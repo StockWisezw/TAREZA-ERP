@@ -75,7 +75,7 @@ export default function ReceiptHistory() {
                             <DialogTitle>Receipt Validation</DialogTitle>
                           </DialogHeader>
                           <div className="py-6 px-10 border rounded-lg bg-zinc-50 font-mono text-sm text-center">
-                            <h3 className="font-bold text-lg">STOCKWISE RETAIL</h3>
+                            <h3 className="font-bold text-lg">TAREZA RETAIL</h3>
                             <p>Receipt: {sale.receiptNumber}</p>
                             <p>{new Date(sale.timestamp).toLocaleString()}</p>
                             <div className="my-4 border-t border-dashed border-zinc-400"></div>

@@ -43,7 +43,7 @@ export default function Login() {
       });
       authError = error;
       if (!error) {
-        toast.success('Welcome back to StockWise');
+        toast.success('Welcome back to Tareza ERP');
         navigate('/dashboard');
       }
     }
@@ -66,8 +66,8 @@ export default function Login() {
             <Store className="w-8 h-8 text-secondary" />
           </div>
           <div className="flex flex-col">
-            <span className="text-3xl font-bold tracking-tight text-white leading-none">STOCKWISE</span>
-            <span className="text-xs tracking-[0.2em] text-primary font-medium mt-1 uppercase">Accounting</span>
+            <span className="text-3xl font-bold tracking-tight text-white leading-none">TAREZA</span>
+            <span className="text-xs tracking-[0.2em] text-primary font-medium mt-1 uppercase">ERP</span>
           </div>
         </div>
         
@@ -98,7 +98,7 @@ export default function Login() {
           <div className="bg-primary p-1.5 rounded-md">
              <Store className="w-5 h-5 text-secondary" />
           </div>
-          <span className="text-xl font-bold tracking-tight">STOCKWISE</span>
+          <span className="text-xl font-bold tracking-tight">TAREZA ERP</span>
         </div>
         <Card className="w-full max-w-md border-0 shadow-none sm:border sm:shadow-lg sm:rounded-2xl overflow-hidden">
           <CardHeader className="space-y-2 pb-8 pt-8 px-8 border-b border-border/40 bg-zinc-50/50">
@@ -114,7 +114,7 @@ export default function Login() {
                 <Input 
                   id="email" 
                   type="email" 
-                  placeholder="admin@stockwise.co.zw" 
+                  placeholder="admin@tareza.co.zw" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required

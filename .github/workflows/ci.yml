@@ -1,4 +1,4 @@
-name: StockWise CI/CD
+name: Tareza ERP CI/CD
 
 on:
   push:

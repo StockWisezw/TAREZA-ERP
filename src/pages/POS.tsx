@@ -36,6 +36,14 @@ export default function POS() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [categories, setCategories] = useState<{id: string, name: string, icon: any}[]>([
+    { id: 'all', name: 'All Menu', icon: <Package className="w-5 h-5" /> },
+    { id: 'beverages', name: 'Beverages', icon: <ShoppingCart className="w-5 h-5" /> }, // Use ShoppingCart instead of Coffee
+    { id: 'snacks', name: 'Snacks', icon: <Tag className="w-5 h-5" /> },
+    { id: 'pharmacy', name: 'Pharmacy', icon: <HelpCircle className="w-5 h-5" /> }, // Use HelpCircle instead of Pill
+  ]);
+
   const receiptRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -68,14 +76,21 @@ export default function POS() {
             sku: p.sku || '',
             retailPrice: p.retail_price,
             wholesalePrice: p.wholesale_price,
-            taxClass: p.tax_class as any
+            taxClass: p.tax_class as any,
+            category: p.category || 'all',
+            imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=150&h=150&fit=crop', // Default image
           })));
         } else {
           // Fallback static mock data for demo if DB is empty
           setProducts([
-            { id: '1', name: 'Mazoe Orange Crush 2L', retailPrice: 4.50, wholesalePrice: 4.10, barcode: '600123456789', sku: 'BV-MOC-2L', taxClass: 'standard' },
-            { id: '2', name: 'Bakers Blue Label Marie 200g', retailPrice: 1.20, wholesalePrice: 1.05, barcode: '600987654321', sku: 'BK-MAR-200G', taxClass: 'standard' },
-            { id: '3', name: 'Panadol 500mg 20s', retailPrice: 2.50, wholesalePrice: 2.10, barcode: '500123456', sku: 'MD-PAN-500MG', taxClass: 'exempt' },
+            { id: '1', name: 'Mazoe Orange Crush 2L', retailPrice: 4.50, wholesalePrice: 4.10, barcode: '600123456789', sku: 'BV-MOC-2L', taxClass: 'standard', category: 'beverages', imageUrl: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=300&h=300&fit=crop' },
+            { id: '2', name: 'Bakers Blue Label Marie 200g', retailPrice: 1.20, wholesalePrice: 1.05, barcode: '600987654321', sku: 'BK-MAR-200G', taxClass: 'standard', category: 'snacks', imageUrl: 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=300&h=300&fit=crop' },
+            { id: '3', name: 'Panadol 500mg 20s', retailPrice: 2.50, wholesalePrice: 2.10, barcode: '500123456', sku: 'MD-PAN-500MG', taxClass: 'exempt', category: 'pharmacy', imageUrl: 'https://images.unsplash.com/photo-1584308666744-24d5e4a8dfd1?w=300&h=300&fit=crop' },
+            { id: '4', name: 'Coca-Cola 330ml Can', retailPrice: 0.80, wholesalePrice: 0.65, barcode: '5449000000996', sku: 'BV-COK-330ML', taxClass: 'standard', category: 'beverages', imageUrl: 'https://images.unsplash.com/photo-1622483767851-4602f23b2c65?w=300&h=300&fit=crop' },
+            { id: '5', name: 'Willards Things 150g', retailPrice: 1.50, wholesalePrice: 1.30, barcode: '6002345678912', sku: 'SN-WIL-150G', taxClass: 'standard', category: 'snacks', imageUrl: 'https://images.unsplash.com/photo-1599490659213-e2b9527bd087?w=300&h=300&fit=crop' },
+            { id: '6', name: 'Paracetamol 100s', retailPrice: 5.00, wholesalePrice: 4.00, barcode: '500987654', sku: 'MD-PAR-100S', taxClass: 'exempt', category: 'pharmacy', imageUrl: 'https://images.unsplash.com/photo-1596562479577-ba8bd5b5f25a?w=300&h=300&fit=crop' },
+            { id: '7', name: 'Lays Salt & Vinegar 120g', retailPrice: 2.00, wholesalePrice: 1.80, barcode: '6002345671234', sku: 'SN-LAY-120G', taxClass: 'standard', category: 'snacks', imageUrl: 'https://images.unsplash.com/photo-1566478989037-eade2e597c55?w=300&h=300&fit=crop' },
+            { id: '8', name: 'Sprite 2L', retailPrice: 2.20, wholesalePrice: 1.95, barcode: '5449000123456', sku: 'BV-SPR-2L', taxClass: 'standard', category: 'beverages', imageUrl: 'https://images.unsplash.com/photo-1625772299848-3a8309df07eb?w=300&h=300&fit=crop' },
           ]);
         }
 
@@ -165,11 +180,13 @@ export default function POS() {
     }
   }, [lastSale, handlePrint]);
 
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.barcode.includes(searchTerm) || 
-    p.sku.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          p.barcode.includes(searchTerm) || 
+                          p.sku.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = activeCategory === 'all' || p.category === activeCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-8rem)] gap-4 pb-2">
@@ -220,130 +237,95 @@ export default function POS() {
           
           <div className="relative z-20">
             <div className="relative flex-1 group">
-              <Search className="absolute left-4 top-3.5 h-5 w-5 text-zinc-400 group-focus-within:text-primary transition-colors" />
+              <Search className="absolute left-4 top-3 h-5 w-5 text-zinc-400 group-focus-within:text-primary transition-colors" />
               <Input 
                 ref={searchInputRef}
                 placeholder="Search products by name, SKU, or scan barcode (F2)..." 
-                className="pl-12 h-14 text-lg shadow-inner font-sans border-zinc-300 focus-visible:ring-primary focus-visible:border-primary rounded-xl transition-all"
+                className="pl-12 h-12 text-base shadow-sm font-sans border-zinc-200 focus-visible:ring-primary focus-visible:border-primary rounded-xl transition-all bg-white"
                 value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setIsSearching(e.target.value.length > 0);
-                }}
-                onFocus={() => setIsSearching(searchTerm.length > 0)}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
-              <Button size="icon" variant="ghost" className="absolute right-2 top-2 h-10 w-10 text-zinc-400 hover:text-zinc-600">
-                <Barcode className="h-6 w-6" />
+              <Button size="icon" variant="ghost" className="absolute right-2 top-1 h-10 w-10 text-zinc-400 hover:text-zinc-600">
+                <Barcode className="h-5 w-5" />
               </Button>
             </div>
             
-            {/* Search Results Dropdown Overlay */}
-            {isSearching && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-zinc-200 overflow-hidden max-h-96 flex flex-col z-50">
-                <div className="p-2 bg-zinc-50 border-b flex justify-between items-center text-xs font-semibold text-zinc-500 px-4">
-                  <span>SEARCH RESULTS</span>
-                  <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => setIsSearching(false)}>Close</Button>
-                </div>
-                <ScrollArea className="flex-1">
-                  {filteredProducts.length === 0 ? (
-                    <div className="p-8 text-center text-zinc-500">No products found matching "{searchTerm}"</div>
-                  ) : (
-                    <div className="p-2 space-y-1">
-                      {filteredProducts.map(product => (
-                        <div 
-                          key={product.id} 
-                          onClick={() => handleProductClick(product)}
-                          className="flex items-center justify-between p-3 hover:bg-zinc-100 rounded-lg cursor-pointer transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded bg-zinc-200 flex items-center justify-center shrink-0">
-                              <Package className="h-5 w-5 text-zinc-500" />
-                            </div>
-                            <div>
-                              <h4 className="font-semibold text-sm">{product.name}</h4>
-                              <p className="text-xs text-zinc-500 font-mono">{product.sku} | {product.barcode}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-bold text-primary font-mono text-lg">
-                              ${(pricingTier === 'wholesale' ? product.wholesalePrice : product.retailPrice).toFixed(2)}
-                            </p>
-                            {product.taxClass !== 'standard' && (
-                              <Badge variant="secondary" className="text-[10px] h-4 leading-none">
-                                {product.taxClass}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </ScrollArea>
-              </div>
-            )}
+            {/* Categories */}
+            <div className="flex gap-2 mt-4 overflow-x-auto pb-2 scrollbar-hide">
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategory(cat.id)}
+                  className={`flex flex-col items-center justify-center min-w-[100px] py-3 px-4 rounded-xl border transition-all duration-200 ${
+                    activeCategory === cat.id 
+                    ? 'border-primary bg-primary/5 text-primary shadow-sm' 
+                    : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50'
+                  }`}
+                >
+                  <div className={`mb-2 p-2 rounded-full ${
+                    activeCategory === cat.id ? 'bg-primary/20 text-primary' : 'bg-zinc-100 text-zinc-500'
+                  }`}>
+                    {cat.icon}
+                  </div>
+                  <span className="text-xs font-semibold whitespace-nowrap">{cat.name}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Cart List */}
-        <div className="flex-1 flex flex-col bg-zinc-50/30 overflow-hidden relative" onClick={() => setIsSearching(false)}>
-          {cart.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-zinc-400 space-y-4">
-              <div className="h-24 w-24 rounded-full bg-zinc-100 flex items-center justify-center">
-                <ShoppingCart className="h-10 w-10 text-zinc-300" />
-              </div>
-              <p className="text-lg">Cart is empty</p>
-              <p className="text-sm text-zinc-500 max-w-xs text-center">Scan an item or use the search bar above to start adding products to the sale.</p>
-            </div>
-          ) : (
-            <ScrollArea className="flex-1 px-4">
-              <div className="space-y-3 py-4">
-                {cart.map((item, index) => (
-                  <div key={`${item.id}-${index}`} className="flex justify-between items-center group bg-white p-4 rounded-xl border border-zinc-200 shadow-sm transition-all hover:border-zinc-300">
-                    <div className="flex-1 flex items-start gap-3">
-                      <div className="h-12 w-12 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0 border border-zinc-200">
-                        <Package className="h-6 w-6 text-zinc-400" />
-                      </div>
-                      <div className="flex flex-col">
-                        <h4 className="text-base font-bold leading-none mb-1.5 text-zinc-800">{item.product.name}</h4>
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="font-mono text-zinc-600">${item.unitPrice.toFixed(2)}</span>
-                          <span className="text-zinc-300">|</span>
-                          <span className="text-zinc-500 text-xs">SKU: {item.product.sku}</span>
-                        </div>
-                        {item.discount && (
-                          <Badge variant="secondary" className="mt-1 w-fit text-xs bg-amber-100 text-amber-800 hover:bg-amber-100">
-                            Discount: {item.discount.type === 'percentage' ? `${item.discount.value}%` : `$${item.discount.value}`}
-                          </Badge>
-                        )}
-                      </div>
+        {/* Product Grid Area */}
+        <ScrollArea className="flex-1 bg-zinc-50/50 p-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-24">
+            {filteredProducts.map((product) => (
+              <div 
+                key={product.id}
+                onClick={() => handleProductClick(product)}
+                className="group relative bg-white border border-zinc-200 rounded-2xl overflow-hidden hover:shadow-md transition-all cursor-pointer flex flex-col hover:border-primary/50"
+              >
+                <div className="h-32 bg-zinc-100 relative overflow-hidden">
+                  {product.imageUrl ? (
+                    <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Package className="w-10 h-10 text-zinc-300" />
                     </div>
-                    
-                    <div className="flex items-center gap-6">
-                      <div className="flex items-center bg-zinc-100 rounded-lg p-1 border border-zinc-200">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-600 hover:bg-white hover:shadow-sm rounded-md" onClick={() => updateQuantity(item.id, item.quantity - 1)}>-</Button>
-                        <span className="text-base w-8 text-center font-bold font-mono text-zinc-800">{item.quantity}</span>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-600 hover:bg-white hover:shadow-sm rounded-md" onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</Button>
-                      </div>
-                      
-                      <div className="flex flex-col items-end min-w-[80px]">
-                        <span className="font-bold text-lg font-mono text-zinc-900">${(item.subtotal + item.vatAmount).toFixed(2)}</span>
-                        {item.vatAmount > 0 && <span className="text-[10px] text-zinc-500">+${item.vatAmount.toFixed(2)} VAT</span>}
-                      </div>
-
-                      <Button variant="ghost" size="icon" className="h-10 w-10 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => removeFromCart(item.id)}>
-                        <Trash2 className="h-5 w-5" />
-                      </Button>
-                    </div>
+                  )}
+                  {product.taxClass !== 'standard' && (
+                    <Badge variant="secondary" className="absolute top-2 left-2 text-[10px] bg-white/90 backdrop-blur-sm border-zinc-200">
+                      {product.taxClass}
+                    </Badge>
+                  )}
+                </div>
+                <div className="p-3 flex flex-col flex-1">
+                  <h4 className="font-semibold text-sm line-clamp-2 leading-tight mb-1">{product.name}</h4>
+                  <p className="text-xs text-zinc-500 font-mono mb-2">{product.sku}</p>
+                  
+                  <div className="mt-auto flex items-center justify-between">
+                    <span className="font-bold text-primary text-base">
+                      ${(pricingTier === 'wholesale' ? product.wholesalePrice : product.retailPrice).toFixed(2)}
+                    </span>
+                    <Button size="icon" className="h-8 w-8 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                      <span className="text-lg leading-none mt-[-2px]">+</span>
+                    </Button>
                   </div>
-                ))}
+                </div>
               </div>
-            </ScrollArea>
-          )}
-        </div>
+            ))}
+            
+            {filteredProducts.length === 0 && (
+               <div className="col-span-full py-20 flex flex-col items-center justify-center text-zinc-500">
+                 <Package className="w-12 h-12 text-zinc-300 mb-4" />
+                 <p className="text-lg font-medium text-zinc-700">No products found</p>
+                 <p className="text-sm">Try adjusting your search or category filter</p>
+               </div>
+            )}
+          </div>
+        </ScrollArea>
       </div>
 
-      {/* RIGHT COLUMN: Customer, Totals & Payment (approx 400px fixed or flex ratio) */}
-      <div className="w-full lg:w-[400px] xl:w-[440px] flex flex-col gap-4">
+      {/* RIGHT COLUMN: Cart List, Totals & Payment (approx 400px fixed or flex ratio) */}
+      <div className="w-full lg:w-[400px] xl:w-[460px] flex flex-col gap-4">
         
         {/* Customer Panel */}
         <Card className="border-zinc-200 shadow-sm shrink-0">
@@ -408,6 +390,47 @@ export default function POS() {
               Wholesale
             </Button>
           </CardContent>
+        </Card>
+
+        {/* Cart items list */}
+        <Card className="border-zinc-200 shadow-sm shrink-0 max-h-[40vh] flex flex-col pt-4">
+          {cart.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-zinc-400 p-8">
+              <ShoppingCart className="h-10 w-10 text-zinc-300 mb-2" />
+              <p className="text-sm">Cart is empty</p>
+            </div>
+          ) : (
+            <ScrollArea className="flex-1 px-4 pb-4">
+              <div className="space-y-3">
+                {cart.map((item, index) => (
+                  <div key={`${item.id}-${index}`} className="flex justify-between items-center group">
+                    <div className="flex flex-col flex-1">
+                      <h4 className="text-sm font-bold leading-none mb-1 text-zinc-800 line-clamp-1 pr-2">{item.product.name}</h4>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-mono text-zinc-600">${item.unitPrice.toFixed(2)}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center bg-zinc-100 rounded-lg p-0.5 border border-zinc-200 shrink-0">
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-600 hover:bg-white hover:shadow-sm rounded-md" onClick={() => updateQuantity(item.id, item.quantity - 1)}>-</Button>
+                        <span className="text-xs w-6 text-center font-bold font-mono text-zinc-800">{item.quantity}</span>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-600 hover:bg-white hover:shadow-sm rounded-md" onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</Button>
+                      </div>
+                      
+                      <div className="flex flex-col items-end min-w-[60px]">
+                        <span className="font-bold text-sm font-mono text-zinc-900">${(item.subtotal + item.vatAmount).toFixed(2)}</span>
+                      </div>
+
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={() => removeFromCart(item.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
         </Card>
 
         {/* Totals Panel */}

@@ -143,7 +143,7 @@ export default function Dashboard() {
               <div className="p-1.5 bg-primary/20 rounded-md">
                  <Sparkles className="h-5 w-5 text-primary" />
               </div>
-              <span className="tracking-tight">StockWise Intelligence</span>
+              <span className="tracking-tight">Tareza Insights</span>
             </CardTitle>
             <CardDescription className="text-zinc-400">AI-generated insights based on real-time metadata.</CardDescription>
           </CardHeader>

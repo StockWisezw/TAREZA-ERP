@@ -5,8 +5,8 @@ export function AiSettings() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium">AI & Automation</h3>
-        <p className="text-sm text-zinc-500">Configure StockWise AI capabilities, forecasting sensitivity, and automated responses.</p>
+        <h3 className="text-lg font-medium">Tareza AI & Automation</h3>
+        <p className="text-sm text-zinc-500">Configure Tareza AI capabilities, forecasting sensitivity, and automated responses.</p>
       </div>
       <Card>
         <CardHeader>

@@ -1,8 +1,8 @@
-# StockWise SaaS Architecture
+# Tareza ERP SaaS Architecture
 
 ## 1. System Architecture Overview
 
-StockWise is designed as a modern, multi-tenant Cloud POS and Inventory Management SaaS. 
+Tareza ERP is designed as a modern, multi-tenant Cloud POS and Inventory Management SaaS. 
 
 *   **Frontend:** React 19 + Vite (Single Page Application). Tailored for fast client-side navigation.
 *   **Styling:** Tailwind CSS + shadcn/ui for a premium, accessible component library.

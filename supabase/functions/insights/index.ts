@@ -60,7 +60,7 @@ serve(async (req) => {
     }
     const ai = new GoogleGenAI({ apiKey: geminiApiKey });
 
-    const systemInstruction = `You are StockWise Intelligence, an expert business advisor in Zimbabwe. 
+    const systemInstruction = `You are Tareza Assistant, an expert business advisor for African businesses. 
     Use this business context to answer questions concisely:
     ${JSON.stringify(dbContext)}
     `;

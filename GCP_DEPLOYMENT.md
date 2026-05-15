@@ -1,6 +1,6 @@
 # Google Cloud Platform (GCP) Deployment Guide
 
-This guide covers how to deploy StockWise to **Google Cloud Run**, and how to correctly get the environment variables needed for the build.
+This guide covers how to deploy Tareza ERP to **Google Cloud Run**, and how to correctly get the environment variables needed for the build.
 
 ## 1. How to get your Environment Variables
 
@@ -26,13 +26,13 @@ To deploy this application to Google Cloud Run, we will use the `Dockerfile` and
 4. Go to **Cloud Run** in the GCP Console.
 5. Click **Create Service**.
 6. Select **"Continuously deploy new revisions from a source repository"** and click **Setup with Cloud Build**.
-7. Connect your GitHub account, select your StockWise repository, and check the acknowledgment.
+7. Connect your GitHub account, select your Tareza repository, and check the acknowledgment.
 8. On the "Build Configuration" step:
    - Branch: `^main$` (or your default branch)
    - Build Type: **Dockerfile**
    - Source Location: `/Dockerfile`
    - **Crucial Step:** Under "Build steps", you need to pass the environment variables so that Vite can bake them into the React app at build time. Unfortunately, the simple GCP console UI doesn't let you pass *build arguments* directly sometimes. If it asks for arguments, add them. Otherwise, see **Setting Build Variables** below.
-9. Name your service (e.g., `stockwise-admin`).
+9. Name your service (e.g., `tareza-admin`).
 10. Under Authentication, select **"Allow unauthenticated invocations"** (since this is a public web app).
 11. Click **Create**.
 
@@ -61,7 +61,7 @@ gcloud config set project YOUR_PROJECT_ID
 
 # 2. Deploy directly from source code
 # Replace URL and KEY with your actual Supabase credentials!
-gcloud run deploy stockwise-frontend \
+gcloud run deploy tareza-frontend \
   --source . \
   --allow-unauthenticated \
   --region us-central1 \
@@ -77,4 +77,4 @@ The `--set-build-env-vars` flag securely passes your Supabase keys directly into
 2. **Update Supabase Redirects:** 
    - Go back to your Supabase Dashboard.
    - Navigate to **Authentication** -> **URL Configuration**.
-   - Change the **Site URL** to your new Google Cloud Run URL (e.g., `https://stockwise-frontend-xxxxx-uc.a.run.app`).
+   - Change the **Site URL** to your new Google Cloud Run URL (e.g., `https://tareza-frontend-xxxxx-uc.a.run.app`).

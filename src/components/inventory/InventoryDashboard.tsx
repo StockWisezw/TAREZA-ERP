@@ -97,7 +97,7 @@ export function InventoryDashboard() {
                <div className="p-1-5 bg-primary/20 rounded-md">
                    <TrendingUp className="h-4 w-4 text-primary" />
                </div>
-               <span>StockWise Intelligence</span>
+               <span>Tareza Insights</span>
             </CardTitle>
             <CardDescription className="text-zinc-400">Automated inventory analysis</CardDescription>
           </CardHeader>

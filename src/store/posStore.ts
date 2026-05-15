@@ -10,6 +10,8 @@ export type Product = {
   retailPrice: number;
   wholesalePrice: number;
   taxClass: 'standard' | 'zero' | 'exempt';
+  category?: string;
+  imageUrl?: string;
 };
 
 export type Customer = {
@@ -314,7 +316,7 @@ export const usePOSStore = create<POSState>()(
       }
     }),
     {
-      name: 'stockwise-pos-storage',
+      name: 'tareza-pos-storage',
       storage: createJSONStorage(() => localStorage),
     }
   )

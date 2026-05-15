@@ -20,7 +20,7 @@ export function AIAssistant() {
       id: "welcome",
       role: "ai",
       content:
-        "Hello! I am StockWise Intelligence. Ask me about your sales trends, inventory forecasts, or how to optimize your profit margins.",
+        "Hello! I am Tareza Assistant. Ask me about your sales trends, inventory forecasts, or how to optimize your profit margins.",
       timestamp: new Date(),
     },
   ]);
@@ -63,7 +63,7 @@ CURRENT CONTEXT:
     try {
       const ai = getGeminiClient();
 
-      const systemInstruction = `You are StockWise Intelligence, an expert business advisor for retail and wholesale businesses in Zimbabwe. Keep your answers concise, actionable, and rely heavily on the context provided. Do not use markdown unless formatting lists or bolding key numbers.`;
+      const systemInstruction = `You are Tareza Assistant, an expert business advisor for retail and wholesale businesses in Africa. Keep your answers concise, actionable, and rely heavily on the context provided. Do not use markdown unless formatting lists or bolding key numbers.`;
 
       const fullPrompt = `${systemInstruction}\n\n${getContextString()}\n\nUser Question: ${userMessage.content}`;
 
@@ -118,7 +118,7 @@ CURRENT CONTEXT:
               </div>
               <div>
                 <h3 className="font-semibold text-sm">
-                  StockWise Intelligence
+                  Tareza Assistant
                 </h3>
                 <p className="text-xs text-zinc-400">Powered by Gemini AI</p>
               </div>

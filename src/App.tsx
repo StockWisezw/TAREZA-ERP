@@ -8,6 +8,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { ThemeProvider } from './components/ThemeProvider';
 import Layout from './components/Layout';
+import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import POS from './pages/POS';
@@ -24,7 +25,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   
   if (loading) return <div className="h-screen w-full flex items-center justify-center">Loading...</div>;
   if (!user && import.meta.env.VITE_SUPABASE_URL !== 'https://your-project.supabase.co') {
-     if(import.meta.env.VITE_SUPABASE_URL) return <Navigate to="/" />;
+     if(import.meta.env.VITE_SUPABASE_URL) return <Navigate to="/login" />;
   }
   
   return <>{children}</>;
@@ -36,7 +37,8 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Login />} />
+            <Route path="/" element={<Landing />} />
+            <Route path="/login" element={<Login />} />
             <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/pos" element={<POS />} />

@@ -1,4 +1,4 @@
--- Migration: StockWise Initial Schema
+-- Migration: Tareza ERP Initial Schema
 -- Description: Complete Multi-tenant SaaS architecture for Cloud POS
 
 -- ==========================================

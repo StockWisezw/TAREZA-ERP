@@ -1,7 +1,7 @@
-# StockWise Design System & UI Architecture
+# Tareza ERP Design System & UI Architecture
 
 ## 1. Design Philosophy
-Inspired by Linear, Stripe, and Shopify POS, StockWise employs a "hyper-functional premium" aesthetic.
+Inspired by Linear, Stripe, and Shopify POS, Tareza ERP employs a "hyper-functional premium" aesthetic.
 - **Precision:** Clean borders, subtle shadows, pixel-perfect alignment.
 - **Speed:** Instant feedback, keyboard shortcuts for everything, minimal transitions.
 - **Clarity:** High contrast data, zero unnecessary UI chrome.
@@ -51,7 +51,7 @@ A sophisticated monochromatic base with highly intentional accent colors.
 - **Top Bar:** Context Switcher (All Branches vs Specific Branch) and Date Range Picker.
 - **KPI Row:** Minimal bento-box cards showing Revenue, Transactions, Avg Basket Size, ZWG Exchange rate reference.
 - **Charts:** Area charts for revenue (Recharts with gradient fills).
-- **AI Sidebar:** A dedicated column for "StockWise Intelligence" (Gemini insights) reading real-time trends.
+- **AI Sidebar:** A dedicated column for "Tareza Insights" (Gemini insights) reading real-time trends.
 
 ### 4.3. Inventory & Wholesale Pricing UI
 - **Layout:** High-density Data Table.

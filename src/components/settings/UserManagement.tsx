@@ -43,7 +43,7 @@ export function UserManagement() {
                   </Avatar>
                   <div>
                     <div className="font-medium">John Doe</div>
-                    <div className="text-xs text-zinc-500">john@stockwise.hq</div>
+                    <div className="text-xs text-zinc-500">john@tareza.hq</div>
                   </div>
                 </TableCell>
                 <TableCell>System Admin</TableCell>

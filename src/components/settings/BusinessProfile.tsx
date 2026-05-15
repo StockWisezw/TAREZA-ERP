@@ -48,7 +48,7 @@ export function BusinessProfile() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="companyName">Company Name</Label>
-            <Input id="companyName" defaultValue="StockWise Retail" />
+            <Input id="companyName" defaultValue="Tareza Retail" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -63,7 +63,7 @@ export function BusinessProfile() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="email">Contact Email</Label>
-              <Input id="email" type="email" defaultValue="admin@stockwise.hq" />
+              <Input id="email" type="email" defaultValue="admin@tareza.hq" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Phone Number</Label>

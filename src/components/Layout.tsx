@@ -27,12 +27,12 @@ import { SyncManager } from './pos/SyncManager';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'POS', href: '/pos', icon: ShoppingCart },
-  { name: 'Receipts', href: '/receipts', icon: Receipt },
-  { name: 'Inventory', href: '/inventory', icon: Package },
-  { name: 'Customers', href: '/customers', icon: Users },
-  { name: 'Suppliers', href: '/suppliers', icon: Truck },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Tareza POS', href: '/pos', icon: ShoppingCart },
+  { name: 'Tareza Fiscal', href: '/receipts', icon: Receipt },
+  { name: 'Tareza Inventory', href: '/inventory', icon: Package },
+  { name: 'Tareza CRM', href: '/customers', icon: Users },
+  { name: 'Tareza Suppliers', href: '/suppliers', icon: Truck },
+  { name: 'Tareza Settings', href: '/settings', icon: Settings },
 ];
 
 function SubscriptionBanner() {
@@ -74,7 +74,7 @@ export default function Layout() {
   const handleSignOut = () => {
     localStorage.removeItem('isPreviewMode');
     signOut();
-    window.location.href = '/';
+    window.location.href = '/login';
   };
 
   const NavLinks = ({ mobile }: { mobile?: boolean }) => (
@@ -130,8 +130,8 @@ export default function Layout() {
               <Store className="h-6 w-6 text-primary-foreground" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xl font-bold tracking-tight text-white leading-none">STOCKWISE</span>
-              <span className="text-[10px] tracking-[0.2em] text-primary font-medium mt-1 uppercase">Accounting</span>
+              <span className="text-xl font-bold tracking-tight text-white leading-none">TAREZA</span>
+              <span className="text-[10px] tracking-[0.2em] text-primary font-medium mt-1 uppercase">ERP</span>
             </div>
           </div>
           <div className="flex-1 overflow-auto py-5 px-3 bg-secondary">
@@ -163,7 +163,7 @@ export default function Layout() {
                 <SheetContent side="left" className="w-64 p-0">
                   <div className="p-4 flex items-center space-x-2 border-b">
                     <Store className="h-5 w-5 text-primary" />
-                    <span className="text-lg font-bold tracking-tight">StockWise</span>
+                    <span className="text-lg font-bold tracking-tight">Tareza ERP</span>
                   </div>
                   <div className="p-3">
                     <NavLinks mobile />
@@ -201,7 +201,7 @@ export default function Layout() {
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium leading-none">Admin User</p>
-                      <p className="text-xs leading-none text-muted-foreground">{user?.email || 'admin@stockwise.co.zw'}</p>
+                      <p className="text-xs leading-none text-muted-foreground">{user?.email || 'admin@tareza.co.zw'}</p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
