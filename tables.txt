@@ -1,0 +1,56 @@
+91:CREATE TABLE businesses (
+104:CREATE TABLE branches (
+121:CREATE TABLE profiles (
+132:CREATE TABLE roles (
+143:CREATE TABLE role_permissions (
+152:CREATE TABLE business_users (
+176:CREATE TABLE categories (
+187:CREATE TABLE products (
+208:CREATE TABLE inventory (
+224:CREATE TABLE stock_movements (
+238:CREATE TABLE stocktakes (
+251:CREATE TABLE stocktake_items (
+267:CREATE TABLE customers (
+282:CREATE TABLE suppliers (
+300:CREATE TABLE sales (
+318:CREATE TABLE sale_items (
+334:CREATE TABLE purchases (
+349:CREATE TABLE purchase_items (
+360:CREATE TABLE expenses (
+379:CREATE TABLE fiscal_receipts (
+394:CREATE TABLE audit_logs (
+412:CREATE TABLE subscriptions (
+549:CREATE TABLE customer_credit_accounts (
+559:CREATE TABLE customer_credit_transactions (
+570:CREATE TABLE refunds (
+580:CREATE TABLE refund_items (
+591:CREATE TABLE price_overrides (
+610:-- (Redundant CREATE TABLE branches removed. It is created in 20260513182000_tareza_schema.sql and enhanced later)
+613:CREATE TABLE products_advanced (
+636:CREATE TABLE inventory_levels (
+647:CREATE TABLE stock_movements (
+660:CREATE TABLE inventory_transfers (
+672:CREATE TABLE stocktakes (
+690:CREATE TABLE customers_crm (
+711:CREATE TABLE customer_activities (
+721:CREATE TABLE customer_loyalty_transactions (
+732:CREATE TABLE customer_communications (
+751:CREATE TABLE suppliers_advanced (
+773:CREATE TABLE purchase_orders (
+793:CREATE TABLE purchase_order_items (
+806:CREATE TABLE goods_received_notes (
+821:CREATE TABLE grn_items (
+835:CREATE TABLE supplier_ledgers (
+849:CREATE TABLE supplier_payments (
+864:CREATE TABLE supplier_returns (
+896:CREATE TABLE IF NOT EXISTS currencies (
+914:CREATE TABLE IF NOT EXISTS tax_rates (
+933:CREATE TABLE IF NOT EXISTS payment_methods (
+945:CREATE TABLE IF NOT EXISTS fiscal_settings (
+964:CREATE TABLE IF NOT EXISTS chat_channels (
+973:CREATE TABLE IF NOT EXISTS chat_messages (
+1133:CREATE TABLE IF NOT EXISTS exchange_rate_history (
+1149:CREATE TABLE IF NOT EXISTS notification_settings (
+1161:CREATE TABLE IF NOT EXISTS notifications (
+1173:CREATE TABLE IF NOT EXISTS pos_settings (
+1187:CREATE TABLE IF NOT EXISTS security_settings (

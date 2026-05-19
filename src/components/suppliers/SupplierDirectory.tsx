@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, MoreHorizontal, FileText, Truck, MapPin, Building2, Plus } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, FileText, Truck, MapPin, Building2, Plus, Printer, Download } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -29,15 +29,38 @@ export function SupplierDirectory() {
   const [newSupplierName, setNewSupplierName] = useState('');
   const [newSupplierContact, setNewSupplierContact] = useState('');
 
+  const exportCSV = () => {
+    if (!suppliers || suppliers.length === 0) {
+      toast.error('No suppliers to export');
+      return;
+    }
+    const headers = ['Code', 'Name', 'Contact', 'Phone', 'Balance'];
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + headers.join(',') + '\n'
+      + suppliers.map(s => `"${s.id}","${s.name || ''}","${s.contact_name || ''}","${s.phone || ''}",${s.balance || 0}`).join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `suppliers_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Suppliers exported successfully');
+  };
+
   const handleAddSupplier = async () => {
     if (!newSupplierName) {
       toast.error("Supplier name is required");
       return;
     }
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user) throw new Error("Not authenticated");
+
       const { data: businessData, error: businessError } = await supabase
         .from('business_users')
         .select('business_id')
+        .eq('user_id', userData.user.id)
         .limit(1)
         .single();
 
@@ -115,7 +138,8 @@ export function SupplierDirectory() {
           />
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <Button variant="outline" className="bg-white shadow-sm"><Filter className="mr-2 h-4 w-4" /> Filters</Button>
+          <Button variant="outline" className="bg-white shadow-sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Print</Button>
+          <Button variant="outline" className="bg-white shadow-sm" onClick={exportCSV}><Download className="mr-2 h-4 w-4" /> Export</Button>
           <Button onClick={() => setIsAddOpen(true)}><Plus className="mr-2 h-4 w-4" /> Add Supplier</Button>
         </div>
       </div>
@@ -188,11 +212,13 @@ export function SupplierDirectory() {
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <MoreHorizontal className="h-4 w-4 text-zinc-500" />
-                        </Button>
-                      </DropdownMenuTrigger>
+                      <DropdownMenuTrigger 
+                        render={
+                          <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <MoreHorizontal className="h-4 w-4 text-zinc-500" />
+                          </Button>
+                        } 
+                      />
                       <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem>View Dashboard</DropdownMenuItem>
                         <DropdownMenuItem>Create Purchase Order</DropdownMenuItem>

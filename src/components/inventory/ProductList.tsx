@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Filter, Download, MoreHorizontal, Settings2, ArrowUpDown } from 'lucide-react';
+import { Search, Plus, Filter, Download, MoreHorizontal, Settings2, ArrowUpDown, Printer } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -29,6 +29,11 @@ export function ProductList() {
   const [newProductSKU, setNewProductSKU] = useState('');
   const [newProductPrice, setNewProductPrice] = useState('');
   const [newProductStock, setNewProductStock] = useState('0');
+  
+  // Wholesale Pack Fields
+  const [isPack, setIsPack] = useState(false);
+  const [packSize, setPackSize] = useState('1');
+  const [wholesalePrice, setWholesalePrice] = useState('');
 
   const fetchProducts = async () => {
     try {
@@ -94,25 +99,31 @@ export function ProductList() {
        return;
     }
     try {
+       const { data: userData } = await supabase.auth.getUser();
+       if (!userData?.user) throw new Error("Not authenticated");
+
        // Fetch user's business_id
        const { data: businessData, error: businessError } = await supabase
          .from('business_users')
          .select('business_id')
+         .eq('user_id', userData.user.id)
          .limit(1)
          .single();
 
        if (businessError || !businessData) {
-         toast.error("You are not part of any business. Cannot add product.");
+         toast.error(`Error: ${businessError?.message || 'You are not part of any business'}. Cannot add product.`);
          return;
        }
 
        const price = parseFloat(newProductPrice);
+       const finalSku = isPack && parseInt(packSize) > 1 ? `${newProductSKU}|PK:${packSize}` : newProductSKU;
+       
        const { data: newProduct, error: productError } = await supabase.from('products').insert({
          business_id: businessData.business_id,
          name: newProductName,
-         sku: newProductSKU,
+         sku: finalSku,
          retail_price: price,
-         wholesale_price: price * 0.9, // rough estimate
+         wholesale_price: isPack ? parseFloat(wholesalePrice) : (price * 0.9),
          is_active: true
        }).select().single();
 
@@ -144,6 +155,9 @@ export function ProductList() {
        setNewProductPrice('');
        setNewProductSKU('');
        setNewProductStock('0');
+       setIsPack(false);
+       setPackSize('1');
+       setWholesalePrice('');
        // fetchProducts() is also called by Realtime, but calling it here is fine as fallback
        fetchProducts();
     } catch (err: any) {
@@ -207,6 +221,7 @@ export function ProductList() {
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button variant="outline" className="bg-white shadow-sm" onClick={() => toast.info('Please use the "Bulk Import" tab to import products.')}>Import</Button>
+          <Button variant="outline" className="bg-white shadow-sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Print</Button>
           <Button variant="outline" className="bg-white shadow-sm" onClick={exportCSV}><Download className="mr-2 h-4 w-4" /> Export</Button>
           <Button variant="outline" className="bg-white shadow-sm"><Filter className="mr-2 h-4 w-4" /> Filter</Button>
           <Button variant="outline" className="bg-white shadow-sm"><Settings2 className="mr-2 h-4 w-4" /> View</Button>
@@ -234,9 +249,29 @@ export function ProductList() {
                     <Input type="number" step="0.01" value={newProductPrice} onChange={e => setNewProductPrice(e.target.value)} placeholder="0.00" />
                   </div>
                 </div>
+                
+                <div className="flex items-center space-x-2 pt-2">
+                  <input type="checkbox" id="isPack" checked={isPack} onChange={(e) => setIsPack(e.target.checked)} className="h-4 w-4 text-primary rounded border-zinc-300" />
+                  <Label htmlFor="isPack" className="font-semibold cursor-pointer">Configure as Bundle/Pack</Label>
+                </div>
+
+                {isPack && (
+                  <div className="grid grid-cols-2 gap-4 p-4 bg-purple-50 rounded-lg border border-purple-100">
+                    <div className="space-y-2">
+                      <Label>Pack Size (Units)</Label>
+                      <Input type="number" value={packSize} onChange={e => setPackSize(e.target.value)} placeholder="e.g. 10" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Wholesale Pack Price ($)</Label>
+                      <Input type="number" step="0.01" value={wholesalePrice} onChange={e => setWholesalePrice(e.target.value)} placeholder="0.00" />
+                    </div>
+                  </div>
+                )}
+                
                 <div className="space-y-2">
                   <Label>Initial Stock Quantity</Label>
                   <Input type="number" value={newProductStock} onChange={e => setNewProductStock(e.target.value)} placeholder="0" />
+                  {isPack && <p className="text-xs text-zinc-500">Stock is measured in units. If you have 5 packs of 10, enter 50.</p>}
                 </div>
               </div>
               <DialogFooter className="mt-6">
@@ -289,11 +324,13 @@ export function ProductList() {
                   <TableCell>{getStatusBadge(stock)}</TableCell>
                   <TableCell>
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <MoreHorizontal className="h-4 w-4 text-zinc-500" />
-                        </Button>
-                      </DropdownMenuTrigger>
+                      <DropdownMenuTrigger 
+                        render={
+                          <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <MoreHorizontal className="h-4 w-4 text-zinc-500" />
+                          </Button>
+                        } 
+                      />
                       <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem>Edit Product</DropdownMenuItem>
                         <DropdownMenuItem>Adjust Stock</DropdownMenuItem>

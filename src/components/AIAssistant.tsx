@@ -65,19 +65,23 @@ CURRENT CONTEXT:
 
       const fullPrompt = `${systemInstruction}\n\n${getContextString()}\n\nUser Question: ${userMessage.content}`;
 
-      const { data, error } = await supabase.functions.invoke('insights', {
-        body: { query: fullPrompt }
+      const res = await fetch('/api/ai/insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: fullPrompt })
       });
 
-      if (error) {
-        throw error;
+      if (!res.ok) {
+        throw new Error('Failed to generate insight');
       }
+      
+      const data = await res.json();
 
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "ai",
         content:
-          data?.result || "I could not generate an insight at this time.",
+          data.result || "I could not generate an insight at this time.",
         timestamp: new Date(),
       };
 

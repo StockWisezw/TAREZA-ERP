@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { toast } from 'sonner';
 import { useReactToPrint } from 'react-to-print';
+import { useNavigate } from 'react-router-dom';
 
 import { usePOSStore, Product, SaleRecord, Customer } from '../store/posStore';
 import { PaymentDialog } from '../components/pos/PaymentDialog';
@@ -17,6 +18,7 @@ import { ReceiptPrint } from '../components/pos/ReceiptPrint';
 import { supabase } from '../lib/supabase';
 
 export default function POS() {
+  const navigate = useNavigate();
   const { 
     cart, getTotals, addToCart, removeFromCart, updateQuantity, pricingTier, setPricingTier, 
     clearCart, completeSale, currentCustomer, setCurrentCustomer, parkSale, parkedSales, resumeSale,
@@ -58,12 +60,20 @@ export default function POS() {
         let customersData: any[] | null = null;
         
         try {
-          const [{ data: pData }, { data: cData }] = await Promise.all([
-            supabase.from('products').select('id, name, barcode, sku, retail_price, wholesale_price, tax_class').eq('is_active', true),
-            supabase.from('customers').select('id, name, phone, email, address, balance, credit_limit')
+          const [{ data: pData }, { data: cData }, { data: catData }] = await Promise.all([
+            supabase.from('products').select('id, name, barcode, sku, retail_price, wholesale_price, tax_class, category_id, categories(name)').eq('is_active', true),
+            supabase.from('customers').select('id, name, phone, email, address, balance, credit_limit'),
+            supabase.from('categories').select('id, name')
           ]);
           productsData = pData;
           customersData = cData;
+          
+          if (catData) {
+            setCategories([
+              { id: 'all', name: 'All Menu', icon: <Package className="w-5 h-5" /> },
+              ...catData.map(c => ({ id: c.id, name: c.name, icon: <Tag className="w-5 h-5" /> }))
+            ]);
+          }
         } catch (e) {
           console.error("Supabase fetch failed", e);
         }
@@ -77,8 +87,8 @@ export default function POS() {
             retailPrice: p.retail_price,
             wholesalePrice: p.wholesale_price,
             taxClass: p.tax_class as any,
-            category: p.category || 'all',
-            imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=150&h=150&fit=crop', // Default image
+            category: p.category_id || 'all',
+            imageUrl: '', 
           })));
         } else {
           setProducts([]);
@@ -156,7 +166,7 @@ export default function POS() {
     searchInputRef.current?.focus();
   };
 
-  const handlePaymentComplete = () => {
+  const handlePaymentComplete = async () => {
     const sale = completeSale();
     if (sale) {
       setLastSale(sale);
@@ -164,6 +174,19 @@ export default function POS() {
       setShowPostSale(true);
       toast.success('Sale Completed!');
       shouldPrintRef.current = true;
+      
+      try {
+        const creditPayment = sale.payments.find(p => p.method === 'credit');
+        if (creditPayment && sale.customerId) {
+          const { data: custData } = await supabase.from('customers').select('balance').eq('id', sale.customerId).single();
+          if (custData) {
+            const newBalance = Number(custData.balance || 0) + creditPayment.amount;
+            await supabase.from('customers').update({ balance: newBalance }).eq('id', sale.customerId);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to update credit balance', err);
+      }
     } else {
       toast.error('Could not complete sale. Check balance.');
     }
@@ -188,14 +211,14 @@ export default function POS() {
   });
 
   return (
-    <div className="flex flex-col lg:flex-row h-auto lg:h-[calc(100vh-8rem)] gap-4 pb-2">
+    <div className="flex flex-col lg:flex-row h-full lg:h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] gap-4 pb-2">
       
       {/* LEFT COLUMN: Products & Search */}
-      <div className="flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden">
+      <div className="flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden h-full">
         
         {/* Top Search Bar Area */}
-        <div className="p-4 border-b border-zinc-200 bg-zinc-50/50">
-          <div className="flex justify-between items-center mb-3">
+        <div className="p-3 border-b border-zinc-200 bg-zinc-50/50">
+          <div className="flex justify-between items-center mb-2">
             <h1 className="text-xl font-bold tracking-tight text-zinc-800">Point of Sale</h1>
             <div className="flex items-center gap-2">
               <Button onClick={parkSale} variant="outline" size="sm" className="hidden sm:flex" disabled={cart.length === 0}>
@@ -276,22 +299,19 @@ export default function POS() {
         {/* Product Grid Area */}
         <ScrollArea className="flex-1 bg-zinc-50/50 p-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-24">
-            {filteredProducts.map((product) => (
+            {filteredProducts.map((product) => {
+              const bgColors = ['bg-rose-100 text-rose-600', 'bg-blue-100 text-blue-600', 'bg-emerald-100 text-emerald-600', 'bg-amber-100 text-amber-600', 'bg-purple-100 text-purple-600', 'bg-indigo-100 text-indigo-600', 'bg-cyan-100 text-cyan-600'];
+              const colorClass = bgColors[product.name.charCodeAt(0) % bgColors.length];
+              return (
               <div 
                 key={product.id}
                 onClick={() => handleProductClick(product)}
                 className="group relative bg-white border border-zinc-200 rounded-2xl overflow-hidden hover:shadow-md transition-all cursor-pointer flex flex-col hover:border-primary/50"
               >
-                <div className="h-32 bg-zinc-100 relative overflow-hidden">
-                  {product.imageUrl ? (
-                    <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Package className="w-10 h-10 text-zinc-300" />
-                    </div>
-                  )}
+                <div className={`h-32 relative overflow-hidden flex items-center justify-center ${colorClass}`}>
+                  <Package className="w-10 h-10 group-hover:scale-110 transition-transform duration-300 opacity-80" />
                   {product.taxClass !== 'standard' && (
-                    <Badge variant="secondary" className="absolute top-2 left-2 text-[10px] bg-white/90 backdrop-blur-sm border-zinc-200">
+                    <Badge variant="secondary" className="absolute top-2 left-2 text-[10px] bg-white/90 backdrop-blur-sm border-zinc-200 text-zinc-700">
                       {product.taxClass}
                     </Badge>
                   )}
@@ -310,7 +330,8 @@ export default function POS() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
             
             {filteredProducts.length === 0 && (
                <div className="col-span-full py-20 flex flex-col items-center justify-center text-zinc-500">
@@ -386,43 +407,43 @@ export default function POS() {
               className={`flex-1 rounded-md ${pricingTier === 'wholesale' ? 'shadow-sm bg-purple-600 hover:bg-purple-700 text-white' : ''}`}
               onClick={() => setPricingTier('wholesale')}
             >
-              Wholesale
+              Wholesale (Packs)
             </Button>
           </CardContent>
         </Card>
 
         {/* Cart items list */}
-        <Card className="border-zinc-200 shadow-sm flex-1 min-h-[200px] flex flex-col pt-4">
+        <Card className="border-zinc-200 shadow-sm flex-1 min-h-[150px] flex flex-col pt-2">
           {cart.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-zinc-400 p-8">
-              <ShoppingCart className="h-10 w-10 text-zinc-300 mb-2" />
+            <div className="flex-1 flex flex-col items-center justify-center text-zinc-400 p-4">
+              <ShoppingCart className="h-8 w-8 text-zinc-300 mb-2" />
               <p className="text-sm">Cart is empty</p>
             </div>
           ) : (
-            <ScrollArea className="flex-1 px-4 pb-4">
-              <div className="space-y-3">
+            <ScrollArea className="flex-1 px-3 pb-2">
+              <div className="space-y-2">
                 {cart.map((item, index) => (
                   <div key={`${item.id}-${index}`} className="flex justify-between items-center group">
                     <div className="flex flex-col flex-1">
-                      <h4 className="text-sm font-bold leading-none mb-1 text-zinc-800 line-clamp-1 pr-2">{item.product.name}</h4>
-                      <div className="flex items-center gap-2 text-xs">
+                      <h4 className="text-[13px] font-bold leading-none mb-1 text-zinc-800 line-clamp-1 pr-2">{item.product.name}</h4>
+                      <div className="flex items-center gap-2 text-[11px]">
                         <span className="font-mono text-zinc-600">${item.unitPrice.toFixed(2)}</span>
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <div className="flex items-center bg-zinc-100 rounded-lg p-0.5 border border-zinc-200 shrink-0">
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-600 hover:bg-white hover:shadow-sm rounded-md" onClick={() => updateQuantity(item.id, item.quantity - 1)}>-</Button>
-                        <span className="text-xs w-6 text-center font-bold font-mono text-zinc-800">{item.quantity}</span>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-600 hover:bg-white hover:shadow-sm rounded-md" onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</Button>
+                        <Button variant="ghost" size="icon" className="h-5 w-5 text-zinc-600 hover:bg-white hover:shadow-sm rounded-md" onClick={() => updateQuantity(item.id, item.quantity - 1)}>-</Button>
+                        <span className="text-[11px] w-5 text-center font-bold font-mono text-zinc-800">{item.quantity}</span>
+                        <Button variant="ghost" size="icon" className="h-5 w-5 text-zinc-600 hover:bg-white hover:shadow-sm rounded-md" onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</Button>
                       </div>
                       
-                      <div className="flex flex-col items-end min-w-[60px]">
-                        <span className="font-bold text-sm font-mono text-zinc-900">${(item.subtotal + item.vatAmount).toFixed(2)}</span>
+                      <div className="flex flex-col items-end min-w-[50px]">
+                        <span className="font-bold text-[13px] font-mono text-zinc-900">${(item.subtotal + item.vatAmount).toFixed(2)}</span>
                       </div>
 
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={() => removeFromCart(item.id)}>
-                        <Trash2 className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={() => removeFromCart(item.id)}>
+                        <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
                   </div>
@@ -435,45 +456,45 @@ export default function POS() {
         {/* Totals Panel */}
         <Card className="shrink-0 flex flex-col border-zinc-200 shadow-sm overflow-hidden">
           <CardContent className="p-0 flex flex-col h-full">
-            <div className="flex-1 p-5 space-y-4 bg-white">
+            <div className="flex-1 p-3 space-y-2 bg-white">
               <div className="flex justify-between text-zinc-600 items-baseline">
-                <span className="text-sm">Subtotal ({cart.length} items)</span>
-                <span className="font-mono text-base font-medium">${totals.subtotal.toFixed(2)}</span>
+                <span className="text-xs">Subtotal ({cart.length} items)</span>
+                <span className="font-mono text-sm font-medium">${totals.subtotal.toFixed(2)}</span>
               </div>
               
               {totals.discount > 0 && (
                 <div className="flex justify-between text-amber-600 items-baseline">
-                  <span className="text-sm">Discount</span>
-                  <span className="font-mono text-base font-medium">-${totals.discount.toFixed(2)}</span>
+                  <span className="text-xs">Discount</span>
+                  <span className="font-mono text-sm font-medium">-${totals.discount.toFixed(2)}</span>
                 </div>
               )}
               
               <div className="flex justify-between text-zinc-600 items-baseline group cursor-help">
-                <span className="text-sm flex items-center border-b border-dashed border-zinc-300 pb-0.5">
-                  VAT (15%) <span className="ml-1 text-[10px] bg-zinc-100 border border-zinc-200 px-1.5 py-0.5 rounded text-zinc-500">ZIMRA</span>
+                <span className="text-xs flex items-center border-b border-dashed border-zinc-300 pb-0.5">
+                  VAT (15%) <span className="ml-1 text-[9px] bg-zinc-100 border border-zinc-200 px-1.5 py-0.5 rounded text-zinc-500">ZIMRA</span>
                 </span>
-                <span className="font-mono text-base font-medium">${totals.vat.toFixed(2)}</span>
+                <span className="font-mono text-sm font-medium">${totals.vat.toFixed(2)}</span>
               </div>
 
-              <Separator className="my-2" />
+              <Separator className="my-1" />
 
-              <div className="pt-2">
+              <div className="pt-1">
                 <div className="flex justify-between items-end">
-                  <span className="text-lg font-semibold text-secondary">Total</span>
-                  <span className="text-4xl font-extrabold tracking-tight font-mono text-primary">${totals.total.toFixed(2)}</span>
+                  <span className="text-base font-semibold text-secondary">Total</span>
+                  <span className="text-3xl font-extrabold tracking-tight font-mono text-primary">${totals.total.toFixed(2)}</span>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 bg-zinc-50 border-t border-zinc-200 space-y-3">
+            <div className="p-3 bg-zinc-50 border-t border-zinc-200 space-y-2">
               <div className="grid grid-cols-3 gap-2">
-                <Button variant="outline" className="bg-white h-12 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-semibold" onClick={clearCart} disabled={cart.length === 0}>
+                <Button variant="outline" className="bg-white h-10 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-semibold text-sm" onClick={clearCart} disabled={cart.length === 0}>
                   Cancel
                 </Button>
                 <Dialog>
                   <DialogTrigger asChild>
-                    <Button variant="outline" className="bg-white h-12 font-semibold" disabled={cart.length === 0}>
-                      <Tag className="w-4 h-4 mr-1 sm:mr-2" />
+                    <Button variant="outline" className="bg-white h-10 font-semibold text-sm" disabled={cart.length === 0}>
+                      <Tag className="w-3.5 h-3.5 mr-1 sm:mr-2" />
                       <span className="hidden sm:inline">Discount</span>
                     </Button>
                   </DialogTrigger>
@@ -494,23 +515,20 @@ export default function POS() {
                 </Button>
               </div>
               
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" className="bg-white h-10 border-zinc-200 text-zinc-700 font-medium text-xs sm:text-sm" onClick={() => toast.info(lastSale ? 'Printing previous tax invoice...' : 'No transaction available to print.')}>
-                   <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5" /> <span className="truncate">Print Tax Invoice</span>
-                </Button>
-                <Button variant="outline" className="bg-white h-10 border-zinc-200 text-zinc-700 font-medium text-xs sm:text-sm" onClick={() => toast.info('Drawer opened.')}>
-                   Open Drawer
+              <div className="grid grid-cols-1 gap-2">
+                <Button variant="outline" className="bg-white h-10 border-zinc-200 text-zinc-700 font-medium text-xs sm:text-sm" onClick={() => navigate('/cash-management')}>
+                   Open Drawer (Cash Management)
                 </Button>
               </div>
               
               <Button 
-                className="w-full h-16 text-xl font-bold shadow-lg transition-transform active:scale-[0.98] bg-emerald-600 text-white hover:bg-emerald-700 relative overflow-hidden rounded-xl border border-emerald-700 mt-2"
+                className="w-full h-12 text-xl font-bold shadow-lg transition-transform active:scale-[0.98] bg-emerald-600 text-white hover:bg-emerald-700 relative overflow-hidden rounded-xl border border-emerald-700 mt-2"
                 disabled={cart.length === 0} 
                 onClick={() => setShowPayment(true)}
               >
                 <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity" />
                 <span className="flex items-center ml-4">Pay Now</span>
-                <span className="absolute right-6 font-mono font-extrabold text-2xl">${totals.total.toFixed(2)}</span>
+                <span className="absolute right-6 font-mono font-extrabold text-xl">${totals.total.toFixed(2)}</span>
               </Button>
             </div>
           </CardContent>

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useState, useEffect, createContext, useContext } from 'react';
-import { supabase } from '../lib/supabase';
-import { User } from '@supabase/supabase-js';
+import { auth } from '../lib/firebase';
+import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 
 type AuthContextType = {
   user: User | null;
@@ -16,22 +16,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      // Ignore error if it's due to mock URL
-      if (!error && session) setUser(session.user);
+    const isGuest = localStorage.getItem('isGuest') === 'true';
+    if (isGuest) {
+      setUser({
+        uid: 'guest-user',
+        email: 'guest@tareza.local',
+      } as unknown as User);
+      setLoading(false);
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem('isGuest');
+    await firebaseSignOut(auth);
+    setUser(null);
   };
 
   return (

@@ -2,5 +2,5 @@
   "name": "Tareza ERP",
   "description": "Tareza ERP. AI-Powered POS, inventory, accounting, and business operating system for African enterprises.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

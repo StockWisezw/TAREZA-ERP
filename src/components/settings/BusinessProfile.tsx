@@ -1,43 +1,59 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '../ui/card';
-import { Input } from '../ui/input';
-import { Button } from '../ui/button';
-import { Label } from '../ui/label';
-import { Textarea } from '../ui/textarea';
-import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import { Camera, Building2, Save } from 'lucide-react';
-import { toast } from 'sonner';
-import { supabase } from '../../lib/supabase';
+import React, { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  CardFooter,
+} from "../ui/card";
+import { Input } from "../ui/input";
+import { Button } from "../ui/button";
+import { Label } from "../ui/label";
+import { Textarea } from "../ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
+import { Camera, Building2, Save } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "../../lib/supabase";
 
 export function BusinessProfile() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [businessData, setBusinessData] = useState<any>(null);
-  
-  const [name, setName] = useState('');
-  const [vatNumber, setVatNumber] = useState('');
-  const [regNumber, setRegNumber] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+
+  const [name, setName] = useState("");
+  const [vatNumber, setVatNumber] = useState("");
+  const [regNumber, setRegNumber] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
 
   useEffect(() => {
     async function loadBusiness() {
       try {
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData?.user) return;
+        
+        const { data: buData, error: buError } = await supabase.from('business_users').select('business_id').eq('user_id', userData.user.id).limit(1).single();
+        if (buError || !buData) {
+          console.error("No business_user found", buError);
+          return;
+        }
+
         const { data, error } = await supabase
-          .from('businesses')
-          .select('*')
-          .limit(1)
+          .from("businesses")
+          .select("*")
+          .eq('id', buData.business_id)
           .single();
-          
+
         if (error) {
-           console.error("No business found", error);
+          console.error("No business found", error);
         } else if (data) {
-           setBusinessData(data);
-           setName(data.name || '');
-           setVatNumber(data.vat_number || '');
-           setRegNumber(data.registration_number || '');
-           setEmail(data.email || '');
-           setPhone(data.phone || '');
+          setBusinessData(data);
+          setName(data.name || "");
+          setVatNumber(data.vat_number || "");
+          setRegNumber(data.registration_number || "");
+          setEmail(data.email || "");
+          setPhone(data.phone || "");
         }
       } catch (err) {
         console.error("Failed to load business profile", err);
@@ -49,48 +65,79 @@ export function BusinessProfile() {
   }, []);
 
   const handleSave = async () => {
-    if (!businessData) {
-      toast.error('No business profile found to update');
-      return;
-    }
-    
     setIsSaving(true);
     try {
-      const { error } = await supabase
-        .from('businesses')
-        .update({
-          name,
-          tax_number: vatNumber,
-          registration_number: regNumber,
-          contact_email: email,
-          contact_phone: phone
-        })
-        .eq('id', businessData.id);
+      if (!businessData) {
+        // Create new business profile
+        const { data, error } = await supabase
+          .from("businesses")
+          .insert({
+            name: name || "My Business",
+            tax_number: vatNumber,
+            registration_number: regNumber,
+            email: email,
+            phone: phone,
+          })
+          .select()
+          .single();
 
-      if (error) throw error;
-      toast.success('Business profile updated successfully');
+        if (error) throw error;
+        setBusinessData(data);
+        toast.success("Business profile created successfully");
+      } else {
+        // Update existing business profile
+        const { error } = await supabase
+          .from("businesses")
+          .update({
+            name,
+            tax_number: vatNumber,
+            registration_number: regNumber,
+            email: email,
+            phone: phone,
+          })
+          .eq("id", businessData.id);
+
+        if (error) throw error;
+        toast.success("Business profile updated successfully");
+      }
     } catch (err: any) {
-      toast.error(`Error saving profile: ${err.message || 'Unknown error'}`);
+      toast.error(`Error saving profile: ${err.message || "Unknown error"}`);
     } finally {
       setIsSaving(false);
     }
   };
 
   if (isLoading) {
-    return <div className="p-8 text-center text-zinc-500">Loading business profile...</div>;
+    return (
+      <div className="p-8 text-center text-zinc-500">
+        Loading business profile...
+      </div>
+    );
   }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-xl font-bold text-zinc-900 tracking-tight">Business Profile</h3>
+          <h3 className="text-xl font-bold text-zinc-900 tracking-tight">
+            Business Profile
+          </h3>
           <p className="text-sm text-zinc-500 mt-1">
             Update your company details, logo, and registration information.
           </p>
         </div>
-        <Button onClick={handleSave} disabled={isSaving} className="bg-primary text-primary-foreground shadow-sm px-6">
-          {isSaving ? 'Saving...' : <><Save className="w-4 h-4 mr-2" /> Save Profile</>}
+        <Button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="bg-primary text-primary-foreground shadow-sm px-6"
+        >
+          {isSaving ? (
+            "Saving..."
+          ) : (
+            <>
+              <Save className="w-4 h-4 mr-2" /> Save Profile
+            </>
+          )}
         </Button>
       </div>
 
@@ -111,8 +158,12 @@ export function BusinessProfile() {
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-col items-center space-y-2 text-center">
-                <Button variant="outline" size="sm" className="w-full">Choose new picture</Button>
-                <p className="text-xs text-zinc-500">JPG, GIF or PNG. Max size of 2MB.</p>
+                <Button variant="outline" size="sm" className="w-full">
+                  Choose new picture
+                </Button>
+                <p className="text-xs text-zinc-500">
+                  JPG, GIF or PNG. Max size of 2MB.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -128,33 +179,94 @@ export function BusinessProfile() {
             </CardHeader>
             <CardContent className="pt-6 space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="companyName" className="font-semibold text-zinc-900">Company Name</Label>
-                <Input id="companyName" value={name} onChange={e => setName(e.target.value)} className="h-11 bg-zinc-50/50" />
+                <Label
+                  htmlFor="companyName"
+                  className="font-semibold text-zinc-900"
+                >
+                  Company Name
+                </Label>
+                <Input
+                  id="companyName"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="h-11 bg-zinc-50/50"
+                />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="vatNumber" className="font-semibold text-zinc-900">VAT / TIN Number</Label>
-                  <Input id="vatNumber" value={vatNumber} onChange={e => setVatNumber(e.target.value)} placeholder="e.g. 123456789" className="h-11" />
+                  <Label
+                    htmlFor="vatNumber"
+                    className="font-semibold text-zinc-900"
+                  >
+                    VAT / TIN Number
+                  </Label>
+                  <Input
+                    id="vatNumber"
+                    value={vatNumber}
+                    onChange={(e) => setVatNumber(e.target.value)}
+                    placeholder="e.g. 123456789"
+                    className="h-11"
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="regNumber" className="font-semibold text-zinc-900">Company Registration</Label>
-                  <Input id="regNumber" value={regNumber} onChange={e => setRegNumber(e.target.value)} placeholder="e.g. 1234/2023" className="h-11" />
+                  <Label
+                    htmlFor="regNumber"
+                    className="font-semibold text-zinc-900"
+                  >
+                    Company Registration
+                  </Label>
+                  <Input
+                    id="regNumber"
+                    value={regNumber}
+                    onChange={(e) => setRegNumber(e.target.value)}
+                    placeholder="e.g. 1234/2023"
+                    className="h-11"
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="font-semibold text-zinc-900">Contact Email</Label>
-                  <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} className="h-11" />
+                  <Label
+                    htmlFor="email"
+                    className="font-semibold text-zinc-900"
+                  >
+                    Contact Email
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="h-11"
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone" className="font-semibold text-zinc-900">Phone Number</Label>
-                  <Input id="phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} className="h-11" />
+                  <Label
+                    htmlFor="phone"
+                    className="font-semibold text-zinc-900"
+                  >
+                    Phone Number
+                  </Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="h-11"
+                  />
                 </div>
               </div>
               <div className="space-y-2 pt-2 border-t border-zinc-100">
-                <Label className="font-semibold text-zinc-900">Invoice & Receipt Footer</Label>
-                <p className="text-xs text-zinc-500 mb-2">Text to display at the bottom of customer receipts.</p>
-                <Textarea placeholder="Thank you for your business!" className="min-h-[100px] resize-y" />
+                <Label className="font-semibold text-zinc-900">
+                  Invoice & Receipt Footer
+                </Label>
+                <p className="text-xs text-zinc-500 mb-2">
+                  Text to display at the bottom of customer receipts.
+                </p>
+                <Textarea
+                  placeholder="Thank you for your business!"
+                  className="min-h-[100px] resize-y"
+                />
               </div>
             </CardContent>
           </Card>

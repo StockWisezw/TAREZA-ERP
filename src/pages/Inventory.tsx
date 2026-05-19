@@ -5,6 +5,8 @@ import { InventoryDashboard } from '../components/inventory/InventoryDashboard';
 import { ProductList } from '../components/inventory/ProductList';
 import { BulkImport } from '../components/inventory/BulkImport';
 import { Stocktake } from '../components/inventory/Stocktake';
+import { Transfers } from '../components/inventory/Transfers';
+import { StockMovementHistory } from '../components/inventory/StockMovementHistory';
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -53,19 +55,11 @@ export default function Inventory() {
           </TabsContent>
 
           <TabsContent value="transfers" className="mt-0 outline-none">
-            <div className="p-12 text-center border-2 border-dashed border-zinc-200 rounded-xl bg-zinc-50">
-              <h3 className="text-lg font-semibold text-zinc-900 mb-2">Branch Transfers</h3>
-              <p className="text-zinc-500 max-w-md mx-auto">Move inventory between warehouses and store locations. Track in-transit stock.</p>
-              <Button className="mt-6">Initiate Transfer</Button>
-            </div>
+            <Transfers />
           </TabsContent>
 
           <TabsContent value="history" className="mt-0 outline-none">
-            <div className="p-12 text-center border-2 border-dashed border-zinc-200 rounded-xl bg-zinc-50">
-              <h3 className="text-lg font-semibold text-zinc-900 mb-2">Audit Trails & History</h3>
-              <p className="text-zinc-500 max-w-md mx-auto">View a comprehensive history of all stock movements, price changes, and adjustments.</p>
-              <Button className="mt-6">View Movement History</Button>
-            </div>
+            <StockMovementHistory />
           </TabsContent>
         </div>
       </Tabs>

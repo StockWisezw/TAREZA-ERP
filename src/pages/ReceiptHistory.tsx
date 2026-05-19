@@ -4,11 +4,12 @@ import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
-import { Search, Receipt, RefreshCcw, Download, ChevronRight } from 'lucide-react';
+import { Search, Receipt, RefreshCcw, Download, ChevronRight, Plus } from 'lucide-react';
 import { usePOSStore, SaleRecord } from '../store/posStore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { useReactToPrint } from 'react-to-print';
 import { ReceiptPrint } from '../components/pos/ReceiptPrint';
+import { toast } from 'sonner';
 
 export default function ReceiptHistory() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,9 +60,17 @@ export default function ReceiptHistory() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold tracking-tight">Receipt History</h1>
-        <Button variant="outline" onClick={exportCSV}>
-          <Download className="mr-2 h-4 w-4" /> Export CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="bg-white shadow-sm" onClick={() => window.print()}>
+            Print All
+          </Button>
+          <Button variant="outline" onClick={exportCSV}>
+            <Download className="mr-2 h-4 w-4" /> Export CSV
+          </Button>
+          <Button className="bg-blue-600 text-white hover:bg-blue-700 shadow-sm" onClick={() => toast.info('Invoice creation wizard will open')}>
+            <Plus className="mr-2 h-4 w-4" /> Create Invoice
+          </Button>
+        </div>
       </div>
 
       <Card>

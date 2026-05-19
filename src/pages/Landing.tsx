@@ -20,6 +20,7 @@ export default function Landing() {
           <a href="#features" className="hover:text-primary transition-colors">Features</a>
           <a href="#solution" className="hover:text-primary transition-colors">Solutions</a>
           <a href="#pricing" className="hover:text-primary transition-colors">Pricing</a>
+          <Link to="/dev-portal" className="text-zinc-400 hover:text-primary transition-colors">Admin Panel</Link>
         </div>
         
         <div className="flex items-center space-x-4">
@@ -277,6 +278,7 @@ export default function Landing() {
            <div className="flex flex-col md:flex-row items-center gap-4 text-zinc-400 mb-4 md:mb-0">
              <a href="mailto:support@tarezaerp.33mail.com" className="hover:text-primary transition-colors">Support: support@tarezaerp.33mail.com</a>
              <a href="mailto:admin@tarezaerp.33mail.com" className="hover:text-primary transition-colors">Billing: admin@tarezaerp.33mail.com</a>
+             <Link to="/dev-portal" className="hover:text-primary transition-colors text-zinc-500 text-xs">Developer Portal</Link>
              <div className="flex gap-2">
                <a href="tel:+263784553570" className="hover:text-primary transition-colors">Phone 1: +263 784553570</a> |
                <a href="tel:+263776699950" className="hover:text-primary transition-colors">Phone 2: +263 776699950</a>

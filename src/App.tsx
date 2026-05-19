@@ -17,6 +17,9 @@ import Customers from './pages/Customers';
 import Suppliers from './pages/Suppliers';
 import Settings from './pages/Settings';
 import ReceiptHistory from './pages/ReceiptHistory';
+import DeveloperPanel from './pages/DeveloperPanel';
+import Reports from './pages/Reports';
+import CashManagement from './pages/CashManagement';
 import { Toaster } from './components/ui/sonner';
 
 // Protected Route Wrapper
@@ -37,6 +40,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/dev-portal" element={<DeveloperPanel />} />
             <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/pos" element={<POS />} />
@@ -45,6 +49,8 @@ export default function App() {
               <Route path="/customers" element={<Customers />} />
               <Route path="/suppliers" element={<Suppliers />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/cash" element={<CashManagement />} />
             </Route>
           </Routes>
         </BrowserRouter>

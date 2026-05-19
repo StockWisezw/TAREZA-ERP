@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, MoreHorizontal, Mail, Phone, MapPin, Star, Building2, User, Plus } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, Mail, Phone, MapPin, Star, Building2, User, Plus, Download, Printer } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -74,15 +74,38 @@ export function CustomerDirectory() {
     }
   };
 
+  const exportCSV = () => {
+    if (!customers || customers.length === 0) {
+      toast.error('No customers to export');
+      return;
+    }
+    const headers = ['Name', 'Email', 'Phone', 'Address', 'Balance'];
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + headers.join(',') + '\n'
+      + customers.map(c => `${c.name || ''},${c.email || ''},${c.phone || ''},"${c.address || ''}",${c.balance || 0}`).join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `customers_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Customers exported successfully');
+  };
+
   const handleAddCustomer = async () => {
     if(!newCustomerName) {
       toast.error("Name is required");
       return;
     }
     try {
+       const { data: userData } = await supabase.auth.getUser();
+       if (!userData?.user) throw new Error("Not authenticated");
+
        const { data: businessData, error: businessError } = await supabase
          .from('business_users')
          .select('business_id')
+         .eq('user_id', userData.user.id)
          .limit(1)
          .single();
 
@@ -149,9 +172,9 @@ export function CustomerDirectory() {
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button variant="outline" className="bg-white shadow-sm"><Filter className="mr-2 h-4 w-4" /> Filters</Button>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="bg-white shadow-sm">Customer Type</Button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger 
+              render={<Button variant="outline" className="bg-white shadow-sm">Customer Type</Button>}
+            />
             <DropdownMenuContent>
               <DropdownMenuItem>All Customers</DropdownMenuItem>
               <DropdownMenuItem>Wholesale Only</DropdownMenuItem>
@@ -159,6 +182,9 @@ export function CustomerDirectory() {
             </DropdownMenuContent>
           </DropdownMenu>
           
+          <Button variant="outline" className="bg-white shadow-sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Print</Button>
+          <Button variant="outline" className="bg-white shadow-sm" onClick={exportCSV}><Download className="mr-2 h-4 w-4" /> Export</Button>
+
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
               <Button className="shadow-sm"><Plus className="mr-2 h-4 w-4" /> Add Customer</Button>
@@ -243,11 +269,13 @@ export function CustomerDirectory() {
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <MoreHorizontal className="h-4 w-4 text-zinc-500" />
-                        </Button>
-                      </DropdownMenuTrigger>
+                      <DropdownMenuTrigger 
+                        render={
+                          <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <MoreHorizontal className="h-4 w-4 text-zinc-500" />
+                          </Button>
+                        }
+                      />
                       <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem onClick={() => openProfile(cust)}>View Profile</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleDelete(cust.id)} className="text-red-600">Delete Customer</DropdownMenuItem>

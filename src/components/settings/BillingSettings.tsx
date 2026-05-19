@@ -13,14 +13,20 @@ export function BillingSettings() {
   
   useEffect(() => {
     async function loadData() {
-      const { data: business } = await supabase.from('businesses').select('*').limit(1).single();
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user) return;
+      
+      const { data: buData } = await supabase.from('business_users').select('business_id').eq('user_id', userData.user.id).limit(1).single();
+      if (!buData) return;
+
+      const { data: business } = await supabase.from('businesses').select('*').eq('id', buData.business_id).single();
       if (business) {
          setBusinessData(business);
          const { data: sub } = await supabase.from('subscriptions').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(1).single();
          if (sub) setSubscription(sub);
 
-         const { count } = await supabase.from('business_users').select('id', { count: 'exact', head: true }).eq('business_id', business.id);
-         setUserCount(count || 1);
+         const { data: bUsers } = await supabase.from('business_users').select('id').eq('business_id', business.id);
+         setUserCount(bUsers?.length || 1);
       }
     }
     loadData();

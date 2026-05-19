@@ -1,3 +1,4 @@
+import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -12,7 +13,10 @@ import {
   Search,
   Receipt,
   Truck,
-  AlertTriangle
+  AlertTriangle,
+  DollarSign,
+  FileText,
+  Lock
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from './ui/button';
@@ -28,10 +32,12 @@ import { SyncManager } from './pos/SyncManager';
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Tareza POS', href: '/pos', icon: ShoppingCart },
+  { name: 'Cash Management', href: '/cash', icon: DollarSign },
   { name: 'Tareza Fiscal', href: '/receipts', icon: Receipt },
   { name: 'Tareza Inventory', href: '/inventory', icon: Package },
   { name: 'Tareza CRM', href: '/customers', icon: Users },
   { name: 'Tareza Suppliers', href: '/suppliers', icon: Truck },
+  { name: 'Reports', href: '/reports', icon: FileText },
   { name: 'Tareza Settings', href: '/settings', icon: Settings },
 ];
 
@@ -70,12 +76,91 @@ function SubscriptionBanner() {
 export default function Layout() {
   const { signOut, user } = useAuth();
   const location = useLocation();
+  const [isLocked, setIsLocked] = React.useState(false);
+  const [unlockPin, setUnlockPin] = React.useState('');
+  const [pinError, setPinError] = React.useState(false);
+
+  React.useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      if (!isLocked) {
+        // Auto lock after 5 minutes of inactivity
+        timeoutId = setTimeout(() => setIsLocked(true), 5 * 60 * 1000);
+      }
+    };
+
+    const handleActivity = () => resetTimer();
+
+    window.addEventListener('mousemove', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+    window.addEventListener('scroll', handleActivity);
+    window.addEventListener('click', handleActivity);
+
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('mousemove', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('scroll', handleActivity);
+      window.removeEventListener('click', handleActivity);
+    };
+  }, [isLocked]);
 
   const handleSignOut = () => {
     localStorage.removeItem('isPreviewMode');
     signOut();
     window.location.href = '/login';
   };
+
+  const handleUnlock = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (unlockPin === '1234' || unlockPin === '0000') {
+      setIsLocked(false);
+      setUnlockPin('');
+      setPinError(false);
+    } else {
+      setPinError(true);
+      setTimeout(() => setPinError(false), 2000);
+    }
+  };
+
+  if (isLocked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
+        <div className="w-full max-w-sm p-8 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200 text-center">
+           <div className="bg-primary/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Lock className="w-8 h-8 text-primary" />
+           </div>
+           <h2 className="text-2xl font-bold tracking-tight text-white mb-2">App Locked</h2>
+           <p className="text-zinc-400 text-sm mb-8">{user?.email || 'Admin User'}</p>
+           
+           <form onSubmit={handleUnlock} className="space-y-4">
+             <input 
+               type="password" 
+               autoFocus
+               placeholder="Enter PIN (e.g. 1234)" 
+               className={`w-full bg-zinc-950 border ${pinError ? 'border-red-500' : 'border-zinc-800'} text-white text-center text-2xl tracking-widest p-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary`}
+               value={unlockPin}
+               onChange={(e) => setUnlockPin(e.target.value)}
+             />
+             {pinError && <p className="text-red-500 text-sm animate-pulse">Incorrect PIN. Try again.</p>}
+             <Button type="submit" className="w-full h-12 text-lg font-bold bg-primary hover:bg-primary/90 text-primary-foreground">
+               Unlock
+             </Button>
+           </form>
+           
+           <div className="mt-8">
+             <Button variant="ghost" className="text-zinc-500 hover:text-white" onClick={handleSignOut}>
+               <LogOut className="w-4 h-4 mr-2"/> Switch User
+             </Button>
+           </div>
+        </div>
+      </div>
+    );
+  }
 
   const NavLinks = ({ mobile }: { mobile?: boolean }) => (
     <div className="flex flex-col space-y-1">
@@ -207,6 +292,10 @@ export default function Layout() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>Profile Settings</DropdownMenuItem>
                   <DropdownMenuItem>Branch Setup</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setIsLocked(true)} className="font-medium text-amber-600">
+                    <Lock className="w-4 h-4 mr-2" /> Lock Terminal
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleSignOut} className="text-red-600">
                     Log out

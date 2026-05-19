@@ -607,13 +607,7 @@ CREATE TABLE price_overrides (
 -- Advanced Inventory Schema
 
 -- Branches & Warehouses
-CREATE TABLE branches (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name VARCHAR(255) NOT NULL,
-  location TEXT,
-  type VARCHAR(50) CHECK (type IN ('STORE', 'WAREHOUSE')),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+-- (Redundant CREATE TABLE branches removed. It is created in 20260513182000_tareza_schema.sql and enhanced later)
 
 -- Advanced Products
 CREATE TABLE products_advanced (
@@ -650,7 +644,7 @@ CREATE TABLE inventory_levels (
 );
 
 -- Stock Movements (Audit Trail)
-CREATE TABLE stock_movements (
+CREATE TABLE stock_movements_advanced (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   product_id UUID REFERENCES products_advanced(id),
   branch_id UUID REFERENCES branches(id),
@@ -675,7 +669,7 @@ CREATE TABLE inventory_transfers (
 );
 
 -- Stocktake
-CREATE TABLE stocktakes (
+CREATE TABLE stocktakes_advanced (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   branch_id UUID REFERENCES branches(id),
   status VARCHAR(50) CHECK (status IN ('DRAFT', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'CANCELLED')),
