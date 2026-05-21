@@ -37,7 +37,7 @@ export function SupportSettings() {
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Billing Email</p>
-                  <a href="mailto:admin@tarezaerp.33mail.com" className="text-sm font-bold text-zinc-900 hover:text-primary transition-colors">
+                  <a href="mailto:admin@tarezaerp.co.zw" className="text-sm font-bold text-zinc-900 hover:text-primary transition-colors">
                     admin@tarezaerp.33mail.com
                   </a>
                 </div>

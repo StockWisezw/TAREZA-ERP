@@ -48,7 +48,7 @@ export function BillingSettings() {
           <h3 className="text-xl font-bold text-zinc-900 tracking-tight">Billing & Subscription</h3>
           <p className="text-sm text-zinc-500 mt-1">Manage your subscription plan, branches, and user limits.</p>
         </div>
-        <Button variant="outline" className="text-zinc-600" onClick={() => window.location.href = 'mailto:admin@tarezaerp.33mail.com?subject=Billing Support - Tareza ERP'}>
+        <Button variant="outline" className="text-zinc-600" onClick={() => window.location.href = 'mailto:admin@tarezaerp.co.zw?subject=Billing Support - Tareza ERP'}>
           <HelpCircle className="w-4 h-4 mr-2" /> Billing Support
         </Button>
       </div>
@@ -99,7 +99,7 @@ export function BillingSettings() {
               <div className="p-6 flex flex-col justify-center">
                  <p className="text-sm font-medium text-zinc-500 mb-1">Billing Cycle</p>
                  <div className="flex items-end gap-2">
-                   <h4 className="text-xl font-bold text-zinc-900">{planName === 'Free Trial' ? '$0.00' : '$45.00'} <span className="text-sm font-medium text-zinc-400">/mo</span></h4>
+                   <h4 className="text-xl font-bold text-zinc-900">{planName === 'Free Trial' ? '$0.00' : '$40.00'} <span className="text-sm font-medium text-zinc-400">/mo</span></h4>
                  </div>
                  <p className="text-xs text-zinc-500 mt-2 font-medium">Billed on the 1st of every month.</p>
               </div>
@@ -128,7 +128,7 @@ export function BillingSettings() {
               </ul>
             </CardContent>
             <CardFooter className="pt-6 border-t border-zinc-100">
-              <Button variant="outline" className="w-full border-zinc-200 text-zinc-700 hover:bg-zinc-50">Downgrade to Starter</Button>
+              <Button variant="outline" className="w-full border-zinc-200 text-zinc-700 hover:bg-zinc-50" onClick={() => toast("Redirecting to Paynow checkout...")}>Downgrade to Starter</Button>
             </CardFooter>
           </Card>
 
@@ -139,7 +139,7 @@ export function BillingSettings() {
             <CardHeader className="bg-primary/5 pb-6 border-b border-primary/10">
               <CardTitle className="text-lg font-bold text-primary">Pro</CardTitle>
               <div className="mt-4 flex items-baseline text-4xl font-extrabold text-zinc-900 tracking-tight">
-                $45
+                $40
                 <span className="ml-1 text-base font-medium text-zinc-500">/mo</span>
               </div>
               <CardDescription className="pt-3 text-zinc-600 leading-relaxed font-medium">Built for growing multi-location retailers.</CardDescription>
@@ -175,7 +175,7 @@ export function BillingSettings() {
               </ul>
             </CardContent>
             <CardFooter className="pt-6 border-t border-zinc-100">
-              <Button className="w-full bg-zinc-900 text-white hover:bg-zinc-800 shadow-sm">Upgrade to Enterprise</Button>
+              <Button className="w-full bg-zinc-900 text-white hover:bg-zinc-800 shadow-sm" onClick={() => toast("Redirecting to Paynow checkout...")}>Upgrade to Enterprise</Button>
             </CardFooter>
           </Card>
         </div>
@@ -201,14 +201,14 @@ export function BillingSettings() {
                   <TableRow className="group hover:bg-zinc-50/50">
                      <TableCell className="font-medium text-zinc-900">Oct 1, 2024</TableCell>
                      <TableCell className="text-zinc-500 font-mono text-sm">INV-2024-0042</TableCell>
-                     <TableCell className="text-zinc-800 font-medium">$45.00</TableCell>
+                     <TableCell className="text-zinc-800 font-medium">$40.00</TableCell>
                      <TableCell><Badge variant="outline" className="bg-emerald-50 border-emerald-200 text-emerald-700">Paid</Badge></TableCell>
                      <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Download className="w-4 h-4" /></Button></TableCell>
                   </TableRow>
                   <TableRow className="group hover:bg-zinc-50/50">
                      <TableCell className="font-medium text-zinc-900">Sep 1, 2024</TableCell>
                      <TableCell className="text-zinc-500 font-mono text-sm">INV-2024-0038</TableCell>
-                     <TableCell className="text-zinc-800 font-medium">$45.00</TableCell>
+                     <TableCell className="text-zinc-800 font-medium">$40.00</TableCell>
                      <TableCell><Badge variant="outline" className="bg-emerald-50 border-emerald-200 text-emerald-700">Paid</Badge></TableCell>
                      <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Download className="w-4 h-4" /></Button></TableCell>
                   </TableRow>

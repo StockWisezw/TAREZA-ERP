@@ -19,7 +19,7 @@ export default function DeveloperPanel() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (email === 'admin@tarezaerp.33mail.com' && password === 'taps1302??') {
+    if (email === 'admin@tarezaerp.co.zw' && password === 'taps1302??') {
       setIsAuthenticated(true);
       fetchBusinesses();
     } else {
@@ -200,6 +200,59 @@ export default function DeveloperPanel() {
                        )}
                     </div>
                   ))}
+               </div>
+            </CardContent>
+          </Card>
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>Licensing & Billing Setup</CardTitle>
+              <CardDescription>Setup live licensing and payment webhooks</CardDescription>
+            </CardHeader>
+            <CardContent>
+               <div className="space-y-4 text-sm text-zinc-600 dark:text-zinc-300">
+                  <p>
+                    Tareza ERP is currently using manual billing checks (checking the `subscription_status` field on the `businesses` table). To automate live licensing, you need to configure a webhook.
+                  </p>
+                  
+                  <div className="p-4 border border-border rounded-lg bg-zinc-50 dark:bg-zinc-900/50">
+                     <h4 className="font-bold text-zinc-900 dark:text-zinc-50 mb-2">1. Choose a Payment Gateway</h4>
+                     <ul className="list-disc pl-5 space-y-1 mb-4">
+                       <li><strong>Paynow / EcoCash</strong> - Best for local Zimbabwe RTGS/USD payments.</li>
+                       <li><strong>Stripe</strong> - Best for international cards processing.</li>
+                       <li><strong>Paystack</strong> - Good alternative for Africa-wide processing.</li>
+                     </ul>
+                     
+                     <h4 className="font-bold text-zinc-900 dark:text-zinc-50 mb-2">2. Implement Webhook Endpoint</h4>
+                     <p className="mb-2">
+                       Set up a serverless function (e.g., using Supabase Edge Functions) to map payment events back to the database:
+                     </p>
+                     <pre className="bg-zinc-950 p-3 rounded-md text-xs text-green-400 overflow-x-auto">
+{`// Supabase Edge Function to handle Paynow/Stripe Webhook
+import { createClient } from '@supabase/supabase-js'
+
+export async function handlePaymentWebhook(req) {
+  const { business_id, status } = await req.json()
+  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+  
+  if(status === 'PAID') {
+    await supabase.from('businesses')
+      .update({ subscription_status: 'ACTIVE' })
+      .eq('id', business_id)
+  }
+}`}
+                     </pre>
+                  </div>
+                  
+                  <div className="p-4 border border-border rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20">
+                     <h4 className="font-bold flex items-center gap-2 mb-2 text-indigo-900 dark:text-indigo-400">
+                       <AlertCircle className="w-4 h-4" /> Next Steps to go Live
+                     </h4>
+                     <ol className="list-decimal pl-5 space-y-1">
+                       <li>Create a Supabase Edge function for webhooks.</li>
+                       <li>Provide the Edge function URL to your Paynow/Stripe dashboard.</li>
+                       <li>Integrate the "Checkout" button on the billing page to redirect to the gateway.</li>
+                     </ol>
+                  </div>
                </div>
             </CardContent>
           </Card>

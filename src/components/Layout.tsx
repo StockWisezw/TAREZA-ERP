@@ -163,7 +163,7 @@ export default function Layout() {
   }
 
   const NavLinks = ({ mobile }: { mobile?: boolean }) => (
-    <div className="flex flex-col space-y-1">
+    <div className="flex flex-col space-y-0.5">
       {navigation.map((item) => {
         const isActive = location.pathname === item.href;
         
@@ -188,7 +188,7 @@ export default function Layout() {
           <Link
             key={item.name}
             to={item.href}
-            className={`flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            className={`flex items-center space-x-3 rounded-lg px-3 py-1 text-sm font-medium transition-colors mt-0.5 ${
               isActive 
                 ? 'bg-primary text-primary-foreground shadow-sm' 
                 : 'text-zinc-400 hover:bg-white/10 hover:text-white'

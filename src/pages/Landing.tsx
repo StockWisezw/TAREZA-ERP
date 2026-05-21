@@ -91,25 +91,30 @@ export default function Landing() {
                   Start your 14-day free trial
                 </Button>
               </Link>
-              <Button size="lg" variant="outline" className="h-14 px-8 text-base font-bold w-full sm:w-auto bg-background/50 backdrop-blur-md border-border hover:bg-background/80">
-                Book a Demo
-              </Button>
+              <a href="mailto:admin@tarezaerp.co.zw?subject=Book a Demo - Tareza ERP">
+                <Button size="lg" variant="outline" className="h-14 px-8 text-base font-bold w-full sm:w-auto bg-background/50 backdrop-blur-md border-border hover:bg-background/80">
+                  Book a Demo
+                </Button>
+              </a>
             </div>
             <p className="text-sm text-zinc-500 font-medium">No credit card required. Cancel anytime.</p>
           </div>
           
           <div className="lg:w-1/2 mt-16 lg:mt-0 relative z-10">
             <div className="relative rounded-2xl overflow-hidden border border-border/50 shadow-2xl glass-effect p-2 bg-gradient-to-br from-white/40 to-white/10 dark:from-zinc-900/80 dark:to-zinc-950/80 backdrop-blur-xl">
-              <div className="rounded-xl overflow-hidden shadow-inner relative aspect-video bg-zinc-900">
-                <video 
-                  autoPlay 
-                  loop 
-                  muted 
-                  playsInline 
-                  className="w-full h-full object-cover scale-105"
-                >
-                  <source src="https://assets.mixkit.co/videos/preview/mixkit-business-dashboard-in-a-computer-screen-41764-large.mp4" type="video/mp4" />
-                </video>
+              <div className="rounded-xl overflow-hidden shadow-inner relative aspect-[4/3] sm:aspect-video bg-zinc-900 flex flex-col group">
+                <img 
+                  src="/src/assets/images/tareza_dashboard_mockup_1779363946895.png"
+                  alt="Tareza ERP Dashboard"
+                  referrerPolicy="no-referrer"
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                />
+                <img 
+                  src="/src/assets/images/tareza_pos_mockup_1779363968403.png"
+                  alt="Tareza POS Interface"
+                  referrerPolicy="no-referrer"
+                  className="absolute bottom-0 right-0 w-2/3 h-auto rounded-tl-xl shadow-2xl border-t border-l border-white/20 translate-y-8 translate-x-8 group-hover:translate-y-4 group-hover:translate-x-4 transition-transform duration-700"
+                />
               </div>
 
               {/* Floating KPI Cards */}
@@ -216,7 +221,7 @@ export default function Landing() {
               </div>
               <h3 className="text-2xl font-bold mb-2 text-foreground">Pro</h3>
               <div className="flex items-baseline gap-1 mb-4">
-                <span className="text-4xl font-bold text-foreground">$45</span>
+                <span className="text-4xl font-bold text-foreground">$40</span>
                 <span className="text-muted-foreground">/mo</span>
               </div>
               <p className="text-sm text-muted-foreground mb-6">For growing multi-location retailers.</p>
@@ -248,7 +253,7 @@ export default function Landing() {
                 <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Custom API Access</li>
                 <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> 24/7 Priority Support</li>
               </ul>
-              <a href="mailto:admin@tarezaerp.33mail.com?subject=Enterprise Inquiry - Tareza ERP" className="mt-auto block">
+              <a href="mailto:admin@tarezaerp.co.zw?subject=Enterprise Inquiry - Tareza ERP" className="mt-auto block">
                 <Button variant="outline" className="w-full">Contact Sales</Button>
               </a>
             </div>
@@ -259,9 +264,9 @@ export default function Landing() {
                <h4 className="font-bold text-lg text-zinc-900 dark:text-zinc-50 mb-1">Payment & Subscription Enquiries</h4>
                <p className="text-sm text-zinc-600 dark:text-zinc-400">For manual payments, plan upgrades, or direct support, please email our billing team.</p>
             </div>
-            <a href="mailto:admin@tarezaerp.33mail.com?subject=Payment Request - Tareza ERP">
+            <a href="mailto:admin@tarezaerp.co.zw?subject=Payment Request - Tareza ERP">
                <Button className="shrink-0 bg-primary text-primary-foreground font-semibold">
-                  Contact admin@tarezaerp.33mail.com
+                  Contact admin@tarezaerp.co.zw
                </Button>
             </a>
           </div>
@@ -276,8 +281,8 @@ export default function Landing() {
              <span className="font-bold tracking-widest text-white">TAREZA ERP</span>
            </div>
            <div className="flex flex-col md:flex-row items-center gap-4 text-zinc-400 mb-4 md:mb-0">
-             <a href="mailto:support@tarezaerp.33mail.com" className="hover:text-primary transition-colors">Support: support@tarezaerp.33mail.com</a>
-             <a href="mailto:admin@tarezaerp.33mail.com" className="hover:text-primary transition-colors">Billing: admin@tarezaerp.33mail.com</a>
+             <a href="mailto:support@tarezaerp.co.zw" className="hover:text-primary transition-colors">Support: support@tarezaerp.co.zw</a>
+             <a href="mailto:admin@tarezaerp.co.zw" className="hover:text-primary transition-colors">Billing: admin@tarezaerp.co.zw</a>
              <Link to="/dev-portal" className="hover:text-primary transition-colors text-zinc-500 text-xs">Developer Portal</Link>
              <div className="flex gap-2">
                <a href="tel:+263784553570" className="hover:text-primary transition-colors">Phone 1: +263 784553570</a> |

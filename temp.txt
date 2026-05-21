@@ -1,0 +1,129 @@
+src/components/suppliers/SupplierDashboard.tsx:115:                <Button variant="link" className="px-0 h-auto text-indigo-600 text-xs mt-2">Generate Draft PO</Button>
+src/components/suppliers/SupplierDirectory.tsx:141:          <Button variant="outline" className="bg-white shadow-sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Print</Button>
+src/components/suppliers/SupplierDirectory.tsx:142:          <Button variant="outline" className="bg-white shadow-sm" onClick={exportCSV}><Download className="mr-2 h-4 w-4" /> Export</Button>
+src/components/suppliers/SupplierDirectory.tsx:143:          <Button onClick={() => setIsAddOpen(true)}><Plus className="mr-2 h-4 w-4" /> Add Supplier</Button>
+src/components/suppliers/SupplierDirectory.tsx:162:            <Button className="w-full" onClick={handleAddSupplier}>Save Supplier</Button>
+src/components/suppliers/SupplierDirectory.tsx:217:                          <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+src/components/suppliers/SupplierDirectory.tsx:327:             <Button variant="outline">Statement</Button>
+src/components/suppliers/SupplierDirectory.tsx:328:            <Button>New PO</Button>
+src/components/suppliers/SupplierPayables.tsx:69:            <Button variant="outline" size="sm"><Download className="mr-2 h-4 w-4" /> Export Report</Button>
+src/components/suppliers/SupplierPayables.tsx:128:                      <Button variant="ghost" size="sm" className="h-8 text-xs bg-zinc-100 hover:bg-zinc-200">
+src/components/suppliers/SupplierPayables.tsx:137:              <Button className="w-full"><CreditCard className="w-4 h-4 mr-2"/> Pay Multiple</Button>
+src/components/suppliers/Procurement.tsx:104:          <Button variant="outline" className="bg-white shadow-sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Print</Button>
+src/components/suppliers/Procurement.tsx:105:          <Button variant="outline" className="bg-white shadow-sm" onClick={exportCSV}><Download className="mr-2 h-4 w-4" /> Export</Button>
+src/components/suppliers/Procurement.tsx:106:          <Button variant="outline" onClick={fetchPOs} className="bg-white shadow-sm"><RefreshCw className="mr-2 h-4 w-4" /> Refresh</Button>
+src/components/suppliers/Procurement.tsx:107:          <Button className="bg-blue-600 text-white hover:bg-blue-700 shadow-sm" onClick={() => toast.info('PO creation wizard will open')}><Plus className="mr-2 h-4 w-4" /> Create PO</Button>
+src/components/suppliers/Procurement.tsx:147:                    <Button variant="ghost" size="sm">View</Button>
+src/components/ui/input-group.tsx:95:    <Button
+src/components/ui/sheet.tsx:64:              <Button
+src/components/ui/button.tsx:50:    <ButtonPrimitive
+src/components/ui/dialog.tsx:75:              <Button
+src/components/ui/dialog.tsx:121:        <DialogPrimitive.Close render={<Button variant="outline" />}>
+src/components/settings/UserManagement.tsx:116:                <Button size="sm" className="bg-primary text-primary-foreground shadow-sm">
+src/components/settings/UserManagement.tsx:138:                  <Button type="submit" className="w-full" disabled={isInviting}>
+src/components/settings/UserManagement.tsx:217:                     <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900">
+src/components/settings/LocalizationSettings.tsx:28:        <Button onClick={handleSave} disabled={isSaving} className="bg-primary text-primary-foreground shadow-sm px-6">
+src/components/settings/BillingSettings.tsx:51:        <Button variant="outline" className="text-zinc-600" onClick={() => window.location.href = 'mailto:admin@tarezaerp.co.zw?subject=Billing Support - Tareza ERP'}>
+src/components/settings/BillingSettings.tsx:77:            <Button variant="outline" className="shrink-0 bg-white shadow-sm border-zinc-200 hover:bg-zinc-50">
+src/components/settings/BillingSettings.tsx:131:              <Button variant="outline" className="w-full border-zinc-200 text-zinc-700 hover:bg-zinc-50" onClick={() => toast("Redirecting to Paynow checkout...")}>Downgrade to Starter</Button>
+src/components/settings/BillingSettings.tsx:156:              <Button className="w-full font-semibold shadow-sm" disabled>Current Plan</Button>
+src/components/settings/BillingSettings.tsx:178:              <Button className="w-full bg-zinc-900 text-white hover:bg-zinc-800 shadow-sm" onClick={() => toast("Redirecting to Paynow checkout...")}>Upgrade to Enterprise</Button>
+src/components/settings/BillingSettings.tsx:206:                     <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Download className="w-4 h-4" /></Button></TableCell>
+src/components/settings/BillingSettings.tsx:213:                     <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Download className="w-4 h-4" /></Button></TableCell>
+src/components/settings/CurrencySettings.tsx:49:          <Button variant="outline" size="sm" className="bg-white border-zinc-200">
+src/components/settings/CurrencySettings.tsx:52:          <Button size="sm" className="bg-primary text-primary-foreground">
+src/components/settings/CurrencySettings.tsx:169:                        <Button variant="ghost" size="sm" className="h-8 text-zinc-500" onClick={() => setEditingId(null)}>Cancel</Button>
+src/components/settings/CurrencySettings.tsx:170:                        <Button size="sm" className="h-8 bg-zinc-900 text-white hover:bg-zinc-800" onClick={() => handleSave(c.id)} disabled={isUpdating}>
+src/components/settings/CurrencySettings.tsx:175:                      <Button 
+src/components/settings/FiscalisationSettings.tsx:30:        <Button onClick={handleSave} disabled={isSaving} className="bg-primary text-primary-foreground shadow-sm px-6">
+src/components/settings/FiscalisationSettings.tsx:99:              <Button variant="outline" size="sm" className="mt-4 bg-white">Add Override</Button>
+src/components/settings/PosSettings.tsx:58:        <Button onClick={handleSave} disabled={isSaving} className="bg-primary text-primary-foreground shadow-sm px-6">
+src/components/settings/SecuritySettings.tsx:28:        <Button onClick={handleSave} disabled={isSaving} className="bg-primary text-primary-foreground shadow-sm px-6">
+src/components/settings/SupportSettings.tsx:51:            <Button className="w-full" onClick={() => window.location.href = 'mailto:admin@tarezaerp.33mail.com?subject=Payment Request - Tareza ERP'}>
+src/components/settings/SupportSettings.tsx:108:            <Button variant="outline" className="w-full border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700" onClick={() => window.location.href = 'mailto:support@tarezaerp.33mail.com?subject=Technical Support - Tareza ERP'}>
+src/components/settings/BranchWarehouseSettings.tsx:106:            <Button className="bg-primary text-primary-foreground shadow-sm">
+src/components/settings/BranchWarehouseSettings.tsx:131:               <Button type="submit" className="w-full" disabled={isAdding}>
+src/components/settings/BranchWarehouseSettings.tsx:214:                     <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900">
+src/components/settings/ThemeSettings.tsx:113:        <Button size="lg" className="px-8 shadow-sm font-semibold">Save Theme Preferences</Button>
+src/components/settings/AiSettings.tsx:38:        <Button onClick={handleSave} disabled={isSaving} className="bg-primary text-primary-foreground shadow-sm px-6">
+src/components/settings/NotificationSettings.tsx:27:        <Button onClick={handleSave} disabled={isSaving} className="bg-primary text-primary-foreground shadow-sm px-6">
+src/components/settings/RolesPermissions.tsx:36:        <Button onClick={handleCreate} disabled={isCreating} className="bg-primary text-primary-foreground shadow-sm">
+src/components/settings/RolesPermissions.tsx:103:                      <Button variant="ghost" size="sm" disabled className="text-zinc-400 opacity-50">
+src/components/settings/RolesPermissions.tsx:107:                      <Button variant="outline" size="sm" className="h-8 border-zinc-200 text-zinc-700 hover:bg-zinc-100">
+src/components/settings/TaxationSettings.tsx:137:        <Button onClick={handleAdd} disabled={isAdding} className="bg-primary text-primary-foreground shadow-sm">
+src/components/settings/TaxationSettings.tsx:235:                         <Button variant="outline" size="sm" className="h-8 border-zinc-200 text-zinc-700 hover:bg-zinc-100">
+src/components/settings/TaxationSettings.tsx:277:                <Button type="submit" disabled={isAddingExpense || !newExpenseName.trim()} className="w-full">
+src/components/settings/TaxationSettings.tsx:325:                         <Button onClick={() => handleDeleteExpense(cat.id)} variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-red-600 hover:bg-red-50">
+src/components/settings/IntegrationSettings.tsx:62:                        <Button variant="outline" size="sm" className="w-[120px] text-zinc-600 border-zinc-200 hover:bg-zinc-100 hover:text-zinc-900">
+src/components/settings/IntegrationSettings.tsx:66:                        <Button onClick={() => handleConnect(init.id)} disabled={isConnecting === init.id} size="sm" className="w-[120px] bg-zinc-900 text-white shadow-sm hover:bg-zinc-800">
+src/components/settings/IntegrationSettings.tsx:93:                <Button variant="outline" size="sm" className="text-indigo-600 border-indigo-200 hover:bg-indigo-50">Generate New Key</Button>
+src/components/settings/BusinessProfile.tsx:129:        <Button
+src/components/settings/BusinessProfile.tsx:161:                <Button variant="outline" size="sm" className="w-full">
+src/components/customers/CustomerDirectory.tsx:173:          <Button variant="outline" className="bg-white shadow-sm"><Filter className="mr-2 h-4 w-4" /> Filters</Button>
+src/components/customers/CustomerDirectory.tsx:176:              render={<Button variant="outline" className="bg-white shadow-sm">Customer Type</Button>}
+src/components/customers/CustomerDirectory.tsx:185:          <Button variant="outline" className="bg-white shadow-sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Print</Button>
+src/components/customers/CustomerDirectory.tsx:186:          <Button variant="outline" className="bg-white shadow-sm" onClick={exportCSV}><Download className="mr-2 h-4 w-4" /> Export</Button>
+src/components/customers/CustomerDirectory.tsx:190:              <Button className="shadow-sm"><Plus className="mr-2 h-4 w-4" /> Add Customer</Button>
+src/components/customers/CustomerDirectory.tsx:213:                <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
+src/components/customers/CustomerDirectory.tsx:214:                <Button onClick={handleAddCustomer}>Save Customer</Button>
+src/components/customers/CustomerDirectory.tsx:274:                          <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+src/components/customers/CustomerDirectory.tsx:377:            <Button variant="outline" onClick={() => handleDelete(selectedCustomer?.id)} className="text-red-600 border-red-200 hover:bg-red-50">Delete Customer</Button>
+src/components/customers/CustomerDirectory.tsx:378:            <Button>New Order</Button>
+src/components/customers/CreditManagement.tsx:87:            <Button variant="outline" size="sm"><Download className="mr-2 h-4 w-4" /> Aging Report</Button>
+src/components/customers/CreditManagement.tsx:146:                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-zinc-100">
+src/components/customers/CreditManagement.tsx:163:                <Button className="w-full bg-zinc-900 text-white hover:bg-zinc-800">Send Reminders ({Math.min(customers.length, 5)})</Button>
+src/components/customers/CustomerDashboard.tsx:122:                <Button variant="link" className="px-0 h-auto text-purple-600 text-xs mt-2">View At-Risk Accounts <ChevronRight className="w-3 h-3 ml-1"/></Button>
+src/components/pos/PaymentDialog.tsx:100:              <Button 
+src/components/pos/PaymentDialog.tsx:109:              <Button 
+src/components/pos/PaymentDialog.tsx:118:              <Button 
+src/components/pos/PaymentDialog.tsx:127:              <Button 
+src/components/pos/PaymentDialog.tsx:136:              <Button 
+src/components/pos/PaymentDialog.tsx:172:                <Button variant="secondary" className="h-14 px-6 text-lg" onClick={setFullAmount}>Max</Button>
+src/components/pos/PaymentDialog.tsx:173:                <Button className="h-14 px-8 text-lg" onClick={handleAddPayment}>Add</Button>
+src/components/pos/PaymentDialog.tsx:179:                    <Button key={val} variant="outline" size="sm" onClick={() => setPresetAmount(val)} className="font-mono">
+src/components/pos/PaymentDialog.tsx:183:                  <Button variant="outline" size="sm" onClick={() => setPresetAmount(Math.ceil(remainingBalance))} className="font-mono">
+src/components/pos/PaymentDialog.tsx:223:          <Button variant="outline" size="lg" onClick={() => onOpenChange(false)} className="w-1/3">Cancel</Button>
+src/components/pos/PaymentDialog.tsx:224:          <Button 
+src/components/Layout.tsx:150:             <Button type="submit" className="w-full h-12 text-lg font-bold bg-primary hover:bg-primary/90 text-primary-foreground">
+src/components/Layout.tsx:156:             <Button variant="ghost" className="text-zinc-500 hover:text-white" onClick={handleSignOut}>
+src/components/Layout.tsx:231:            <Button variant="ghost" className="w-full justify-start text-zinc-400 hover:text-white hover:bg-white/10" onClick={handleSignOut}>
+src/components/Layout.tsx:245:                <SheetTrigger render={<Button variant="ghost" size="icon" className="md:hidden mr-2" />}>
+src/components/Layout.tsx:271:              <Button variant="ghost" size="icon" className="relative">
+src/components/Layout.tsx:277:                <DropdownMenuTrigger render={<Button variant="ghost" className="relative h-8 w-8 rounded-full" />}>
+src/components/ThemeToggle.tsx:17:      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-zinc-500" />}>
+src/components/inventory/Stocktake.tsx:127:          <Button variant="outline" onClick={fetchStocktakes}>Refresh</Button>
+src/components/inventory/Stocktake.tsx:128:          <Button onClick={() => setIsCreating(true)} className="w-full sm:w-auto">
+src/components/inventory/Stocktake.tsx:178:          <Button variant="outline" className="bg-white whitespace-nowrap"><Filter className="mr-2 h-4 w-4" /> Filter</Button>
+src/components/inventory/Stocktake.tsx:219:                    <Button variant="outline" size="sm" onClick={() => openReview(stk)} className="border-amber-200 text-amber-800 bg-amber-50 hover:bg-amber-100">
+src/components/inventory/Stocktake.tsx:223:                    <Button variant="outline" size="sm" onClick={() => setIsCounting(true)} className="border-emerald-200 text-emerald-800 bg-emerald-50 hover:bg-emerald-100">
+src/components/inventory/Stocktake.tsx:227:                    <Button variant="ghost" size="sm">View Report</Button>
+src/components/inventory/Stocktake.tsx:280:            <Button variant="ghost" className="text-zinc-500" onClick={() => setReviewItem(null)}>Cancel</Button>
+src/components/inventory/Stocktake.tsx:282:              <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={handleReject}>Reject Count</Button>
+src/components/inventory/Stocktake.tsx:283:              <Button onClick={handleApprove} className="bg-zinc-900 text-zinc-50 hover:bg-zinc-800">Approve & Adjust Inventory</Button>
+src/components/inventory/Stocktake.tsx:313:              <Button type="button" variant="ghost" onClick={() => setIsCreating(false)}>Cancel</Button>
+src/components/inventory/Stocktake.tsx:314:              <Button type="submit">Start Counting</Button>
+src/components/inventory/Stocktake.tsx:328:             <Button variant="outline" size="sm" className="bg-zinc-800 text-zinc-100 border-zinc-700 hover:bg-zinc-700 hover:text-white" onClick={() => setIsCounting(false)}>
+src/components/inventory/Stocktake.tsx:344:                   <Button size="lg" className="h-12 bg-blue-600 hover:bg-blue-700 text-white">Add</Button>
+src/components/inventory/Stocktake.tsx:350:              <Button variant="ghost" className="text-red-600 hover:bg-red-50 hover:text-red-700">Cancel Stocktake</Button>
+src/components/inventory/Stocktake.tsx:351:              <Button onClick={() => {
+src/components/inventory/Transfers.tsx:69:           <Button variant="outline" onClick={fetchTransfers}>Refresh</Button>
+src/components/inventory/Transfers.tsx:70:           <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> New Transfer</Button>
+src/components/inventory/Transfers.tsx:163:                     <Button variant="outline" size="sm" className="border-blue-200 text-blue-800 bg-blue-50 hover:bg-blue-100" onClick={() => handleUpdateStatus(trf.id, 'RECEIVED')}>Receive</Button>
+src/components/inventory/Transfers.tsx:165:                     <Button variant="outline" size="sm" className="border-amber-200 text-amber-800 bg-amber-50 hover:bg-amber-100" onClick={() => handleUpdateStatus(trf.id, 'IN_TRANSIT')}>Dispatch</Button>
+src/components/inventory/Transfers.tsx:167:                    <Button variant="ghost" size="sm">View</Button>
+src/components/inventory/ProductList.tsx:223:          <Button variant="outline" className="bg-white shadow-sm" onClick={() => toast.info('Please use the "Bulk Import" tab to import products.')}>Import</Button>
+src/components/inventory/ProductList.tsx:224:          <Button variant="outline" className="bg-white shadow-sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Print</Button>
+src/components/inventory/ProductList.tsx:225:          <Button variant="outline" className="bg-white shadow-sm" onClick={exportCSV}><Download className="mr-2 h-4 w-4" /> Export</Button>
+src/components/inventory/ProductList.tsx:226:          <Button variant="outline" className="bg-white shadow-sm"><Filter className="mr-2 h-4 w-4" /> Filter</Button>
+src/components/inventory/ProductList.tsx:227:          <Button variant="outline" className="bg-white shadow-sm"><Settings2 className="mr-2 h-4 w-4" /> View</Button>
+src/components/inventory/ProductList.tsx:231:              <Button className="shadow-sm"><Plus className="mr-2 h-4 w-4" /> Add Product</Button>
+src/components/inventory/ProductList.tsx:278:                <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
+src/components/inventory/ProductList.tsx:279:                <Button onClick={handleAddProduct}>Save Product</Button>
+src/components/inventory/ProductList.tsx:329:                          <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+src/components/inventory/BulkImport.tsx:14:        <Button variant="outline" className="bg-white">
+src/components/inventory/BulkImport.tsx:29:            <Button>Browse Files</Button>
+src/components/inventory/StockMovementHistory.tsx:89:        <Button variant="outline" onClick={fetchMovements}><RefreshCw className="mr-2 h-4 w-4" /> Refresh</Button>
+src/components/inventory/StockMovementHistory.tsx:98:          <Button variant="outline" className="bg-white"><Filter className="mr-2 h-4 w-4" /> Filter Advanced</Button>
+src/components/AIAssistant.tsx:106:      <Button
+src/components/AIAssistant.tsx:131:            <Button
+src/components/AIAssistant.tsx:206:              <Button
