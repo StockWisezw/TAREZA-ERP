@@ -10,8 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useReactToPrint } from 'react-to-print';
 import { ReceiptPrint } from '../components/pos/ReceiptPrint';
 import { toast } from 'sonner';
-import { db } from '../lib/firebase';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 export default function ReceiptHistory() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,13 +26,12 @@ export default function ReceiptHistory() {
   const fetchSales = async () => {
     setIsLoading(true);
     try {
-      const q = query(collection(db, 'sales'), orderBy('created_at', 'desc'), limit(50));
-      const snapshot = await getDocs(q);
-      const sales: any[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setSalesHistory(sales);
+      const { data } = await supabase.from('sales')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+        
+      setSalesHistory(data || []);
     } catch (err) {
       console.error('Failed to load past transactions:', err);
       toast.error('Could not load history');

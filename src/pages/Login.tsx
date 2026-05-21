@@ -1,9 +1,7 @@
 import * as React from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../lib/firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -34,53 +32,63 @@ export default function Login() {
         return;
       }
       try {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-
-        // Setup Firestore
-        await setDoc(doc(db, 'profiles', user.uid), {
-          first_name: firstName,
-          last_name: lastName,
-          email: user.email
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
         });
 
-        const bRef = await addDoc(collection(db, 'businesses'), {
-          name: businessName,
-          created_at: new Date().toISOString()
-        });
+        if (error) throw error;
+        
+        const user = data.user;
+        if (!user) throw new Error("User creation failed");
 
-        const rRef = await addDoc(collection(db, 'roles'), {
-          business_id: bRef.id,
-          name: 'Admin',
-          description: 'System Administrator'
-        });
+        // Setup Supabase Data
+        await supabase.from('profiles').insert([
+          { id: user.id, first_name: firstName, last_name: lastName, email: user.email }
+        ]);
 
-        const brRef = await addDoc(collection(db, 'branches'), {
-          business_id: bRef.id,
-          name: 'Main Branch',
-          type: 'retail'
-        });
+        const { data: bData } = await supabase.from('businesses').insert([
+          { name: businessName, created_at: new Date().toISOString() }
+        ]).select().single();
 
-        await addDoc(collection(db, 'business_users'), {
-          business_id: bRef.id,
-          user_id: user.uid,
-          branch_id: brRef.id,
-          role_id: rRef.id
-        });
+        const bRef = bData as any;
 
-        await addDoc(collection(db, 'categories'), {
-          business_id: bRef.id,
-          name: 'General'
-        });
+        if (bRef) {
+          const { data: rData } = await supabase.from('roles').insert([
+            { business_id: bRef.id, name: 'Admin', description: 'System Administrator' }
+          ]).select().single();
 
-        toast.success('Signup successful! Welcome to Tareza ERP.');
+          const rRef = rData as any;
+
+          const { data: brData } = await supabase.from('branches').insert([
+            { business_id: bRef.id, name: 'Main Branch', type: 'retail' }
+          ]).select().single();
+          
+          const brRef = brData as any;
+
+          if (rRef && brRef) {
+            await supabase.from('business_users').insert([
+              { business_id: bRef.id, user_id: user.id, branch_id: brRef.id, role_id: rRef.id }
+            ]);
+          }
+
+          await supabase.from('categories').insert([
+            { business_id: bRef.id, name: 'General' }
+          ]);
+        }
+
+        toast.success('Signup successful! Welcome to Tareza ERP. Please check your email to confirm if required.');
         navigate('/dashboard');
       } catch (error: any) {
         authError = error;
       }
     } else {
       try {
-        await signInWithEmailAndPassword(auth, email, password);
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+        if (error) throw error;
         toast.success('Welcome back to Tareza ERP');
         navigate('/dashboard');
       } catch (error: any) {
@@ -97,26 +105,17 @@ export default function Login() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+      });
+      if (error) throw error;
       
-      // Update profile with Google name if we don't have one
-      const nameParts = user.displayName?.split(' ') || ['User', ''];
-      await setDoc(doc(db, 'profiles', user.uid), {
-        first_name: nameParts[0],
-        last_name: nameParts.slice(1).join(' '),
-        email: user.email
-      }, { merge: true });
-
-      toast.success('Signed in with Google!');
-      navigate('/dashboard');
     } catch (error: any) {
       toast.error(error.message);
-    } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="min-h-screen bg-background flex">

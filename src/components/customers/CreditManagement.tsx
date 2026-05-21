@@ -4,8 +4,7 @@ import { Button } from '../ui/button';
 import { AlertTriangle, TrendingUp, DollarSign, CalendarClock, Download, Bell } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { supabase } from '../../lib/supabase';
 
 export function CreditManagement() {
   const [customers, setCustomers] = useState<any[]>([]);
@@ -14,16 +13,16 @@ export function CreditManagement() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const q = query(collection(db, 'customers'));
-        const snap = await getDocs(q);
-        const custs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-        const withBalance = custs.filter(c => Number(c.balance) > 0);
-        
-        withBalance.sort((a, b) => Number(b.balance) - Number(a.balance));
-        setCustomers(withBalance);
-        
-        const total = withBalance.reduce((sum, c) => sum + Number(c.balance), 0);
-        setTotalReceivables(total);
+        const { data: custs } = await supabase.from('customers').select('*');
+        if (custs) {
+            const withBalance = custs.filter(c => Number(c.balance) > 0);
+            
+            withBalance.sort((a, b) => Number(b.balance) - Number(a.balance));
+            setCustomers(withBalance);
+            
+            const total = withBalance.reduce((sum, c) => sum + Number(c.balance), 0);
+            setTotalReceivables(total);
+        }
       } catch (err) {
         console.error('Failed to fetch credit data', err);
       }

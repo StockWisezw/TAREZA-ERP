@@ -6,8 +6,7 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Lock, Unlock, DollarSign, Calculator, FileText, AlertTriangle, ArrowUpRight, ArrowDownRight, UserMinus } from 'lucide-react';
 import { toast } from 'sonner';
-import { db } from '../lib/firebase';
-import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 
 interface CashLog {
@@ -47,27 +46,22 @@ export default function CashManagement() {
       const isoStartOfDay = startOfDay.toISOString();
 
       // 1. Fetch sales
-      const salesQuery = query(
-        collection(db, 'sales'),
-        where('status', '==', 'completed'),
-        where('created_at', '>=', isoStartOfDay)
-      );
-      const salesSnapshot = await getDocs(salesQuery);
-      const salesData = salesSnapshot.docs.map(doc => doc.data());
+      const { data: salesData } = await supabase.from('sales')
+        .select('*')
+        .eq('status', 'completed')
+        .gte('created_at', isoStartOfDay);
       
       const totalCashSales = salesData?.filter(s => s.payment_method === 'cash').reduce((sum, sale) => sum + Number(sale.total), 0) || 0;
       
       // 2. Fetch cash logs
-      const logsQuery = query(
-        collection(db, 'cash_drawer_logs'),
-        where('created_at', '>=', isoStartOfDay)
-      );
-      const logsSnapshot = await getDocs(logsQuery);
-      const logsData: any[] = logsSnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const { data: logsDocs } = await supabase.from('cash_drawer_logs')
+        .select('*')
+        .gte('created_at', isoStartOfDay)
+        .order('created_at', { ascending: false });
+
+      const logsData = logsDocs || [];
         
-      setCashLogs(logsData || []);
+      setCashLogs(logsData);
       
       let float = 0;
       let expenses = 0;
@@ -76,7 +70,7 @@ export default function CashManagement() {
       
       let isRegisterCurrentlyClosed = false;
       
-      (logsData || []).forEach(log => {
+      logsData.forEach(log => {
         const amt = Number(log.amount);
         switch(log.transaction_type) {
             case 'opening_float': float += amt; break;
@@ -94,10 +88,10 @@ export default function CashManagement() {
       if (isRegisterCurrentlyClosed && float === 0 && totalCashSales === 0) {
           setIsDrawerOpen(false);
       } else {
-          const hasClosing = (logsData || []).some(l => l.transaction_type === 'closing_count');
-          const hasOpeningAfterClosing = (logsData || [])
+          const hasClosing = logsData.some(l => l.transaction_type === 'closing_count');
+          const hasOpeningAfterClosing = logsData
             .findIndex(l => l.transaction_type === 'opening_float') < 
-            (logsData || []).findIndex(l => l.transaction_type === 'closing_count');
+            logsData.findIndex(l => l.transaction_type === 'closing_count');
             
           if (hasClosing && !hasOpeningAfterClosing) {
               setIsDrawerOpen(false);
@@ -121,12 +115,12 @@ export default function CashManagement() {
     }
     
     try {
-        await addDoc(collection(db, 'cash_drawer_logs'), {
+        await supabase.from('cash_drawer_logs').insert([{
             amount: parseFloat(entryAmount),
             transaction_type: entryType,
             notes: entryNotes,
             created_at: new Date().toISOString()
-        });
+        }]);
         
         toast.success('Transaction logged successfully');
         setEntryAmount('');
@@ -153,12 +147,12 @@ export default function CashManagement() {
     }
 
     try {
-        await addDoc(collection(db, 'cash_drawer_logs'), {
+        await supabase.from('cash_drawer_logs').insert([{
             amount: countedCash,
             transaction_type: 'closing_count',
             notes: `Counted: $${countedCash.toFixed(2)}, Expected: $${expectedCash.toFixed(2)}, Variance: $${variance.toFixed(2)}. ${notes}`,
             created_at: new Date().toISOString()
-        });
+        }]);
         
         setIsDrawerOpen(false);
         setCountedCash(0);
@@ -175,12 +169,12 @@ export default function CashManagement() {
     try {
         const floatAmount = parseFloat(startingFloat) || 0;
         
-        await addDoc(collection(db, 'cash_drawer_logs'), {
+        await supabase.from('cash_drawer_logs').insert([{
             amount: floatAmount,
             transaction_type: 'opening_float',
             notes: 'Register opened',
             created_at: new Date().toISOString()
-        });
+        }]);
         
         setIsDrawerOpen(true);
         setStartingFloat('');

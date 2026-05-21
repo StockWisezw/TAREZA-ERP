@@ -48,32 +48,27 @@ export default function POS() {
   const receiptRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch products and customers from Firebase
+  // Fetch products and customers from Supabase
   useEffect(() => {
-    let unsubscribeProducts: () => void;
+    let unsubscribeProducts: any = null;
     
     const loadData = async () => {
       try {
         setIsLoading(true);
-        const { collection, getDocs, onSnapshot, query, where } = await import('firebase/firestore');
-        const { db } = await import('../lib/firebase');
+        const { supabase } = await import('../lib/supabase');
         
         let productsData: any[] = [];
         let customersData: any[] = [];
         let catData: any[] = [];
         
         try {
-          const productsRef = collection(db, 'products');
-          // Assuming we just fetch all products for now
-          
-          const customersRef = collection(db, 'customers');
-          const [custSnap, catSnap] = await Promise.all([
-            getDocs(customersRef),
-            getDocs(collection(db, 'categories'))
+          const [custRes, catRes] = await Promise.all([
+            supabase.from('customers').select('*'),
+            supabase.from('categories').select('*')
           ]);
           
-          customersData = custSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          catData = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          customersData = custRes.data || [];
+          catData = catRes.data || [];
           
           if (catData.length > 0) {
             setCategories([
@@ -83,27 +78,52 @@ export default function POS() {
           }
           
           // Setup realtime subscription for products
-          unsubscribeProducts = onSnapshot(productsRef, (snapshot) => {
-            const pData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            if (pData.length > 0) {
-              setProducts(pData.map(p => ({
-                id: p.id,
-                name: p.name || 'Unnamed',
-                barcode: p.barcode || '',
-                sku: p.sku || '',
-                retailPrice: p.retail_price || p.retailPrice || 0,
-                wholesalePrice: p.wholesale_price || p.wholesalePrice || 0,
-                taxClass: p.tax_class || p.taxClass || 'standard',
-                category: p.category_id || p.category || 'all',
-                imageUrl: '', 
-              })));
-            } else {
-              setProducts([]);
-            }
-          });
+          const channel = supabase.channel('public:products')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, payload => {
+               supabase.from('products').select('*').then(({ data }) => {
+                 if (data && data.length > 0) {
+                    setProducts(data.map(p => ({
+                      id: p.id,
+                      name: p.name || 'Unnamed',
+                      barcode: p.barcode || '',
+                      sku: p.sku || '',
+                      retailPrice: p.retail_price || p.retailPrice || 0,
+                      wholesalePrice: p.wholesale_price || p.wholesalePrice || 0,
+                      taxClass: p.tax_class || p.taxClass || 'standard',
+                      category: p.category_id || p.category || 'all',
+                      imageUrl: '', 
+                    })));
+                 } else {
+                   setProducts([]);
+                 }
+               });
+            })
+            .subscribe();
+            
+          unsubscribeProducts = () => {
+            supabase.removeChannel(channel);
+          };
+
+          // Initial load
+          const { data: initProducts } = await supabase.from('products').select('*');
+          if (initProducts && initProducts.length > 0) {
+            setProducts(initProducts.map(p => ({
+              id: p.id,
+              name: p.name || 'Unnamed',
+              barcode: p.barcode || '',
+              sku: p.sku || '',
+              retailPrice: p.retail_price || p.retailPrice || 0,
+              wholesalePrice: p.wholesale_price || p.wholesalePrice || 0,
+              taxClass: p.tax_class || p.taxClass || 'standard',
+              category: p.category_id || p.category || 'all',
+              imageUrl: '', 
+            })));
+          } else {
+             setProducts([]);
+          }
           
         } catch (e) {
-          console.error("Firebase fetch failed", e);
+          console.error("Supabase fetch failed", e);
         }
 
         if (customersData.length > 0) {
@@ -180,44 +200,41 @@ export default function POS() {
       shouldPrintRef.current = true;
       
       try {
-        const { collection, addDoc, doc, getDoc, updateDoc } = await import('firebase/firestore');
-        const { db } = await import('../lib/firebase');
+        const { supabase } = await import('../lib/supabase');
 
-        // 1. Save Sale to Firebase
+        // 1. Save Sale to Supabase
         const saleData = JSON.parse(JSON.stringify(sale));
-        const saleDoc = await addDoc(collection(db, 'sales'), {
+        const { data: saleDoc } = await supabase.from('sales').insert([{
           ...saleData,
           total: sale.total,
           payment_method: sale.payments.length > 0 ? sale.payments[0].method : 'cash',
           status: 'completed',
           created_at: new Date().toISOString()
-        });
+        }]).select().single();
 
         // 2. Update Credit Balance if needed
         const creditPayment = sale.payments.find(p => p.method === 'credit');
         if (creditPayment && sale.customerId) {
-          const customerRef = doc(db, 'customers', sale.customerId);
-          const custSnap = await getDoc(customerRef);
-          if (custSnap.exists()) {
-            const custData = custSnap.data();
+          const { data: custData } = await supabase.from('customers').select('*').eq('id', sale.customerId).single();
+          if (custData) {
             const newBalance = Number(custData.balance || 0) + creditPayment.amount;
-            await updateDoc(customerRef, { balance: newBalance });
+            await supabase.from('customers').update({ balance: newBalance }).eq('id', sale.customerId);
           }
         }
 
         // 3. Update Cash Drawer
         const cashPayment = sale.payments.find(p => p.method === 'cash');
-        if (cashPayment) {
-          await addDoc(collection(db, 'cash_drawer_logs'), {
+        if (cashPayment && saleDoc) {
+          await supabase.from('cash_drawer_logs').insert([{
             amount: cashPayment.amount, // Record the exact cash amount processed
             transaction_type: 'cash_sale',
             notes: `Sale ${sale.receiptNumber}`,
             sale_id: saleDoc.id,
             created_at: new Date().toISOString()
-          });
+          }]);
         }
       } catch (err) {
-        console.error('Failed to sync sale to Firebase / update credit balance', err);
+        console.error('Failed to sync sale to Supabase / update credit balance', err);
       }
     } else {
       toast.error('Could not complete sale. Check balance.');

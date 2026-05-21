@@ -37,7 +37,7 @@ export function PosSettings() {
       setIsSaving(false);
       toast.success('POS settings updated successfully. Reloading to apply changes...');
       
-      // If toggled, reload the page to re-initialize firebase with/without offline DB
+      // If toggled, reload the page to re-initialize Supabase with/without offline DB
       if (initialOfflineMode !== offlineMode) {
           setTimeout(() => {
             window.location.reload();
