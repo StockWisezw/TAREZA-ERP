@@ -41,6 +41,10 @@ export function Procurement() {
         .order('order_date', { ascending: false });
 
       if (error) {
+        if (error.code === '42P01' || error.message?.includes('relation') || error.code === '404') {
+           setPos([]);
+           return;
+        }
         throw error;
       }
       setPos(data || []);

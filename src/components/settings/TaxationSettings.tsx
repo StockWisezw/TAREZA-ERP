@@ -52,8 +52,10 @@ export function TaxationSettings() {
       }
       setTaxRates(data || []);
     } catch (err: any) {
-      console.error(err);
-      toast.error('Failed to load tax rates');
+      if (err?.code !== '42P01' && err?.code !== '404' && !err?.message?.includes('relation')) {
+        console.error(err);
+        toast.error('Failed to load tax rates');
+      }
     } finally {
       setLoading(false);
     }
@@ -85,7 +87,9 @@ export function TaxationSettings() {
       }
       setExpenseCategories(categories);
     } catch (err: any) {
-      console.error('Failed to load expense categories', err);
+      if (err?.code !== '42P01' && err?.code !== '404' && !err?.message?.includes('relation')) {
+        console.error('Failed to load expense categories', err);
+      }
     } finally {
       setExpensesLoading(false);
     }

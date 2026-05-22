@@ -59,10 +59,7 @@ export default function Login() {
         const { data: bData } = await supabase.from('businesses').insert([
           { 
             name: businessName, 
-            company_registration_number: registrationNumber,
-            subscription_plan: planChoice === 'TRIAL' ? 'TRIAL' : 'PRO',
-            subscription_status: planChoice === 'TRIAL' ? 'TRIAL' : 'ACTIVE',
-            subscription_end_date: endDate.toISOString(),
+            tax_number: registrationNumber,
             created_at: new Date().toISOString() 
           }
         ]).select().single();
@@ -70,6 +67,14 @@ export default function Login() {
         const bRef = bData as any;
 
         if (bRef) {
+          await supabase.from('subscriptions').insert([{
+             business_id: bRef.id,
+             plan_name: planChoice === 'TRIAL' ? 'free_trial' : 'pro',
+             status: 'active',
+             start_date: new Date().toISOString(),
+             end_date: endDate.toISOString()
+          }]);
+
           const { data: rData } = await supabase.from('roles').insert([
             { business_id: bRef.id, name: 'Admin', description: 'System Administrator' }
           ]).select().single();

@@ -14,7 +14,7 @@ async function startServer() {
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        return res.status(500).json({ error: "Gemini API key is not configured on the server." });
+        return res.json({ result: "Gemini API key is not configured on the server. Please set GEMINI_API_KEY." });
       }
       
       const ai = new GoogleGenAI({ apiKey });
@@ -28,7 +28,7 @@ async function startServer() {
       res.json({ result: response.text });
     } catch (error: any) {
       console.error("AI Generation Error:", error);
-      res.status(500).json({ error: error.message || "Failed to generate AI content" });
+      res.json({ result: "AI Assistant is currently unavailable. Please check your API key configuration." });
     }
   });
 

@@ -202,18 +202,41 @@ export default function POS() {
       try {
         const { supabase } = await import('../lib/supabase');
 
-        // 1. Save Sale to Supabase
-        const saleData = JSON.parse(JSON.stringify(sale));
-        const { data: saleDoc } = await supabase.from('sales').insert([{
-          ...saleData,
-          total: sale.total,
-          payment_method: sale.payments.length > 0 ? sale.payments[0].method : 'cash',
-          status: 'completed',
-          created_at: new Date().toISOString()
-        }]).select().single();
+        const { data: userData } = await supabase.auth.getUser();
+          let businessId = null;
+          if (userData?.user) {
+            const { data: businessData } = await supabase.from('business_users').select('business_id').eq('user_id', userData.user.id).single();
+            businessId = businessData?.business_id;
+          }
 
-        // 2. Update Credit Balance if needed
-        const creditPayment = sale.payments.find(p => p.method === 'credit');
+          const salePayload: any = {
+             receipt_number: sale.receiptNumber,
+             total_amount: sale.total,
+             total_tax_amount: sale.vatTotal,
+             total_discount: sale.discountTotal,
+             payment_method: sale.payments.length > 0 ? sale.payments[0].method : 'cash',
+             status: 'COMPLETED',
+             created_at: new Date().toISOString()
+          };
+          if (businessId) salePayload.business_id = businessId;
+          if (sale.customerId) salePayload.customer_id = sale.customerId;
+
+          const { data: saleDoc, error: saleErr } = await supabase.from('sales').insert([salePayload]).select().single();
+
+          if (saleDoc && sale.items.length > 0) {
+             const itemsPayload = sale.items.map(item => ({
+               sale_id: saleDoc.id,
+               product_id: item.product.id,
+               quantity: item.quantity,
+               unit_price: item.unitPrice,
+               line_total: item.subtotal,
+               vat_amount: item.vatAmount
+             }));
+             await supabase.from('sale_items').insert(itemsPayload);
+          }
+
+          // 2. Update Credit Balance if needed
+          const creditPayment = sale.payments.find(p => p.method === 'credit');
         if (creditPayment && sale.customerId) {
           const { data: custData } = await supabase.from('customers').select('*').eq('id', sale.customerId).single();
           if (custData) {

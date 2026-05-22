@@ -97,7 +97,7 @@ export const ReceiptPrint = React.forwardRef<HTMLDivElement, ReceiptPrintProps>(
             <p className="text-[10px] text-zinc-700 mb-2">Receipt #{sale.receiptNumber}</p>
             
             <div className="flex justify-center mb-2">
-              <QRCodeSVG value={qrPayload} size={100} level="M" />
+              <QRCodeSVG value={`RECEIPT-${sale.receiptNumber}-${sale.total}`} size={100} level="M" />
             </div>
             
             <div className="mt-2 break-all">

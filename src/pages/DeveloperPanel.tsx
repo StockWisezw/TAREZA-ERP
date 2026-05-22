@@ -46,18 +46,17 @@ export default function DeveloperPanel() {
     }
   };
 
-  const toggleSubscription = async (id: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'ACTIVE' ? 'GRACE_PERIOD' : 'ACTIVE';
+  const toggleSubscription = async (businessId: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'active' ? 'past_due' : 'active';
     try {
       const { error } = await supabase
-        .from('businesses')
-        .update({ subscription_status: newStatus })
-        .eq('id', id);
+        .from('subscriptions')
+        .update({ status: newStatus })
+        .eq('business_id', businessId);
       
       if (error) throw error;
 
-      toast.success(`Account status updated to ${newStatus}`);
-      fetchBusinesses();
+      toast.success(`Subscription status updated. Note: you may need to reload the page to see changes depending on your view.`);
     } catch (err: any) {
       toast.error(`Failed to update account: ${err.message}`);
     }
@@ -148,17 +147,17 @@ export default function DeveloperPanel() {
                         <TableRow key={b.id}>
                           <TableCell className="font-medium">{b.name}</TableCell>
                           <TableCell>
-                            <Badge variant={b.subscription_status === 'ACTIVE' || b.subscription_status === 'TRIAL' ? 'default' : 'destructive'} className="text-xs uppercase">
-                              {b.subscription_status || 'UNKNOWN'}
+                            <Badge variant="default" className="text-xs uppercase">
+                              CHECK SUB. TABLE
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
                             <Button 
-                              variant={b.subscription_status === 'ACTIVE' ? 'destructive' : 'default'} 
+                              variant="default" 
                               size="sm"
-                              onClick={() => toggleSubscription(b.id, b.subscription_status)}
+                              onClick={() => toggleSubscription(b.id, 'active')}
                             >
-                              {b.subscription_status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                              Toggle
                             </Button>
                           </TableCell>
                         </TableRow>

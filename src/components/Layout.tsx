@@ -28,6 +28,7 @@ import { Input } from './ui/input';
 import { ThemeToggle } from './ThemeToggle';
 import { AIAssistant } from './AIAssistant';
 import { SyncManager } from './pos/SyncManager';
+import { SyncStatusIndicator } from './SyncStatusIndicator';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -267,6 +268,8 @@ export default function Layout() {
             </div>
 
             <div className="flex items-center space-x-4">
+              <SyncStatusIndicator />
+              <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block" />
               <ThemeToggle />
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-5 w-5 text-zinc-500" />

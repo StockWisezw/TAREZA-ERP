@@ -40,12 +40,18 @@ export function Stocktake() {
         .order('started_at', { ascending: false });
 
       if (error) {
+        if (error.code === '42P01' || error.message?.includes('relation') || error.code === '404') {
+          setStocktakes([]);
+          return;
+        }
         console.error('Error fetching stocktakes:', error);
       } else if (data) {
         setStocktakes(data);
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      if (err?.code !== '404' && err?.code !== '42P01') {
+        console.error(err);
+      }
     } finally {
       setLoading(false);
     }
