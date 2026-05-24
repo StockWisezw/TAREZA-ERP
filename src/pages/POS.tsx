@@ -24,6 +24,18 @@ import {
   saveCustomers as saveLocalCustomers
 } from '../lib/indexedDb';
 
+import {
+  getOpenRegisterSession,
+  openRegisterSession,
+  closeRegisterSession,
+  recordStockMovement,
+  postJournalEntry,
+  logAuditEvent
+} from '../services/ledgerService';
+
+import { db } from '../lib/firebase';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+
 export default function POS() {
   const navigate = useNavigate();
   const { 
@@ -33,6 +45,14 @@ export default function POS() {
   } = usePOSStore();
   
   const totals = getTotals();
+
+  // Active Cashier Register Session Shift Manager States
+  const [activeSession, setActiveSession] = useState<any | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [openingFloat, setOpeningFloat] = useState('100');
+  const [closingActual, setClosingActual] = useState('');
+  const [showCloseShift, setShowCloseShift] = useState(false);
+  const [showShiftDetails, setShowShiftDetails] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showPayment, setShowPayment] = useState(false);
@@ -81,6 +101,25 @@ export default function POS() {
             { id: 'all', name: 'All Menu', icon: <Package className="w-5 h-5" /> },
             ...cachedCats.map(c => ({ id: c.id, name: c.name, icon: <Tag className="w-5 h-5" /> }))
           ]);
+        }
+
+        // 1.5 Recover open register session
+        try {
+          const { appwrite: appService } = await import('../lib/appwrite');
+          const { data: userContext } = await appService.auth.getUser();
+          if (userContext?.user) {
+            const { data: userBusiness } = await appService.from('business_users').select('business_id').eq('user_id', userContext.user.id).limit(1).maybeSingle();
+            if (userBusiness?.business_id) {
+              const activeRS = await getOpenRegisterSession(userBusiness.business_id, userContext.user.id);
+              if (activeRS) {
+                setActiveSession(activeRS);
+              }
+            }
+          }
+        } catch (sErr) {
+          console.error("Failed to recover open register session on mount:", sErr);
+        } finally {
+          setSessionLoading(false);
         }
 
         // 2. Refresh from Server
@@ -262,76 +301,207 @@ export default function POS() {
   };
 
   const handlePaymentComplete = async () => {
+    if (!activeSession) {
+      toast.error('No active cashier shift session! Please start a shift first before attempting a sale.');
+      return;
+    }
+
     const sale = completeSale();
     if (sale) {
       setLastSale(sale);
       setShowPayment(false);
       setShowPostSale(true);
-      toast.success('Sale Completed!');
+      toast.success('Sale Completed and Recorded!');
       shouldPrintRef.current = true;
       
       try {
         const { appwrite } = await import('../lib/appwrite');
 
         const { data: userData } = await appwrite.auth.getUser();
-          let businessId = null;
-          if (userData?.user) {
-            const { data: businessData } = await appwrite.from('business_users').select('business_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
-            businessId = businessData?.business_id;
-          }
-
-          const salePayload: any = {
-             receipt_number: sale.receiptNumber,
-             total_amount: sale.total,
-             total_tax_amount: sale.vatTotal,
-             total_discount: sale.discountTotal,
-             payment_method: sale.payments.length > 0 ? sale.payments[0].method : 'cash',
-             status: 'COMPLETED',
-             created_at: new Date().toISOString()
-          };
-          if (businessId) salePayload.business_id = businessId;
-          if (sale.customerId) salePayload.customer_id = sale.customerId;
-
-          const { data: saleDoc, error: saleErr } = await appwrite.from('sales').insert([salePayload]).select().single();
-
-          if (saleDoc && sale.items.length > 0) {
-             const itemsPayload = sale.items.map(item => ({
-               sale_id: saleDoc.id,
-               product_id: item.product.id,
-               quantity: item.quantity,
-               unit_price: item.unitPrice,
-               line_total: item.subtotal,
-               vat_amount: item.vatAmount
-             }));
-             await appwrite.from('sale_items').insert(itemsPayload);
-          }
-
-          // 2. Update Credit Balance if needed
-          const creditPayment = sale.payments.find(p => p.method === 'credit');
-        if (creditPayment && sale.customerId) {
-          const { data: custData } = await appwrite.from('customers').select('*').eq('id', sale.customerId).single();
-          if (custData) {
-            const newBalance = Number(custData.balance || 0) + creditPayment.amount;
-            await appwrite.from('customers').update({ balance: newBalance }).eq('id', sale.customerId);
-          }
+        let businessId = 'default_business';
+        let branchId = 'default_branch';
+        if (userData?.user) {
+          const { data: businessData } = await appwrite.from('business_users').select('business_id, branch_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
+          if (businessData?.business_id) businessId = businessData.business_id;
+          if (businessData?.branch_id) branchId = businessData.branch_id;
         }
 
-        // 3. Update Cash Drawer
-        const cashPayment = sale.payments.find(p => p.method === 'cash');
-        if (cashPayment && saleDoc) {
-          await appwrite.from('cash_drawer_logs').insert([{
-            amount: cashPayment.amount, // Record the exact cash amount processed
-            transaction_type: 'cash_sale',
-            notes: `Sale ${sale.receiptNumber}`,
-            sale_id: saleDoc.id,
-            created_at: new Date().toISOString()
-          }]);
+        const salePayload: any = {
+           receipt_number: sale.receiptNumber,
+           total_amount: sale.total,
+           total_tax_amount: sale.vatTotal,
+           total_discount: sale.discountTotal,
+           payment_method: sale.payments.length > 0 ? sale.payments[0].method : 'cash',
+           status: 'COMPLETED',
+           register_session_id: activeSession.id,
+           created_at: new Date().toISOString()
+        };
+        if (businessId) salePayload.business_id = businessId;
+        if (sale.customerId) salePayload.customer_id = sale.customerId;
+
+        const { data: saleDoc, error: saleErr } = await appwrite.from('sales').insert([salePayload]).select().single();
+
+        if (saleDoc) {
+          // 1. Log sale items and update real-time stock levels with matching double-entry COGS
+          if (sale.items.length > 0) {
+            const itemsPayload = sale.items.map(item => ({
+              sale_id: saleDoc.id,
+              product_id: item.product.id,
+              quantity: item.quantity,
+              unit_price: item.unitPrice,
+              line_total: item.subtotal,
+              vat_amount: item.vatAmount
+            }));
+            await appwrite.from('sale_items').insert(itemsPayload);
+
+            for (const item of sale.items) {
+              await recordStockMovement(
+                businessId,
+                branchId,
+                item.product.id,
+                -Math.abs(item.quantity), // negative for stock depletion
+                'POS_SALE',
+                userData?.user?.id || 'unknown',
+                sale.receiptNumber,
+                item.product.wholesalePrice
+              );
+            }
+          }
+
+          // 2. Double-Entry Accounting postings for sale receipts
+          const creditPayment = sale.payments.find(p => p.method === 'credit');
+          const isCredit = !!creditPayment;
+          const mainAccount = isCredit ? '1100' : '1000'; // Accounts Receivable vs POS Cash Till
+
+          const ledgerLines = [
+            { accountCode: mainAccount, debit: sale.total, credit: 0, description: `Receipt payment ${sale.receiptNumber}` },
+            { accountCode: '4000', debit: 0, credit: sale.total, description: `Sales Revenue registered [${sale.receiptNumber}]` }
+          ];
+
+          await postJournalEntry(
+            businessId,
+            branchId,
+            userData?.user?.id || 'unknown',
+            sale.receiptNumber,
+            `POS Sale Checkout ${sale.receiptNumber}`,
+            ledgerLines
+          );
+
+          // 3. Update active session metrics
+          const sessRef = doc(db, 'register_sessions', activeSession.id);
+          const sessSnap = await getDoc(sessRef);
+          if (sessSnap.exists()) {
+            const sessData = sessSnap.data();
+            const currentTotalSales = Number(sessData.sales_total || 0) + sale.total;
+            const currentCountSales = Number(sessData.sales_count || 0) + 1;
+            const currentExpectedObj = Number(sessData.expected_balance || 0) + sale.total;
+            await updateDoc(sessRef, {
+              sales_total: currentTotalSales,
+              sales_count: currentCountSales,
+              expected_balance: currentExpectedObj
+            });
+            // Update activeSession state
+            setActiveSession({
+              ...activeSession,
+              sales_total: currentTotalSales,
+              sales_count: currentCountSales,
+              expected_balance: currentExpectedObj
+            });
+          }
+
+          // 4. Update Customer credit balance if credit purchase
+          if (creditPayment && sale.customerId) {
+            const { data: custData } = await appwrite.from('customers').select('*').eq('id', sale.customerId).single();
+            if (custData) {
+              const newBalance = Number(custData.balance || 0) + creditPayment.amount;
+              await appwrite.from('customers').update({ balance: newBalance }).eq('id', sale.customerId);
+            }
+          }
+
+          // 5. Update Cash Drawer Log (Cash Management)
+          const cashPayment = sale.payments.find(p => p.method === 'cash' || p.method === 'usd_cash');
+          if (cashPayment) {
+            await appwrite.from('cash_drawer_logs').insert([{
+              amount: cashPayment.amount,
+              transaction_type: 'cash_sale',
+              notes: `Sale ${sale.receiptNumber}`,
+              sale_id: saleDoc.id,
+              created_at: new Date().toISOString()
+            }]);
+          }
+
+          // 6. Log Audit Trail
+          await logAuditEvent(
+            businessId,
+            userData?.user?.id || 'unknown',
+            'CREATE',
+            'POS',
+            null,
+            { receipt: sale.receiptNumber, total: sale.total }
+          );
         }
       } catch (err) {
         console.error('Failed to sync sale to Firebase / update credit balance', err);
+        toast.error('Local sale logged but ledger syncer experienced delay.');
       }
     } else {
       toast.error('Could not complete sale. Check balance.');
+    }
+  };
+
+  const handleStartShift = async () => {
+    try {
+      const floatVal = parseFloat(openingFloat);
+      if (isNaN(floatVal) || floatVal < 0) {
+        toast.error('Please input a valid opening balance float (non-negative).');
+        return;
+      }
+      const { appwrite: appService } = await import('../lib/appwrite');
+      const { data: userData } = await appService.auth.getUser();
+      if (!userData?.user) {
+        toast.error('Session error: Could not verify user authentic token.');
+        return;
+      }
+      
+      const { data: businessData } = await appService.from('business_users')
+        .select('business_id, branch_id')
+        .eq('user_id', userData.user.id)
+        .limit(1)
+        .maybeSingle();
+
+      const bid = businessData?.business_id || 'default_business';
+      const brid = businessData?.branch_id || 'default_branch';
+
+      const res = await openRegisterSession(bid, brid, userData.user.id, floatVal);
+      if (res.success) {
+        setActiveSession(res.session);
+        toast.success(`Active register session successfully started with float $${floatVal.toFixed(2)}.`);
+      } else {
+        toast.error(res.error || 'Failed to start register session.');
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Error occurred starting register shift session.');
+    }
+  };
+
+  const handleEndShift = async () => {
+    try {
+      const actualVal = parseFloat(closingActual);
+      if (isNaN(actualVal) || actualVal < 0) {
+        toast.error('Please input a valid closing drawer counter float.');
+        return;
+      }
+      const res = await closeRegisterSession(activeSession.id, actualVal);
+      if (res.success) {
+        setActiveSession(null);
+        setClosingActual('');
+        setShowCloseShift(false);
+        toast.success(`Active Shift successfully ended! Total Expected: $${res.session.expected_balance.toFixed(2)}, Actual Drawer Float: $${actualVal.toFixed(2)}, Shift Variance Code Over/Short: $${res.session.variance.toFixed(2)}.`);
+      } else {
+        toast.error(res.error || 'Failed to end register session safely.');
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Error occurred during final shift audit closure.');
     }
   };
 
@@ -353,6 +523,46 @@ export default function POS() {
     return matchesSearch && matchesCategory;
   });
 
+  if (!activeSession && !sessionLoading) {
+    return (
+      <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <Card className="w-full max-w-md bg-white border border-zinc-200 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 inset-x-0 h-1.5 bg-zinc-800" />
+          <CardHeader className="pt-6">
+            <div className="w-12 h-12 rounded-xl bg-zinc-50 border border-zinc-200 flex items-center justify-center mb-2">
+              <Coins className="w-6 h-6 text-zinc-700" />
+            </div>
+            <CardTitle className="text-xl font-bold text-zinc-900 font-sans tracking-tight">Initialize Cashier Shift</CardTitle>
+            <p className="text-sm text-zinc-500 mt-1">
+              An active register session and opening float are required to activate the POS terminal and maintain continuous transactional integrity.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-zinc-600">Register Opening Cash Float (USD)</label>
+              <Input
+                type="number"
+                placeholder="100.00"
+                value={openingFloat}
+                onChange={(e) => setOpeningFloat(e.target.value)}
+                className="w-full font-mono text-lg py-5 pl-3"
+              />
+            </div>
+            <div className="bg-zinc-50 rounded-lg p-3 border border-zinc-200 text-xs text-zinc-600 flex items-start gap-2">
+              <span className="text-zinc-400 mt-0.5">ℹ</span>
+              <span>All sales completed under this terminal shift will be balanced automatically to your cashier ID and are fully auditable.</span>
+            </div>
+          </CardContent>
+          <DialogFooter className="p-6 bg-zinc-50 border-t border-zinc-100 flex flex-col gap-2">
+            <Button onClick={handleStartShift} className="w-full bg-zinc-900 hover:bg-zinc-800 text-white py-5 font-semibold text-sm">
+              Open Register Shift
+            </Button>
+          </DialogFooter>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col lg:flex-row h-full lg:h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] gap-4 pb-2">
       
@@ -364,6 +574,91 @@ export default function POS() {
           <div className="flex justify-between items-center mb-2">
             <h1 className="text-xl font-bold tracking-tight text-zinc-800">Point of Sale</h1>
             <div className="flex items-center gap-2">
+              {activeSession && (
+                <Dialog open={showShiftDetails} onOpenChange={setShowShiftDetails}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70 hover:text-emerald-800">
+                      <Coins className="w-4 h-4 mr-2" /> Shift: Active
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <Coins className="w-5 h-5 text-zinc-700" /> Active Shift Controls
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3">
+                          <span className="text-xs text-zinc-400 block mb-0.5">Opened At</span>
+                          <span className="font-medium text-zinc-700 font-mono text-xs">
+                            {new Date(activeSession.opened_at).toLocaleTimeString() || 'Just now'}
+                          </span>
+                        </div>
+                        <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3">
+                          <span className="text-xs text-zinc-400 block mb-0.5">Opening Float</span>
+                          <span className="font-semibold text-zinc-800 font-mono">
+                            ${(activeSession.opening_balance || 0).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3">
+                          <span className="text-xs text-zinc-400 block mb-0.5">Current Expected</span>
+                          <span className="font-semibold text-zinc-800 font-mono">
+                            ${(activeSession.expected_balance || 0).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3 font-mono">
+                          <span className="text-xs text-zinc-400 block mb-0.5">Transactions Count</span>
+                          <span className="font-bold text-zinc-800">
+                            {activeSession.sales_count || 0} Sales
+                          </span>
+                        </div>
+                      </div>
+
+                      <Separator />
+
+                      {!showCloseShift ? (
+                        <Button 
+                          onClick={() => {
+                            setShowCloseShift(true);
+                            setClosingActual(activeSession.expected_balance?.toString() || '');
+                          }} 
+                          variant="destructive" 
+                          className="w-full"
+                        >
+                          End Shift & Close Session
+                        </Button>
+                      ) : (
+                        <div className="space-y-3 p-3 border border-red-100 bg-red-50/20 rounded-xl">
+                          <h3 className="text-xs font-semibold text-red-800">Final Shift Close Checklist</h3>
+                          <div className="space-y-1.5">
+                            <label className="text-xs text-zinc-600 block">Actual Cash Drawer Float Counter</label>
+                            <Input 
+                              type="number" 
+                              placeholder="0.00" 
+                              value={closingActual}
+                              onChange={(e) => setClosingActual(e.target.value)}
+                              className="font-mono text-base"
+                            />
+                            <p className="text-[10px] text-zinc-500">
+                              Input the exact cash balance. Unbalanced deviations or variance overages/shortages will be reconciled dynamically to the General Ledger.
+                            </p>
+                          </div>
+                          <div className="flex gap-2 pt-1">
+                            <Button size="sm" variant="outline" onClick={() => setShowCloseShift(false)} className="flex-1">
+                              Back
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={handleEndShift} className="flex-1">
+                              Confirm Close Shift
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+
               <Button onClick={parkSale} variant="outline" size="sm" className="hidden sm:flex" disabled={cart.length === 0}>
                 <Pause className="w-4 h-4 mr-2" /> Hold Sale
               </Button>

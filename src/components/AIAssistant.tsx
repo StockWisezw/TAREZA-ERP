@@ -27,7 +27,64 @@ export function AIAssistant() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const [bizStats, setBizStats] = useState<{
+    salesToday: number;
+    transactionsToday: number;
+    lowStockCount: number;
+    totalProducts: number;
+    branchesCount: number;
+  } | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        const { data: salesList } = await appwrite.from('sales').select('total_amount, created_at');
+        const { data: productsList } = await appwrite.from('products').select('*');
+        const { data: branchesList } = await appwrite.from('branches').select('*');
+        
+        let inventoryList: any[] = [];
+        try {
+          const res = await appwrite.from('inventory').select('*');
+          if (res && res.data) inventoryList = res.data;
+        } catch (_) {}
+
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        let salesToday = 0;
+        let transactionsToday = 0;
+        if (salesList) {
+          const todaysSales = salesList.filter((s: any) => {
+            if (!s.created_at) return false;
+            const d = new Date(s.created_at);
+            return d >= startOfToday;
+          });
+          salesToday = todaysSales.reduce((acc: number, s: any) => acc + Number(s.total_amount || 0), 0);
+          transactionsToday = todaysSales.length;
+        }
+
+        let lowStockCount = 0;
+        if (inventoryList.length > 0) {
+          lowStockCount = inventoryList.filter((i: any) => Number(i.quantity || 0) <= Number(i.low_stock_threshold || 5)).length;
+        }
+
+        setBizStats({
+          salesToday,
+          transactionsToday,
+          lowStockCount,
+          totalProducts: productsList?.length || 0,
+          branchesCount: branchesList?.length || 0,
+        });
+      } catch (e) {
+        console.error("Failed to load dynamic stats for AI:", e);
+      }
+    }
+    if (isOpen) {
+      loadStats();
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -37,6 +94,17 @@ export function AIAssistant() {
 
   // Mock Context data that would normally be fetched from the database
   const getContextString = () => {
+    if (bizStats) {
+      return `
+CURRENT REAL-TIME CONTEXT:
+- Today's Total Sales: $${bizStats.salesToday.toFixed(2)}
+- Today's Transactions Count: ${bizStats.transactionsToday}
+- Total Catalog Products: ${bizStats.totalProducts}
+- Critical Low Stock Counter: ${bizStats.lowStockCount} items
+- Active Outlets/Branches count: ${bizStats.branchesCount}
+- ZWG (Zimbabwe Gold) Reference Rate: 14.5
+      `;
+    }
     return `
 CURRENT CONTEXT:
 - Today's Sales: $2,450

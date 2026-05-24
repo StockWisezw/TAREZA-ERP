@@ -144,5 +144,35 @@ service cloud.firestore {
       allow get, write: if isSignedIn() && isValidId(subId);
       allow list: if isSignedIn();
     }
+
+    // 23. Accounts Collection
+    match /accounts/{acctId} {
+      allow get, write: if isSignedIn() && isValidId(acctId);
+      allow list: if isSignedIn();
+    }
+
+    // 24. Journal Entries Collection
+    match /journal_entries/{jeId} {
+      allow get, write: if isSignedIn() && isValidId(jeId);
+      allow list: if isSignedIn();
+    }
+
+    // 25. Journal Lines Collection
+    match /journal_lines/{jlId} {
+      allow get, write: if isSignedIn() && isValidId(jlId);
+      allow list: if isSignedIn();
+    }
+
+    // 26. Register Sessions Collection
+    match /register_sessions/{rsId} {
+      allow get, write: if isSignedIn() && isValidId(rsId);
+      allow list: if isSignedIn();
+    }
+
+    // 27. Audit Logs Collection
+    match /audit_logs/{alId} {
+      allow get, write: if isSignedIn() && isValidId(alId);
+      allow list: if isSignedIn();
+    }
   }
 }

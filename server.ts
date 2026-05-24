@@ -16,10 +16,17 @@ async function startServer() {
         return res.json({ result: "Gemini API key is not configured on the server. Please set GEMINI_API_KEY." });
       }
       
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
       const prompt = req.body.prompt || "Generate a brief business insight.";
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.5-flash',
         contents: prompt,
       });
       res.json({ result: response.text });

@@ -20,6 +20,7 @@ import ReceiptHistory from './pages/ReceiptHistory';
 import DeveloperPanel from './pages/DeveloperPanel';
 import Reports from './pages/Reports';
 import CashManagement from './pages/CashManagement';
+import Accounting from './pages/Accounting';
 import { Toaster } from './components/ui/sonner';
 
 // Protected Route Wrapper
@@ -51,6 +52,7 @@ export default function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/cash" element={<CashManagement />} />
+              <Route path="/accounting" element={<Accounting />} />
             </Route>
           </Routes>
         </BrowserRouter>

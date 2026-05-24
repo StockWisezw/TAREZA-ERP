@@ -17,7 +17,7 @@ import {
   sendPasswordResetEmail
 } from 'firebase/auth';
 import { 
-  getFirestore, 
+  initializeFirestore, 
   collection, 
   doc, 
   getDoc, 
@@ -34,9 +34,11 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-// Initialize Firebase SDK
+// Initialize Firebase SDK with long-polling configured for standard robust transit in sandbox/iframe environments
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true
+}, firebaseConfig.firestoreDatabaseId || '(default)');
 export const auth = getAuth();
 
 // Test connection on boot as mandated by the Firebase Integration Skill
@@ -121,7 +123,12 @@ const ALLOWED_KEYS: Record<string, string[]> = {
   stocktakes_advanced: ['id', 'business_id', 'branch_id', 'status', 'created_at'],
   inventory_transfers: ['id', 'business_id', 'from_branch_id', 'to_branch_id', 'status', 'created_at'],
   stock_movements: ['id', 'product_id', 'branch_id', 'quantity', 'type', 'created_at'],
-  subscriptions: ['id', 'business_id', 'plan_name', 'status', 'start_date', 'end_date', 'created_at']
+  subscriptions: ['id', 'business_id', 'plan_name', 'status', 'start_date', 'end_date', 'created_at'],
+  accounts: ['id', 'business_id', 'code', 'name', 'type', 'balance', 'is_system', 'created_at'],
+  journal_entries: ['id', 'business_id', 'branch_id', 'date', 'reference', 'description', 'created_at', 'user_id'],
+  journal_lines: ['id', 'journal_entry_id', 'account_id', 'debit', 'credit', 'description'],
+  register_sessions: ['id', 'business_id', 'branch_id', 'user_id', 'opening_balance', 'closing_balance', 'expected_balance', 'variance', 'status', 'opened_at', 'closed_at', 'sales_count', 'sales_total', 'refunds_total', 'payouts_total', 'created_at'],
+  audit_logs: ['id', 'business_id', 'user_id', 'user_email', 'action', 'module', 'old_value', 'new_value', 'created_at']
 };
 
 function normalizeInput(item: any, table: string): any {

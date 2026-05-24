@@ -89,6 +89,8 @@ interface POSState {
   resumeSale: (saleId: string) => void;
   completeSale: () => SaleRecord | null;
   getTotals: () => { subtotal: number; vat: number; discount: number; total: number; amountPaid: number; balance: number };
+  removeSaleFromOfflineQueue: (saleId: string) => void;
+  clearOfflineQueue: () => void;
 }
 
 // Fixed 15% VAT for standard items in Zimbabwe
@@ -314,7 +316,13 @@ export const usePOSStore = create<POSState>()(
         }));
 
         return newSale;
-      }
+      },
+
+      removeSaleFromOfflineQueue: (saleId) => set((state) => ({
+        offlineQueue: state.offlineQueue.filter((sale) => sale.id !== saleId)
+      })),
+
+      clearOfflineQueue: () => set({ offlineQueue: [] })
     }),
     {
       name: 'tareza-pos-storage',

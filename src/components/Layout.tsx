@@ -16,7 +16,8 @@ import {
   AlertTriangle,
   DollarSign,
   FileText,
-  Lock
+  Lock,
+  BookOpen
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from './ui/button';
@@ -35,6 +36,7 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Tareza POS', href: '/pos', icon: ShoppingCart },
   { name: 'Cash Management', href: '/cash', icon: DollarSign },
+  { name: 'Accounting Ledger', href: '/accounting', icon: BookOpen },
   { name: 'Tareza Fiscal', href: '/receipts', icon: Receipt },
   { name: 'Tareza Inventory', href: '/inventory', icon: Package },
   { name: 'Tareza CRM', href: '/customers', icon: Users },

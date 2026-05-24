@@ -297,6 +297,83 @@
         "end_date": { "type": "string" },
         "created_at": { "type": "string" }
       }
+    },
+    "Account": {
+      "title": "Account",
+      "description": "General Ledger Chart Of Account",
+      "type": "object",
+      "properties": {
+        "business_id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "balance": { "type": "number" },
+        "is_system": { "type": "boolean" },
+        "created_at": { "type": "string" }
+      }
+    },
+    "JournalEntry": {
+      "title": "JournalEntry",
+      "description": "Ledger double-entry transaction header details",
+      "type": "object",
+      "properties": {
+        "business_id": { "type": "string" },
+        "branch_id": { "type": "string" },
+        "date": { "type": "string" },
+        "reference": { "type": "string" },
+        "description": { "type": "string" },
+        "created_at": { "type": "string" },
+        "user_id": { "type": "string" }
+      }
+    },
+    "JournalLine": {
+      "title": "JournalLine",
+      "description": "Debit or credit entry belonging to a journal",
+      "type": "object",
+      "properties": {
+        "journal_entry_id": { "type": "string" },
+        "account_id": { "type": "string" },
+        "debit": { "type": "number" },
+        "credit": { "type": "number" },
+        "description": { "type": "string" }
+      }
+    },
+    "RegisterSession": {
+      "title": "RegisterSession",
+      "description": "Cashier POS Shift Register Session",
+      "type": "object",
+      "properties": {
+        "business_id": { "type": "string" },
+        "branch_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "opening_balance": { "type": "number" },
+        "closing_balance": { "type": "number" },
+        "expected_balance": { "type": "number" },
+        "variance": { "type": "number" },
+        "status": { "type": "string" },
+        "opened_at": { "type": "string" },
+        "closed_at": { "type": "string" },
+        "sales_count": { "type": "integer" },
+        "sales_total": { "type": "number" },
+        "refunds_total": { "type": "number" },
+        "payouts_total": { "type": "number" },
+        "created_at": { "type": "string" }
+      }
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "ERP Security and Action Audit Log Entry",
+      "type": "object",
+      "properties": {
+        "business_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "user_email": { "type": "string" },
+        "action": { "type": "string" },
+        "module": { "type": "string" },
+        "old_value": { "type": "string" },
+        "new_value": { "type": "string" },
+        "created_at": { "type": "string" }
+      }
     }
   },
   "firestore": {
@@ -320,6 +397,11 @@
     "/stocktakes_advanced/{stId}": { "schema": "#/entities/StocktakeAdvanced", "description": "Advanced audits" },
     "/inventory_transfers/{itId}": { "schema": "#/entities/InventoryTransfer", "description": "Inter-branch allocations" },
     "/stock_movements/{movId}": { "schema": "#/entities/StockMovement", "description": "Log of stock audits" },
-    "/subscriptions/{subId}": { "schema": "#/entities/Subscription", "description": "Business recurring payments status" }
+    "/subscriptions/{subId}": { "schema": "#/entities/Subscription", "description": "Business recurring payments status" },
+    "/accounts/{acctId}": { "schema": "#/entities/Account", "description": "Chart of accounts" },
+    "/journal_entries/{jeId}": { "schema": "#/entities/JournalEntry", "description": "Double-entry logs" },
+    "/journal_lines/{jlId}": { "schema": "#/entities/JournalLine", "description": "Debit/credit items" },
+    "/register_sessions/{rsId}": { "schema": "#/entities/RegisterSession", "description": "Cashier terminal shifts" },
+    "/audit_logs/{alId}": { "schema": "#/entities/AuditLog", "description": "Action logs" }
   }
 }
