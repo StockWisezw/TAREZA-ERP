@@ -45,9 +45,17 @@ export const auth = getAuth();
 async function testConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
+    console.log("[Firestore SDK] Successfully reached Cloud Firestore backend.");
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration.");
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const errCode = (error as any)?.code || '';
+    
+    if (errMsg.includes('the client is offline') || errCode === 'unavailable') {
+      console.warn(`[Firestore SDK] Note: Connection to Firestore backend timed out or is offline (${errMsg}). The client will operate offline and auto-sync when online.`);
+    } else if (errCode === 'permission-denied') {
+      console.log("[Firestore SDK] Connected to Firestore (Security rules evaluated correctly).");
+    } else {
+      console.error("[Firestore SDK] Connection error:", error);
     }
   }
 }

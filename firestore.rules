@@ -6,6 +6,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Allow connection test
+    match /test/{docId} {
+      allow read: if true;
+    }
+
     // Common helper functions
     function isSignedIn() {
       return request.auth != null;
