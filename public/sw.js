@@ -1,8 +1,7 @@
-const CACHE_NAME = 'pos-offline-cache-v1';
+const CACHE_NAME = 'pos-offline-cache-v2';
 const OFFLINE_URLS = [
   '/',
   '/index.html',
-  '/pos',
 ];
 
 self.addEventListener('install', (event) => {
@@ -15,25 +14,58 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cache) => {
+          if (cache !== CACHE_NAME) {
+            console.log('Clearing old service worker cache:', cache);
+            return caches.delete(cache);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method === 'POST' && event.request.url.includes('firestore.googleapis.com')) {
-    // Basic offline fallback strategy for firestore happens at the SDK level usually, 
-    // but we can register background sync if needed.
+  // Skip cross-origin or POST/PUT/DELETE requests
+  if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
     return;
   }
-  
+
+  // API or FireStore requests should go directly to network
+  if (event.request.url.includes('/api/') || event.request.url.includes('firestore.googleapis.com')) {
+    return;
+  }
+
+  // Use a Network-First strategy for application assets and routing.
+  // This ensures the live application pulls the absolute latest bundle when online requested,
+  // falling back to local service worker cache only when offline.
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request).catch(() => {
-        // Return offline fallback if network fails
-        if (event.request.mode === 'navigate') {
-          return caches.match('/');
+    fetch(event.request)
+      .then((response) => {
+        // If response is valid, clone and update the cache for offline fallback
+        if (response && response.status === 200 && response.type === 'basic') {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
         }
-      });
-    })
+        return response;
+      })
+      .catch(() => {
+        // Fallback to cache if network fails
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          // If navigation request fails and not cached, return root index page
+          if (event.request.mode === 'navigate') {
+            return caches.match('/');
+          }
+        });
+      })
   );
 });
 

@@ -46,8 +46,13 @@ async function startServer() {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     // Support React Router HTML5 History API fallback
+    // Only serve index.html for navigation requests, not for missing static assets or files with extensions
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      if (req.path.includes('.') || req.path.startsWith('/assets/')) {
+        res.status(404).send('Not Found');
+      } else {
+        res.sendFile(path.join(distPath, 'index.html'));
+      }
     });
   }
   app.listen(PORT, "0.0.0.0", () => {

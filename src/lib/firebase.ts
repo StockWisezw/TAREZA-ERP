@@ -30,7 +30,9 @@ import {
   orderBy, 
   limit, 
   QueryConstraint,
-  getDocFromServer
+  getDocFromServer,
+  persistentLocalCache,
+  persistentMultipleTabManager
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -39,8 +41,13 @@ const app = initializeApp(firebaseConfig);
 
 // Keep long polling enabled for sandbox and iframe environments, and ensure it does not conflict
 // with auto-detection by explicitly disabling auto-detection when forced long polling is active.
+// Set up persistent offline cache with multiple-tab coordination support for seamless offline sync.
 const forceLongPolling = true;
-const firestoreSettings: any = {};
+const firestoreSettings: any = {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+};
 
 if (forceLongPolling) {
   firestoreSettings.experimentalForceLongPolling = true;
