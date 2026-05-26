@@ -39,6 +39,7 @@ export type CartItem = {
   subtotal: number;
   vatAmount: number;
   discount?: Discount;
+  tier?: PricingTier;
 };
 
 export type PaymentMethod = 'cash' | 'card' | 'ecocash' | 'usd_cash' | 'credit';
@@ -81,6 +82,7 @@ interface POSState {
   applyItemDiscount: (itemId: string, discount: Discount) => void;
   applyGlobalDiscount: (discount: Discount) => void;
   setPricingTier: (tier: PricingTier) => void;
+  setItemPricingTier: (itemId: string, tier: PricingTier) => void;
   setCurrentCustomer: (customer: Customer | null) => void;
   addPayment: (method: PaymentMethod, amount: number) => void;
   removePayment: (paymentId: string) => void;
@@ -93,8 +95,13 @@ interface POSState {
   clearOfflineQueue: () => void;
 }
 
-// Fixed 15% VAT for standard items in Zimbabwe
-const VAT_RATE = 0.15;
+// Fixed 15% VAT for standard items in Zimbabwe if enabled in settings (default off)
+const getVatRate = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('tareza_vat_enabled') === 'true' ? 0.15 : 0;
+  }
+  return 0; // Default off
+};
 
 export const usePOSStore = create<POSState>()(
   persist(
@@ -109,6 +116,7 @@ export const usePOSStore = create<POSState>()(
       addToCart: (product, quantity = 1) => set((state) => {
         const existingItem = state.cart.find((item) => item.product.id === product.id);
         const unitPrice = state.pricingTier === 'wholesale' ? product.wholesalePrice : product.retailPrice;
+        const defaultTier = state.pricingTier;
         
         if (existingItem) {
           const newQty = existingItem.quantity + quantity;
@@ -119,7 +127,7 @@ export const usePOSStore = create<POSState>()(
               ? subtotal * (existingItem.discount.value / 100) 
               : existingItem.discount.value;
           }
-          const vatAmount = product.taxClass === 'standard' ? (subtotal - itemDiscountValue) * VAT_RATE : 0;
+          const vatAmount = product.taxClass === 'standard' ? (subtotal - itemDiscountValue) * getVatRate() : 0;
           
           return {
             cart: state.cart.map((item) =>
@@ -131,10 +139,10 @@ export const usePOSStore = create<POSState>()(
         }
 
         const subtotal = quantity * unitPrice;
-        const vatAmount = product.taxClass === 'standard' ? subtotal * VAT_RATE : 0;
+        const vatAmount = product.taxClass === 'standard' ? subtotal * getVatRate() : 0;
 
         return {
-          cart: [...state.cart, { id: uuidv4(), product, quantity, unitPrice, subtotal, vatAmount }],
+          cart: [...state.cart, { id: uuidv4(), product, quantity, unitPrice, subtotal, vatAmount, tier: defaultTier }],
         };
       }),
 
@@ -156,7 +164,7 @@ export const usePOSStore = create<POSState>()(
                   ? subtotal * (item.discount.value / 100) 
                   : item.discount.value;
               }
-              const vatAmount = item.product.taxClass === 'standard' ? Math.max(0, subtotal - itemDiscountValue) * VAT_RATE : 0;
+              const vatAmount = item.product.taxClass === 'standard' ? Math.max(0, subtotal - itemDiscountValue) * getVatRate() : 0;
               return { ...item, quantity, subtotal, vatAmount };
             }
             return item;
@@ -171,7 +179,7 @@ export const usePOSStore = create<POSState>()(
               let itemDiscountValue = discount.type === 'percentage' 
                 ? item.subtotal * (discount.value / 100) 
                 : discount.value;
-              const vatAmount = item.product.taxClass === 'standard' ? Math.max(0, item.subtotal - itemDiscountValue) * VAT_RATE : 0;
+              const vatAmount = item.product.taxClass === 'standard' ? Math.max(0, item.subtotal - itemDiscountValue) * getVatRate() : 0;
               return { ...item, discount, vatAmount };
             }
             return item;
@@ -191,10 +199,29 @@ export const usePOSStore = create<POSState>()(
               ? subtotal * (item.discount.value / 100) 
               : item.discount.value;
           }
-          const vatAmount = item.product.taxClass === 'standard' ? Math.max(0, subtotal - itemDiscountValue) * VAT_RATE : 0;
-          return { ...item, unitPrice, subtotal, vatAmount };
+          const vatAmount = item.product.taxClass === 'standard' ? Math.max(0, subtotal - itemDiscountValue) * getVatRate() : 0;
+          return { ...item, tier, unitPrice, subtotal, vatAmount };
         });
         return { pricingTier: tier, cart: updatedCart };
+      }),
+
+      setItemPricingTier: (itemId, tier) => set((state) => {
+        const updatedCart = state.cart.map(item => {
+          if (item.id === itemId) {
+            const unitPrice = tier === 'wholesale' ? item.product.wholesalePrice : item.product.retailPrice;
+            const subtotal = item.quantity * unitPrice;
+            let itemDiscountValue = 0;
+            if (item.discount) {
+              itemDiscountValue = item.discount.type === 'percentage' 
+                ? subtotal * (item.discount.value / 100) 
+                : item.discount.value;
+            }
+            const vatAmount = item.product.taxClass === 'standard' ? Math.max(0, subtotal - itemDiscountValue) * getVatRate() : 0;
+            return { ...item, tier, unitPrice, subtotal, vatAmount };
+          }
+          return item;
+        });
+        return { cart: updatedCart };
       }),
 
       setCurrentCustomer: (customer) => set({ currentCustomer: customer }),

@@ -18,6 +18,7 @@ export function TaxationSettings() {
   const [loading, setLoading] = useState(true);
   const [expensesLoading, setExpensesLoading] = useState(true);
   const [vatEnabled, setVatEnabled] = useState(false);
+  const [taxInclusive, setTaxInclusive] = useState(false);
   const [newExpenseName, setNewExpenseName] = useState('');
   const [newExpenseDesc, setNewExpenseDesc] = useState('');
   const [isAddingExpense, setIsAddingExpense] = useState(false);
@@ -36,6 +37,14 @@ export function TaxationSettings() {
     const storedVat = localStorage.getItem('tareza_vat_enabled');
     if (storedVat !== null) {
       setVatEnabled(storedVat === 'true');
+    } else {
+      setVatEnabled(false);
+    }
+    const storedInclusive = localStorage.getItem('tareza_tax_inclusive');
+    if (storedInclusive !== null) {
+      setTaxInclusive(storedInclusive === 'true');
+    } else {
+      setTaxInclusive(false);
     }
   }, []);
 
@@ -139,6 +148,12 @@ export function TaxationSettings() {
     setVatEnabled(enabled);
     localStorage.setItem('tareza_vat_enabled', String(enabled));
     toast.success(enabled ? 'VAT calculation enabled' : 'VAT calculation disabled');
+  };
+
+  const toggleTaxInclusive = (enabled: boolean) => {
+    setTaxInclusive(enabled);
+    localStorage.setItem('tareza_tax_inclusive', String(enabled));
+    toast.success(enabled ? 'Tax inclusive pricing enabled' : 'Tax inclusive pricing disabled');
   };
 
   const openAddRateDialog = () => {
@@ -285,7 +300,7 @@ export function TaxationSettings() {
                       Prices entered in the system already include tax.
                     </span>
                   </div>
-                  <Switch defaultChecked disabled={!vatEnabled} />
+                  <Switch checked={taxInclusive} onCheckedChange={toggleTaxInclusive} disabled={!vatEnabled} />
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex flex-col space-y-1">
@@ -308,7 +323,7 @@ export function TaxationSettings() {
                 <Percent className="w-5 h-5 text-zinc-400" />
                 <CardTitle className="text-lg">Configured Tax Rates</CardTitle>
               </div>
-              <CardDescription className="mt-1">Defined tax rates mapped to ZIMRA FDMS requirements.</CardDescription>
+              <CardDescription className="mt-1">Defined tax rates mapped to standard compliance requirements.</CardDescription>
             </CardHeader>
             <div className="overflow-x-auto">
               <Table>

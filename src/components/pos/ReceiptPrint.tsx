@@ -91,20 +91,20 @@ export const ReceiptPrint = React.forwardRef<HTMLDivElement, ReceiptPrintProps>(
           </div>
 
           <div className="text-center mt-4">
-            {/* ZIMRA Fiscal Details */}
-            <h3 className="font-bold border-b border-zinc-400 border-solid mb-2 pb-1 text-[10px]">FISCAL TAX INVOICE</h3>
-            <p className="text-[10px] text-zinc-700">Device ID: VFD-123456</p>
+            {/* POS Sync Status */}
+            <h3 className="font-bold border-b border-zinc-400 border-solid mb-2 pb-1 text-[10px]">SALES TAX INVOICE</h3>
             <p className="text-[10px] text-zinc-700 mb-2">Receipt #{sale.receiptNumber}</p>
             
             <div className="flex justify-center mb-2">
               <QRCodeSVG value={`RECEIPT-${sale.receiptNumber}-${sale.total}`} size={100} level="M" />
             </div>
             
-            <div className="mt-2 break-all">
-              <p className="font-bold text-[9px]">ZIMRA FISCAL SIGNATURE</p>
-              <p className="text-[8px] text-zinc-600 font-sans mt-1 leading-snug">
-                {sale.status === 'offline_pending' ? 'OFFLINE VERIFICATION PENDING - WILL SYNC TO ZIMRA SHORTLY' : 'ABC123XYZ456DEF789GHI012JKL345MNO678PQR901STU234VWX'}
-              </p>
+            <div className="mt-2 text-center text-[10px]">
+              {sale.status === 'offline_pending' ? (
+                <p className="text-amber-600 font-bold uppercase tracking-wider text-[9px]">Offline Queue - Sync Pending</p>
+              ) : (
+                <p className="text-emerald-600 font-bold uppercase tracking-wider text-[9px]">Synced Online</p>
+              )}
             </div>
           </div>
           

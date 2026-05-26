@@ -38,7 +38,7 @@ import { db, doc, getDoc, updateDoc } from '../lib/supabaseClient';
 export default function POS() {
   const navigate = useNavigate();
   const { 
-    cart, getTotals, addToCart, removeFromCart, updateQuantity, pricingTier, setPricingTier, 
+    cart, getTotals, addToCart, removeFromCart, updateQuantity, pricingTier, setPricingTier, setItemPricingTier,
     clearCart, completeSale, currentCustomer, setCurrentCustomer, parkSale, parkedSales, resumeSale,
     applyGlobalDiscount
   } = usePOSStore();
@@ -63,6 +63,12 @@ export default function POS() {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [vatEnabled, setVatEnabled] = useState(false);
+
+  useEffect(() => {
+    const isVat = localStorage.getItem('tareza_vat_enabled') === 'true';
+    setVatEnabled(isVat);
+  }, []);
 
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [categories, setCategories] = useState<{id: string, name: string, icon: any}[]>([
@@ -875,7 +881,22 @@ export default function POS() {
                     <div className="flex flex-col flex-1">
                       <h4 className="text-[13px] font-bold leading-none mb-1 text-zinc-800 line-clamp-1 pr-2">{item.product.name}</h4>
                       <div className="flex items-center gap-2 text-[11px]">
-                        <span className="font-mono text-zinc-600">${item.unitPrice.toFixed(2)}</span>
+                        <span className="font-mono text-zinc-650">${item.unitPrice.toFixed(2)}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newTier = item.tier === 'wholesale' ? 'retail' : 'wholesale';
+                            setItemPricingTier(item.id, newTier);
+                            toast.success(`Switched ${item.product.name} to ${newTier} pricing`);
+                          }}
+                          className={`px-1.5 py-0.5 rounded text-[8px] font-semibold border transition-all uppercase tracking-wider ${
+                            item.tier === 'wholesale' 
+                              ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" 
+                              : "bg-blue-50 text-blue-705 border-blue-200 hover:bg-blue-100"
+                          }`}
+                        >
+                          {item.tier === 'wholesale' ? 'Wholesale' : 'Retail'}
+                        </button>
                       </div>
                     </div>
                     
@@ -917,12 +938,14 @@ export default function POS() {
                 </div>
               )}
               
-              <div className="flex justify-between text-zinc-600 items-baseline group cursor-help">
-                <span className="text-xs flex items-center border-b border-dashed border-zinc-300 pb-0.5">
-                  VAT (15%) <span className="ml-1 text-[9px] bg-zinc-100 border border-zinc-200 px-1.5 py-0.5 rounded text-zinc-500">ZIMRA</span>
-                </span>
-                <span className="font-mono text-sm font-medium">${totals.vat.toFixed(2)}</span>
-              </div>
+              {vatEnabled && (
+                <div className="flex justify-between text-zinc-650 items-baseline group">
+                  <span className="text-xs flex items-center">
+                    VAT (15%)
+                  </span>
+                  <span className="font-mono text-sm font-medium">${totals.vat.toFixed(2)}</span>
+                </div>
+              )}
 
               <Separator className="my-1" />
 

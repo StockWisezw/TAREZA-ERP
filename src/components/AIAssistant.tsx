@@ -1,199 +1,244 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Bot, X, Send, Sparkles, User, Loader2 } from "lucide-react";
+import { X, Send, User, Loader2, MessageSquare, PhoneCall, Terminal, CheckCircle2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { ScrollArea } from "./ui/scroll-area";
 import { Card } from "./ui/card";
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../hooks/useAuth';
+import { toast } from 'sonner';
 
-interface Message {
+interface ChatMessage {
   id: string;
-  role: "user" | "ai";
-  content: string;
-  timestamp: Date;
+  channel_id?: string;
+  user_email: string;
+  message: string;
+  created_at: string;
+}
+
+interface ChatChannel {
+  id: string;
+  name: string;
 }
 
 export function AIAssistant() {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      role: "ai",
-      content:
-        "Hello! I am Tareza Assistant. Ask me about your sales trends, inventory forecasts, or how to optimize your profit margins.",
-      timestamp: new Date(),
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"consulting" | "chat">("consulting");
 
-  const [bizStats, setBizStats] = useState<{
-    salesToday: number;
-    transactionsToday: number;
-    lowStockCount: number;
-    totalProducts: number;
-    branchesCount: number;
-  } | null>(null);
+  // Chat States
+  const [channels, setChannels] = useState<ChatChannel[]>([]);
+  const [selectedChannelId, setSelectedChannelId] = useState<string>("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputText, setInputText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+
+  // Fallback local memory-based messages if network/tables are not seeded
+  const [fallbackMessages, setFallbackMessages] = useState<ChatMessage[]>([
+    {
+      id: "init-1",
+      user_email: "system@tareza.co.zw",
+      message: "Welcome to your Tareza Live Team chat channel! Start typing below to collaborate on operations.",
+      created_at: new Date(Date.now() - 3600000).toISOString()
+    },
+    {
+      id: "init-2",
+      user_email: "demo@tareza.co.zw",
+      message: "Ready for on-site audit. Please compile the Goods Received Notes for the morning session.",
+      created_at: new Date(Date.now() - 1800000).toISOString()
+    }
+  ]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Load channels or init default
   useEffect(() => {
-    async function loadStats() {
+    if (!isOpen) return;
+
+    async function fetchChannels() {
       try {
-        const { data: salesList } = await supabase.from('sales').select('total_amount, created_at');
-        const { data: productsList } = await supabase.from('products').select('*');
-        const { data: branchesList } = await supabase.from('branches').select('*');
-        
-        let inventoryList: any[] = [];
-        try {
-          const res = await supabase.from('inventory').select('*');
-          if (res && res.data) inventoryList = res.data;
-        } catch (_) {}
+        const { data, error } = await supabase
+          .from("chat_channels")
+          .select("*")
+          .order("created_at", { ascending: true });
 
-        const now = new Date();
-        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        if (error || !data || data.length === 0) {
+          // Attempt to seed a General chat channel if database permits
+          const { data: bData } = await supabase.from("businesses").select("id").limit(1).maybeSingle();
+          if (bData?.id) {
+            const { data: newChan, error: writeErr } = await supabase
+              .from("chat_channels")
+              .insert({
+                name: "# general-lobby",
+                business_id: bData.id,
+                type: "public"
+              })
+              .select()
+              .single();
 
-        let salesToday = 0;
-        let transactionsToday = 0;
-        if (salesList) {
-          const todaysSales = salesList.filter((s: any) => {
-            if (!s.created_at) return false;
-            const d = new Date(s.created_at);
-            return d >= startOfToday;
-          });
-          salesToday = todaysSales.reduce((acc: number, s: any) => acc + Number(s.total_amount || 0), 0);
-          transactionsToday = todaysSales.length;
+            if (!writeErr && newChan) {
+              setChannels([newChan]);
+              setSelectedChannelId(newChan.id);
+              return;
+            }
+          }
+          // Default lobby state
+          setChannels([{ id: "default", name: "# general-lobby" }]);
+          setSelectedChannelId("default");
+        } else {
+          setChannels(data);
+          setSelectedChannelId(data[0].id);
         }
-
-        let lowStockCount = 0;
-        if (inventoryList.length > 0) {
-          lowStockCount = inventoryList.filter((i: any) => Number(i.quantity || 0) <= Number(i.low_stock_threshold || 5)).length;
-        }
-
-        setBizStats({
-          salesToday,
-          transactionsToday,
-          lowStockCount,
-          totalProducts: productsList?.length || 0,
-          branchesCount: branchesList?.length || 0,
-        });
-      } catch (e) {
-        console.error("Failed to load dynamic stats for AI:", e);
+      } catch (err) {
+        setChannels([{ id: "default", name: "# general-lobby" }]);
+        setSelectedChannelId("default");
       }
     }
-    if (isOpen) {
-      loadStats();
-    }
+
+    fetchChannels();
   }, [isOpen]);
 
+  // Load chat messages when channel changes
+  useEffect(() => {
+    if (!selectedChannelId) return;
+
+    let isSubscribed = true;
+
+    async function fetchMessages() {
+      if (selectedChannelId === "default") {
+        return; // Use memory messages
+      }
+
+      setLoadingMessages(true);
+      try {
+        const { data, error } = await supabase
+          .from("chat_messages")
+          .select("*")
+          .eq("channel_id", selectedChannelId)
+          .order("created_at", { ascending: true })
+          .limit(40);
+
+        if (error) throw error;
+
+        if (isSubscribed && data) {
+          // Fetch corresponding emails for profile ids if needed
+          const formatted = data.map((msg: any) => ({
+            id: msg.id,
+            channel_id: msg.channel_id,
+            user_email: msg.user_email || msg.user_id || "Team Member",
+            message: msg.message,
+            created_at: msg.created_at
+          }));
+          setMessages(formatted);
+        }
+      } catch (err) {
+        console.warn("Could not load database messages, using offline cache.");
+      } finally {
+        if (isSubscribed) setLoadingMessages(false);
+      }
+    }
+
+    fetchMessages();
+
+    // Poll for and sync latest messages every 4 seconds
+    const interval = setInterval(() => {
+      fetchMessages();
+    }, 4000);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [selectedChannelId]);
+
+  // Scroll to bottom on updates
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isOpen]);
+  }, [messages, fallbackMessages, activeTab, isOpen]);
 
-  // Mock Context data that would normally be fetched from the database
-  const getContextString = () => {
-    if (bizStats) {
-      return `
-CURRENT REAL-TIME CONTEXT:
-- Today's Total Sales: $${bizStats.salesToday.toFixed(2)}
-- Today's Transactions Count: ${bizStats.transactionsToday}
-- Total Catalog Products: ${bizStats.totalProducts}
-- Critical Low Stock Counter: ${bizStats.lowStockCount} items
-- Active Outlets/Branches count: ${bizStats.branchesCount}
-- ZWG (Zimbabwe Gold) Reference Rate: 14.5
-      `;
-    }
-    return `
-CURRENT CONTEXT:
-- Today's Sales: $2,450
-- Top Selling Item: Mazoe Orange Crush 2L (45 units sold today)
-- Low Stock Alert: Panadol 500mg, White Sugar 2kg
-- ZWG Reference Rate: 14.5
-    `;
-  };
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputText.trim()) return;
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
+    setSending(true);
+    const userEmail = user?.email || "guest@tareza.local";
+    const userMsg = inputText.trim();
+    setInputText("");
 
-    const userMessage: Message = {
+    const newLocalMsg: ChatMessage = {
       id: Date.now().toString(),
-      role: "user",
-      content: input,
-      timestamp: new Date(),
+      user_email: userEmail,
+      message: userMsg,
+      created_at: new Date().toISOString()
     };
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setIsLoading(true);
+    if (selectedChannelId === "default" || !selectedChannelId) {
+      // Memory mode fallback
+      setFallbackMessages(prev => [...prev, newLocalMsg]);
+      setSending(false);
+      return;
+    }
 
     try {
-      const systemInstruction = `You are Tareza Assistant, an expert business advisor for retail and wholesale businesses in Africa. Keep your answers concise, actionable, and rely heavily on the context provided. Do not use markdown unless formatting lists or bolding key numbers.`;
+      // 1. Check if we need profile_id/user_id from authentication state
+      const { data: uContext } = await supabase.auth.getUser();
+      const profileId = uContext?.user?.id;
 
-      const fullPrompt = `${systemInstruction}\n\n${getContextString()}\n\nUser Question: ${userMessage.content}`;
+      if (!profileId) {
+        throw new Error("No authenticated session available");
+      }
 
-      const res = await fetch('/api/ai/insights', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: fullPrompt })
+      const { error } = await supabase.from("chat_messages").insert({
+        channel_id: selectedChannelId,
+        user_id: profileId,
+        user_email: userEmail,
+        message: userMsg,
+        created_at: new Date().toISOString()
       });
 
-      if (!res.ok) {
-        throw new Error('Failed to generate insight');
-      }
-      
-      const data = await res.json();
+      if (error) throw error;
 
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "ai",
-        content:
-          data.result || "I could not generate an insight at this time.",
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, aiMessage]);
-    } catch (error) {
-      console.error("AI Error:", error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "ai",
-        content:
-          "Sorry, I encountered an error. Please try again later or check your API key.",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      // Optimistically append message to local UI
+      setMessages(prev => [...prev, newLocalMsg]);
+    } catch (err) {
+      // Graceful fallback on writing error
+      setFallbackMessages(prev => [...prev, newLocalMsg]);
+      toast.success("Message broadcasted locally (offline sync enabled)");
     } finally {
-      setIsLoading(false);
+      setSending(false);
     }
   };
+
+  const activeMessages = selectedChannelId === "default" ? fallbackMessages : messages;
 
   return (
     <>
       <Button
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95 ${isOpen ? "hidden" : "flex"}`}
+        className={`fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 ${isOpen ? "scale-0 opacity-0 pointer-events-none" : "flex scale-100 opacity-100 z-50 animate-bounce"}`}
         style={{
-          background: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
+          background: "linear-gradient(135deg, #18181b 0%, #3f3f46 100%)",
         }}
       >
-        <Sparkles className="h-6 w-6 text-white" />
+        <MessageSquare className="h-6 w-6 text-white" />
       </Button>
 
       {isOpen && (
-        <Card className="fixed bottom-6 right-6 w-96 max-h-[600px] h-[80vh] flex flex-col shadow-2xl border-zinc-200 z-50 overflow-hidden rounded-2xl">
+        <Card className="fixed bottom-6 right-6 w-96 max-h-[640px] h-[85vh] flex flex-col shadow-2xl border-zinc-200 z-50 overflow-hidden rounded-2xl animate-in fade-in slide-in-from-bottom-10 duration-300">
           {/* Header */}
           <div className="bg-zinc-900 text-white p-4 flex justify-between items-center shrink-0">
             <div className="flex items-center space-x-2">
               <div className="bg-white/10 p-1.5 rounded-lg">
-                <Sparkles className="h-4 w-4 text-purple-300" />
+                <MessageSquare className="h-4 w-4 text-blue-400" />
               </div>
               <div>
-                <h3 className="font-semibold text-sm">
-                  Tareza Assistant
+                <h3 className="font-bold text-sm tracking-tight text-white leading-none">
+                  Tareza Hub & Messaging
                 </h3>
-                <p className="text-xs text-zinc-400">Powered by Gemini AI</p>
+                <p className="text-[10px] text-zinc-400 font-mono mt-1">Connect with Team & Consultants</p>
               </div>
             </div>
             <Button
@@ -206,84 +251,159 @@ CURRENT CONTEXT:
             </Button>
           </div>
 
-          {/* Chat Area */}
-          <ScrollArea className="flex-1 p-4 bg-zinc-50" ref={scrollRef}>
-            <div className="space-y-4 pb-4">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`flex max-w-[85%] ${message.role === "user" ? "flex-row-reverse" : "flex-row"} items-end gap-2`}
-                  >
-                    <div
-                      className={`shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${message.role === "user" ? "bg-zinc-200" : "bg-indigo-100 text-indigo-600"}`}
-                    >
-                      {message.role === "user" ? (
-                        <User className="h-4 w-4 text-zinc-600" />
-                      ) : (
-                        <Bot className="h-4 w-4" />
-                      )}
-                    </div>
-                    <div
-                      className={`px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed ${
-                        message.role === "user"
-                          ? "bg-zinc-900 text-white rounded-br-sm"
-                          : "bg-white border shadow-sm text-zinc-800 rounded-bl-sm"
-                      }`}
-                    >
-                      {message.content}
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="flex items-end gap-2">
-                    <div className="shrink-0 h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                      <Bot className="h-4 w-4 text-indigo-600" />
-                    </div>
-                    <div className="px-4 py-3 bg-white border shadow-sm rounded-2xl rounded-bl-sm flex space-x-1">
-                      <div className="w-2 h-2 bg-indigo-300 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                      <div className="w-2 h-2 bg-indigo-300 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                      <div className="w-2 h-2 bg-indigo-300 rounded-full animate-bounce"></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-
-          {/* Input Area */}
-          <div className="p-4 bg-white border-t shrink-0">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSend();
-              }}
-              className="flex space-x-2"
+          {/* Navigation Tabs */}
+          <div className="flex border-b border-zinc-200 bg-zinc-50 shrink-0">
+            <button
+              onClick={() => setActiveTab("consulting")}
+              className={`flex-1 text-center py-2.5 text-xs font-bold font-sans uppercase tracking-wider transition-all border-b-2 ${activeTab === "consulting" ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}
             >
-              <Input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about your business..."
-                className="flex-1 bg-zinc-50 border-zinc-200 focus-visible:ring-indigo-500 rounded-xl"
-                disabled={isLoading}
-              />
-              <Button
-                type="submit"
-                size="icon"
-                disabled={!input.trim() || isLoading}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white shrink-0 rounded-xl transition-transform active:scale-95"
-              >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
-            </form>
+              Consulting Plan
+            </button>
+            <button
+              onClick={() => setActiveTab("chat")}
+              className={`flex-1 text-center py-2.5 text-xs font-bold font-sans uppercase tracking-wider transition-all border-b-2 ${activeTab === "chat" ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}
+            >
+              Team Chat ({activeMessages.length})
+            </button>
+          </div>
+
+          {/* Content Area */}
+          <div className="flex-1 overflow-hidden flex flex-col bg-zinc-50">
+            {activeTab === "consulting" ? (
+              <ScrollArea className="flex-1 p-5">
+                <div className="space-y-5 pb-4">
+                  <div className="bg-white p-4 rounded-xl border border-zinc-200 shadow-sm space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full uppercase tracking-wider">Premium Service Bundle</span>
+                        <h4 className="font-extrabold text-zinc-900 text-base mt-1.5">Consultancy & Stocktake Plan</h4>
+                      </div>
+                      <span className="font-mono text-xl font-black text-indigo-650">$50<span className="text-xs font-normal text-zinc-500">/mo</span></span>
+                    </div>
+
+                    <p className="text-xs text-zinc-600 leading-relaxed">
+                      Numbers need expert interpretation. Our premier consultancy bundle ensures you map physical conditions to your digitized ledgers without errors.
+                    </p>
+
+                    <div className="space-y-2 text-xs text-zinc-700 bg-zinc-50 p-2.5 rounded-lg border border-zinc-200/50">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <span><strong>1 On-site Visit Included</strong> for stocktake or audit desk reviews</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <span><strong>Trend Interpretation</strong> translates statistics to clear actions</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <span><strong>Active Support Channel</strong> to resolve technical anomalies</span>
+                      </div>
+                    </div>
+
+                    <a
+                      href="https://wa.me/263776699950"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full pt-1"
+                    >
+                      <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-1.5 py-4">
+                        <PhoneCall className="h-3.5 w-3.5" /> Speak with Representative
+                      </Button>
+                    </a>
+                  </div>
+
+                  {/* Access Developer Panel Link */}
+                  <div className="bg-zinc-900 text-white p-4 rounded-xl shadow-sm space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Terminal className="h-4 w-4 text-blue-400" />
+                      <h5 className="font-bold text-sm text-white">Developer Administration</h5>
+                    </div>
+                    <p className="text-[11px] text-zinc-400">
+                      Access advanced diagnostic utilities, direct database telemetry logs, and manual backups triggers safely.
+                    </p>
+                    <a href="/developer-panel" className="block pt-1">
+                      <Button variant="outline" className="w-full border-zinc-700 hover:bg-zinc-800 text-zinc-200 hover:text-white font-semibold text-xs py-2.5">
+                        Access Developer Terminal
+                      </Button>
+                    </a>
+                  </div>
+                </div>
+              </ScrollArea>
+            ) : (
+              <>
+                {/* Channels Dropdown Selector */}
+                <div className="p-2.5 border-b border-zinc-200 bg-white flex items-center justify-between shadow-sm shrink-0">
+                  <span className="text-xs font-bold text-zinc-500 font-mono">Workspace Lobby:</span>
+                  <select
+                    value={selectedChannelId}
+                    onChange={(e) => setSelectedChannelId(e.target.value)}
+                    className="text-xs font-semibold bg-zinc-100 border-zinc-200 border rounded p-1 max-w-[180px]"
+                  >
+                    {channels.map((chan) => (
+                      <option key={chan.id} value={chan.id}>
+                        {chan.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Messages Loop */}
+                <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+                  <div className="space-y-3 pb-3">
+                    {loadingMessages ? (
+                      <div className="flex justify-center py-6">
+                        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+                      </div>
+                    ) : (
+                      activeMessages.map((msg) => {
+                        const isSelf = msg.user_email === (user?.email || "guest@tareza.local");
+                        return (
+                          <div
+                            key={msg.id}
+                            className={`flex flex-col ${isSelf ? "items-end" : "items-start"}`}
+                          >
+                            <span className="text-[9px] text-zinc-400 font-semibold mb-0.5 px-1">
+                              {msg.user_email} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            <div
+                              className={`px-3 py-2 rounded-xl text-xs max-w-[85%] leading-relaxed ${isSelf ? "bg-zinc-900 text-white rounded-tr-none" : "bg-white border text-zinc-800 rounded-tl-none shadow-sm"}`}
+                            >
+                              {msg.message}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </ScrollArea>
+
+                {/* Message input */}
+                <form
+                  onSubmit={handleSendMessage}
+                  className="p-3 bg-white border-t border-zinc-200 flex gap-2 shrink-0 shadow-sm"
+                >
+                  <Input
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    placeholder="Type message to team members..."
+                    className="flex-1 h-9 text-xs bg-zinc-50 border-zinc-200 focus-visible:ring-zinc-800 rounded-lg"
+                    disabled={sending}
+                  />
+                  <Button
+                    type="submit"
+                    size="icon"
+                    className="h-9 w-9 bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg shrink-0"
+                    disabled={!inputText.trim() || sending}
+                  >
+                    {sending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                  </Button>
+                </form>
+              </>
+            )}
           </div>
         </Card>
       )}

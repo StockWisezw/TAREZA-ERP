@@ -90,38 +90,29 @@ export function InventoryDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-xl bg-secondary text-secondary-foreground relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
-          <CardHeader className="relative z-10">
-            <CardTitle className="flex items-center space-x-2 text-white">
-               <div className="p-1-5 bg-primary/20 rounded-md">
-                   <TrendingUp className="h-4 w-4 text-primary" />
-               </div>
-               <span>Tareza Insights</span>
-            </CardTitle>
-            <CardDescription className="text-zinc-400">Automated inventory analysis</CardDescription>
+        <Card className="border-zinc-200">
+          <CardHeader>
+            <CardTitle className="text-zinc-900 font-bold">Quick Verification Panel</CardTitle>
+            <CardDescription className="text-zinc-500">Manual review of inventory states</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 relative z-10">
-            <div className="p-3 bg-white/5 border border-white/10 rounded-lg backdrop-blur-sm">
-              <h4 className="font-semibold text-primary text-sm mb-1 flex items-center space-x-2">
-                 <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                 <span>High Demand Alert</span>
-              </h4>
-              <p className="text-xs text-zinc-300">"Mazoe Orange Crush 2L" sales have spiked by 45%. Recommend increasing reorder level by 20 units before Friday.</p>
+          <CardContent className="space-y-4">
+            <div className="p-4 bg-zinc-50 border border-zinc-250 rounded-xl">
+              <h4 className="font-bold text-zinc-900 text-sm mb-1">Verify Stock Records</h4>
+              <p className="text-xs text-zinc-650 leading-relaxed">
+                Physical counts are invaluable to reconcile discrepancies and spot leakages immediately. 
+              </p>
             </div>
-            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg backdrop-blur-sm">
-              <h4 className="font-semibold text-amber-400 text-sm mb-1 flex items-center space-x-2">
-                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                 <span>Dead Stock Detected</span>
-              </h4>
-              <p className="text-xs text-zinc-300">"Generic Phone Cases" haven't moved in 90 days. Recommend applying a 30% discount to clear $450 in tied-up capital.</p>
+            <div className="p-4 bg-zinc-50 border border-zinc-250 rounded-xl">
+              <h4 className="font-bold text-zinc-900 text-sm mb-1">Generate PO Reports</h4>
+              <p className="text-xs text-zinc-650 leading-relaxed">
+                Connect your purchase orders with Goods Received Notes (GRN) under the **Suppliers** tab to track procurement.
+              </p>
             </div>
-            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg backdrop-blur-sm">
-              <h4 className="font-semibold text-emerald-400 text-sm mb-1 flex items-center space-x-2">
-                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                 <span>Optimal Stock Levels</span>
-              </h4>
-              <p className="text-xs text-zinc-300">Overall warehouse utilization is at 82%. You are well-optimized for the upcoming month-end rush.</p>
+            <div className="p-4 bg-zinc-50 border border-zinc-250 rounded-xl">
+              <h4 className="font-bold text-zinc-900 text-sm mb-1">Need Consultation?</h4>
+              <p className="text-xs text-zinc-650 leading-relaxed font-semibold text-indigo-600">
+                Contact your consultant on +263 776699950 for hands-on, on-site interpretation.
+              </p>
             </div>
           </CardContent>
         </Card>

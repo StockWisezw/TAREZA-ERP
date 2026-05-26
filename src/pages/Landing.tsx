@@ -98,8 +98,8 @@ export default function Landing() {
         <div className="w-full max-w-7xl mx-auto px-6 py-24 md:py-32 flex flex-col lg:flex-row items-center relative z-10">
           <div className="lg:w-1/2 space-y-8 z-10 text-center lg:text-left">
             <div className="inline-flex items-center space-x-2 bg-background/80 dark:bg-background/50 border border-border/50 rounded-full px-4 py-1.5 text-sm font-medium backdrop-blur-md shadow-sm">
-              <SparklesIcon className="w-4 h-4 text-primary" />
-              <span>Now with Tareza AI Insights</span>
+              <CheckCircle2 className="w-4 h-4 text-primary" />
+              <span>Includes On-site Stocktakes & Expert Consultancy</span>
             </div>
             
             <h1 className="text-5xl md:text-7xl font-bold tracking-tighter leading-[1.1] text-zinc-900 dark:text-zinc-50 drop-shadow-sm">
@@ -111,7 +111,7 @@ export default function Landing() {
             
             <p className="text-xl text-zinc-600 dark:text-zinc-300 max-w-2xl mx-auto lg:mx-0 leading-relaxed font-medium">
               Powering African commerce. Point of Sale, multi-branch inventory, 
-              accounting, and AI forecasting—all in one enterprise-grade platform.
+              accounting, and expert on-site consulting—all in one enterprise-grade platform.
             </p>
             
             <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start space-y-4 sm:space-y-0 sm:space-x-4 pt-4">
@@ -159,11 +159,11 @@ export default function Landing() {
               
               <div className="absolute -right-6 top-16 bg-secondary text-white p-4 rounded-xl shadow-xl border border-secondary/50 flex items-center space-x-3 hidden md:flex animate-in slide-in-from-right-5 duration-1000 delay-500">
                 <div className="bg-primary/20 p-2 rounded-lg text-primary">
-                  <SparklesIcon className="w-5 h-5" />
+                  <Package className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-primary uppercase">Tareza AI</p>
-                  <p className="text-sm font-medium text-zinc-200">Reorder Mazoe 2L now</p>
+                  <p className="text-xs font-bold text-primary uppercase">Professional Advice</p>
+                  <p className="text-sm font-medium text-zinc-200">On-site stocktakes & strategic planning</p>
                 </div>
               </div>
             </div>
@@ -183,7 +183,7 @@ export default function Landing() {
             <FeatureCard 
               icon={<Store className="w-6 h-6" />}
               title="Tareza POS"
-              description="Lightning-fast point of sale that works offline. Process sales, manage returns, and print fiscal receipts instantly."
+              description="Lightning-fast point of sale that works offline. Process sales, manage returns, and print sales receipts instantly."
             />
             <FeatureCard 
               icon={<Package className="w-6 h-6" />}
@@ -191,14 +191,14 @@ export default function Landing() {
               description="Track stock across multiple warehouses and branches in real-time. Automated stocktakes and low-stock alerts."
             />
             <FeatureCard 
-              icon={<SparklesIcon className="w-6 h-6" />}
-              title="Tareza AI"
-              description="Predictive insights, demand forecasting, and an intelligent assistant that acts as your virtual CFO."
+              icon={<Users className="w-6 h-6" />}
+              title="Tailored Consultancy"
+              description="Numbers alone don't build businesses—interpretation does. We offer hands-on monthly visits to guide strategy and minimize stock leakages."
             />
             <FeatureCard 
               icon={<ShieldCheck className="w-6 h-6" />}
-              title="ZIMRA Fiscalisation"
-              description="Built-in ZIMRA compliance. Generate digital signatures and fiscal QR codes directly on your receipts."
+              title="Resilient Offline Engine"
+              description="Robust offline checkout capability. Continue scanning and completing sales without internet; data syncs automatically when reconnected."
             />
             <FeatureCard 
               icon={<Building2 className="w-6 h-6" />}
@@ -246,23 +246,24 @@ export default function Landing() {
             {/* Pro Plan */}
             <div className="bg-card rounded-2xl border-2 border-primary p-8 shadow-lg relative flex flex-col scale-105 z-10">
               <div className="absolute top-0 inset-x-0 translate-y-[-50%] flex justify-center">
-                <span className="bg-primary text-primary-foreground text-xs font-bold uppercase tracking-widest py-1 px-4 rounded-full">Most Popular</span>
+                <span className="bg-primary text-primary-foreground text-xs font-bold uppercase tracking-widest py-1 px-4 rounded-full">Most Recommended</span>
               </div>
-              <h3 className="text-2xl font-bold mb-2 text-foreground">Pro</h3>
+              <h3 className="text-2xl font-bold mb-2 text-foreground">Consultancy Pro</h3>
               <div className="flex items-baseline gap-1 mb-4">
-                <span className="text-4xl font-bold text-foreground">$40</span>
+                <span className="text-4xl font-bold text-foreground">$50</span>
                 <span className="text-muted-foreground">/mo</span>
               </div>
-              <p className="text-sm text-muted-foreground mb-6">For growing multi-location retailers.</p>
+              <p className="text-sm text-muted-foreground mb-6">Expert physical oversight & premium enterprise software.</p>
               
               <ul className="space-y-4 mb-8 flex-1">
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Up to 3 Branches</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Up to 10 User Accounts</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> All Tareza Modules</li>
+                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> 1 Monthly On-Site Visit (Stocktake or Consultancy)</li>
+                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Professional Financial Trend Interpretation</li>
+                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Up to 3 Branches / Warehouses</li>
+                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Direct Developer Support Hotline</li>
                 <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> ZIMRA Fiscalisation Ready</li>
               </ul>
               <Link to="/login" className="mt-auto">
-                <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">Start 14-day free trial</Button>
+                <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-bold">Start your 14-day trial</Button>
               </Link>
             </div>
 

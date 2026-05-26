@@ -31,7 +31,6 @@ const navItems = [
   { id: 'branches', label: 'Branches & Warehouses', icon: Store },
   { id: 'users', label: 'Users & Staff', icon: Users },
   { id: 'roles', label: 'Roles & Permissions', icon: Shield },
-  { id: 'fiscalisation', label: 'Fiscalisation (ZIMRA)', icon: Receipt },
   { id: 'pos', label: 'POS Settings', icon: Settings2 },
   { id: 'themes', label: 'Themes & Branding', icon: Palette },
   { id: 'localization', label: 'Localization', icon: Globe },

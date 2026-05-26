@@ -28,6 +28,33 @@ export default function GoodsReceiving() {
   // History log of received goods
   const [grnHistory, setGrnHistory] = useState<any[]>([]);
 
+  // Automatically update product selection and quantities based on chosen PO items
+  useEffect(() => {
+    if (!selectedPOId || purchaseOrders.length === 0) return;
+    const po = purchaseOrders.find(p => p.id === selectedPOId);
+    if (po && po.items && po.items.length > 0) {
+      const firstItem = po.items[0];
+      setSelectedProductId(firstItem.product_id);
+      setQuantityToReceive(firstItem.quantity?.toString() || '1');
+    }
+  }, [selectedPOId, purchaseOrders]);
+
+  const currentPO = purchaseOrders.find(po => po.id === selectedPOId);
+  const poItems = currentPO?.items || [];
+  const filteredProducts = poItems.length > 0 
+    ? products.filter(p => poItems.some((it: any) => it.product_id === p.id))
+    : products;
+
+  const handleProductChange = (val: string) => {
+    setSelectedProductId(val);
+    if (currentPO && currentPO.items) {
+      const match = currentPO.items.find((it: any) => it.product_id === val);
+      if (match) {
+        setQuantityToReceive(match.quantity?.toString() || '1');
+      }
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -268,7 +295,7 @@ export default function GoodsReceiving() {
 
           <form onSubmit={handleReceiveGoods} className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-zinc-600">Select Purchase Order</label>
+              <label className="text-xs font-semibold text-zinc-650">Select Purchase Order</label>
               <Select value={selectedPOId} onValueChange={setSelectedPOId}>
                 <SelectTrigger className="bg-white border-zinc-200">
                   <SelectValue placeholder="Select PO Reference" />
@@ -289,18 +316,35 @@ export default function GoodsReceiving() {
               </Select>
             </div>
 
+            {poItems.length > 0 && (
+              <div className="bg-zinc-50 border border-zinc-200 p-3 rounded-lg space-y-2 text-xs">
+                <span className="font-bold text-zinc-700 block">Ordered Products in this PO:</span>
+                <div className="space-y-1 divide-y divide-zinc-100 max-h-[140px] overflow-y-auto">
+                  {poItems.map((it: any, index: number) => {
+                    const isSelected = selectedProductId === it.product_id;
+                    return (
+                      <div key={index} className={`flex justify-between items-center py-1.5 px-2 rounded-md ${isSelected ? 'bg-blue-50 font-semibold text-blue-700' : 'text-zinc-650'}`}>
+                        <span>• {it.product_name}</span>
+                        <span className="font-mono text-[11px]">Ordered Qty: <strong className="text-zinc-900">{it.quantity}</strong></span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">Item Received</label>
-                <Select value={selectedProductId} onValueChange={setSelectedProductId}>
+                <label className="text-xs font-semibold text-zinc-650">Item Received</label>
+                <Select value={selectedProductId} onValueChange={handleProductChange}>
                   <SelectTrigger className="bg-white border-zinc-200">
                     <SelectValue placeholder="Product" />
                   </SelectTrigger>
                   <SelectContent className="bg-white">
-                    {products.map(p => (
+                    {filteredProducts.map(p => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                     ))}
-                    {products.length === 0 && (
+                    {filteredProducts.length === 0 && (
                       <SelectItem value="none" disabled>No active products</SelectItem>
                     )}
                   </SelectContent>
@@ -308,7 +352,7 @@ export default function GoodsReceiving() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">Target Warehouse Branch</label>
+                <label className="text-xs font-semibold text-zinc-650">Target Warehouse Branch</label>
                 <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
                   <SelectTrigger className="bg-white border-zinc-200">
                     <SelectValue placeholder="Destination Location" />

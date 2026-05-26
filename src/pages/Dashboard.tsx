@@ -66,29 +66,6 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    async function loadAiInsights() {
-      try {
-        const response = await fetch('/api/ai/insights', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: 'Generate one concise, specific business insight (about 1-2 sentences max) for a retail ERP system. Make it sound like it analysed recent fake sales data and noticed a trend. DO NOT use markdown format, just plain text.' })
-        });
-        const respData = await response.json();
-        if (respData.result) {
-          setAiInsight(respData.result);
-        } else {
-           setAiInsight(null);
-        }
-      } catch (err) {
-        setAiInsight(null);
-      } finally {
-        setAiLoading(false);
-      }
-    }
-    loadAiInsights();
-  }, []);
-
-  useEffect(() => {
     async function ensureBusinessProfile() {
       try {
         const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -306,43 +283,55 @@ export default function Dashboard() {
           </CardContent>
         </Card>
         
-        {/* Navy Deep Premium AI Card */}
-        <Card className="col-span-3 border-0 shadow-xl bg-secondary text-secondary-foreground relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
+        {/* Consultancy Card */}
+        <Card className="col-span-3 border-0 shadow-xl bg-gradient-to-br from-indigo-900 to-indigo-950 text-white relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20"></div>
           <CardHeader className="relative z-10">
             <CardTitle className="flex items-center space-x-2 text-white">
-              <div className="p-1.5 bg-primary/20 rounded-md">
-                 <Sparkles className="h-5 w-5 text-primary" />
+              <div className="p-1.5 bg-indigo-500/20 rounded-md">
+                 <Package className="h-5 w-5 text-indigo-300" />
               </div>
-              <span className="tracking-tight">Tareza Insights</span>
+              <span className="tracking-tight">On-site Consultancy & Stocktake Bundle</span>
             </CardTitle>
-            <CardDescription className="text-zinc-400">AI-generated insights based on real-time metadata.</CardDescription>
+            <CardDescription className="text-zinc-400">Because numbers alone do not tell the whole story. Numbers need a physical expert to interpret them and advise on the best direct strategies to protect margins.</CardDescription>
           </CardHeader>
-          <CardContent className="relative z-10">
-             {aiLoading ? (
-               <div className="flex flex-col items-center justify-center p-8 text-center bg-white/5 rounded-xl border border-white/10 h-full animate-pulse">
-                  <Sparkles className="w-8 h-8 text-zinc-500 mb-3 opacity-50" />
-                  <h4 className="text-sm font-semibold text-zinc-400 mb-1">Analyzing Data...</h4>
-               </div>
-             ) : aiInsight ? (
-               <div className="flex flex-col items-center justify-center p-8 text-center bg-white/5 rounded-xl border border-white/10 h-[200px] overflow-auto shadow-inner">
-                 <div className="flex items-center space-x-2 text-primary font-semibold mb-3">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                    <span>Recent Insight</span>
-                 </div>
-                 <p className="text-sm text-zinc-300 max-w-[250px] leading-relaxed mx-auto italic">
-                   "{aiInsight}"
-                 </p>
-               </div>
-             ) : (
-               <div className="flex flex-col items-center justify-center p-8 text-center bg-white/5 rounded-xl border border-white/10 h-[200px]">
-                 <Sparkles className="w-8 h-8 text-zinc-500 mb-3 opacity-50" />
-                 <h4 className="text-sm font-semibold text-zinc-300 mb-1">AI Setup Required</h4>
-                 <p className="text-xs text-zinc-500 max-w-[200px] leading-relaxed mx-auto">
-                   Set your GEMINI_API_KEY environment variable in AI Studio settings to unlock intelligent demand forecasting.
-                 </p>
-               </div>
-             )}
+          <CardContent className="relative z-10 w-full">
+            <div className="flex flex-col p-6 bg-white/5 rounded-xl border border-white/10 space-y-4">
+              <div className="flex items-baseline gap-1">
+                <span className="text-3xl font-extrabold text-white">$50</span>
+                <span className="text-zinc-400 text-sm">/month bundle</span>
+              </div>
+              <p className="text-xs text-zinc-300 leading-relaxed">
+                Ensure absolute alignment between raw ledger values and real-world counts. We specialize in interpreting stock velocity trends and advising on leakage-prevention strategies.
+              </p>
+              <div className="space-y-1.5 text-xs text-zinc-400 border-t border-white/5 pt-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                  <span><strong>1 Monthly On-Site Visit</strong>: Hands-on physical stocktake or high-level management consulting</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                  <span><strong>Trend Interpretation</strong>: Translate metrics into simple, high-yield business growth advice</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                  <span><strong>Developer Support</strong>: Direct line to technical engineers & diagnostic terminals</span>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                <a href="https://wa.me/263776699950" target="_blank" rel="noopener noreferrer" className="block">
+                  <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white transition-all font-bold text-xs py-2.5 rounded-lg shadow-md">
+                    Request WhatsApp Visit
+                  </button>
+                </a>
+                <a href="/developer-panel" className="block">
+                  <button className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 hover:text-white transition-all font-bold text-xs py-2.5 rounded-lg shadow-md">
+                    Developer Portal Support
+                  </button>
+                </a>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

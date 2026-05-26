@@ -7,7 +7,6 @@ import { CurrencySettings } from '../components/settings/CurrencySettings';
 import { BranchWarehouseSettings } from '../components/settings/BranchWarehouseSettings';
 import { UserManagement } from '../components/settings/UserManagement';
 import { RolesPermissions } from '../components/settings/RolesPermissions';
-import { FiscalisationSettings } from '../components/settings/FiscalisationSettings';
 import { PosSettings } from '../components/settings/PosSettings';
 import { ThemeSettings } from '../components/settings/ThemeSettings';
 import { LocalizationSettings } from '../components/settings/LocalizationSettings';
@@ -30,7 +29,6 @@ export default function Settings() {
       case 'branches': return <BranchWarehouseSettings />;
       case 'users': return <UserManagement />;
       case 'roles': return <RolesPermissions />;
-      case 'fiscalisation': return <FiscalisationSettings />;
       case 'pos': return <PosSettings />;
       case 'themes': return <ThemeSettings />;
       case 'localization': return <LocalizationSettings />;

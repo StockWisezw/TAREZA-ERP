@@ -38,6 +38,56 @@ export function Procurement() {
   const [totalAmount, setTotalAmount] = useState('0.00');
   const [orderDate, setOrderDate] = useState('');
 
+  // Ordered product line items
+  const [poItems, setPoItems] = useState<any[]>([]);
+  const [tempProductId, setTempProductId] = useState('');
+  const [tempQty, setTempQty] = useState('1');
+  const [tempPrice, setTempPrice] = useState('0.00');
+
+  // Interactive row expansion
+  const [expandedPOId, setExpandedPOId] = useState<string | null>(null);
+
+  const handleAddItem = () => {
+    if (!tempProductId) {
+      toast.error("Please select a product");
+      return;
+    }
+    const matchedProd = products.find(p => p.id === tempProductId);
+    if (!matchedProd) return;
+
+    const qty = parseFloat(tempQty);
+    const prc = parseFloat(tempPrice);
+    if (isNaN(qty) || qty <= 0) {
+      toast.error("Please enter a valid quantity");
+      return;
+    }
+
+    const newItem = {
+      product_id: tempProductId,
+      product_name: matchedProd.name,
+      quantity: qty,
+      price: prc
+    };
+
+    const nextItems = [...poItems, newItem];
+    setPoItems(nextItems);
+    
+    // Auto-update total amount
+    const nextTotal = nextItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+    setTotalAmount(nextTotal.toFixed(2));
+
+    // Reset fields but keep selected product for convenience
+    setTempQty('1');
+    setTempPrice('0.00');
+  };
+
+  const handleRemoveItem = (index: number) => {
+    const nextItems = poItems.filter((_, idx) => idx !== index);
+    setPoItems(nextItems);
+    const nextTotal = nextItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+    setTotalAmount(nextTotal.toFixed(2));
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -126,6 +176,7 @@ export function Procurement() {
         total_amount: parseFloat(totalAmount) || 0,
         order_date: orderDate || new Date().toISOString().split('T')[0],
         expected_delivery_date: expectedDelivery || null,
+        items: poItems,
         created_at: new Date().toISOString()
       };
 
@@ -143,6 +194,7 @@ export function Procurement() {
       setPoStatus('PENDING_APPROVAL');
       setTotalAmount('0.00');
       setOrderDate('');
+      setPoItems([]);
 
       fetchData();
     } catch (err: any) {
@@ -162,7 +214,8 @@ export function Procurement() {
         status: poStatus,
         total_amount: parseFloat(totalAmount) || 0,
         expected_delivery_date: expectedDelivery || null,
-        order_date: orderDate || new Date().toISOString().split('T')[0]
+        order_date: orderDate || new Date().toISOString().split('T')[0],
+        items: poItems
       };
 
       const { error } = await supabase
@@ -175,6 +228,7 @@ export function Procurement() {
       toast.success(`Purchase Order ${poNumber} updated successfully!`);
       setIsEditOpen(false);
       setSelectedPO(null);
+      setPoItems([]);
       fetchData();
     } catch (err: any) {
       console.error(err);
@@ -208,8 +262,12 @@ export function Procurement() {
     setSelectedSupplierId(suppliers[0]?.id || '');
     setExpectedDelivery(new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]);
     setPoStatus('PENDING_APPROVAL');
-    setTotalAmount('3500.00');
+    setTotalAmount('0.00');
     setOrderDate(new Date().toISOString().split('T')[0]);
+    setPoItems([]);
+    setTempProductId(products[0]?.id || '');
+    setTempQty('1');
+    setTempPrice('0.00');
     setIsCreateOpen(true);
   };
 
@@ -221,6 +279,10 @@ export function Procurement() {
     setPoStatus(po.status || 'PENDING_APPROVAL');
     setTotalAmount(po.total_amount?.toString() || '0.00');
     setOrderDate(po.order_date || '');
+    setPoItems(po.items || []);
+    setTempProductId(products[0]?.id || '');
+    setTempQty('1');
+    setTempPrice('0.00');
     setIsEditOpen(true);
   };
 
@@ -324,51 +386,91 @@ export function Procurement() {
                    </TableCell>
                 </TableRow>
               ) : filteredPOs.map((po) => (
-                <TableRow key={po.id} className="hover:bg-zinc-50/50 cursor-pointer">
-                  <TableCell className="font-mono text-sm font-medium text-blue-600">{po.po_number}</TableCell>
-                  <TableCell className="font-semibold text-zinc-900">{po.suppliers_advanced?.name || 'Unknown Supplier'}</TableCell>
-                  <TableCell className="text-sm text-zinc-600">
-                    {po.order_date ? new Date(po.order_date).toLocaleDateString() : '-'}
-                  </TableCell>
-                  <TableCell className="text-sm text-zinc-600">
-                    {po.expected_delivery_date ? new Date(po.expected_delivery_date).toLocaleDateString() : '-'}
-                  </TableCell>
-                  <TableCell className="text-right font-mono font-bold text-zinc-900">
-                    ${(po.total_amount || 0).toFixed(2)}
-                  </TableCell>
-                  <TableCell>{getStatusBadge(po.status)}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(po)}>
-                        <Edit className="h-3.5 w-3.5 mr-1" /> Edit
-                      </Button>
-                      
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-white">
-                          <DropdownMenuLabel>Status Actions</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => adjustStatusDirect(po, 'APPROVED')}>
-                            Approve PO
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => adjustStatusDirect(po, 'RECEIVED')}>
-                            Mark Received
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => adjustStatusDirect(po, 'DRAFT')}>
-                            Convert to Draft
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem className="text-destructive font-semibold" onClick={() => handleDeletePO(po.id, po.po_number)}>
-                            <Trash2 className="h-4 w-4 mr-2" /> Delete PO
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <React.Fragment key={po.id}>
+                  <TableRow 
+                    className="hover:bg-zinc-50/50 cursor-pointer"
+                    onClick={() => setExpandedPOId(expandedPOId === po.id ? null : po.id)}
+                  >
+                    <TableCell className="font-mono text-sm font-medium text-blue-600">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-zinc-400 text-[10px]">{expandedPOId === po.id ? '▼' : '▶'}</span>
+                        {po.po_number}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-semibold text-zinc-900">{po.suppliers_advanced?.name || 'Unknown Supplier'}</TableCell>
+                    <TableCell className="text-sm text-zinc-600">
+                      {po.order_date ? new Date(po.order_date).toLocaleDateString() : '-'}
+                    </TableCell>
+                    <TableCell className="text-sm text-zinc-600">
+                      {po.expected_delivery_date ? new Date(po.expected_delivery_date).toLocaleDateString() : '-'}
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-bold text-zinc-900">
+                      ${(po.total_amount || 0).toFixed(2)}
+                    </TableCell>
+                    <TableCell>{getStatusBadge(po.status)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(po)}>
+                          <Edit className="h-3.5 w-3.5 mr-1" /> Edit
+                        </Button>
+                        
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-white">
+                            <DropdownMenuLabel>Status Actions</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => adjustStatusDirect(po, 'APPROVED')}>
+                              Approve PO
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => adjustStatusDirect(po, 'RECEIVED')}>
+                              Mark Received
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => adjustStatusDirect(po, 'DRAFT')}>
+                              Convert to Draft
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-destructive font-semibold" onClick={() => handleDeletePO(po.id, po.po_number)}>
+                              <Trash2 className="h-4 w-4 mr-2" /> Delete PO
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  {expandedPOId === po.id && (
+                    <TableRow className="bg-zinc-50/30 hover:bg-zinc-50/30">
+                      <TableCell colSpan={7} className="p-4 border-t border-b">
+                        <div className="space-y-3 pl-4">
+                          <h4 className="text-xs font-bold text-zinc-700 uppercase tracking-wider">Ordered Products ({po.items?.length || 0})</h4>
+                          {(!po.items || po.items.length === 0) ? (
+                            <p className="text-xs text-zinc-400 italic">No specific products were listed for this purchase order. Click Edit to add items.</p>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {po.items.map((it: any, idx: number) => {
+                                const matchedProd = products.find((pr: any) => pr.id === it.product_id);
+                                return (
+                                  <div key={idx} className="bg-white p-3 rounded-xl border border-zinc-200 flex justify-between items-center text-sm shadow-sm">
+                                    <div>
+                                      <p className="font-semibold text-zinc-900">{matchedProd ? matchedProd.name : (it.product_name || 'Generic Item')}</p>
+                                      <p className="text-xs text-zinc-500 font-mono">SKU: {matchedProd ? matchedProd.sku : 'N/A'}</p>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="font-bold text-zinc-800">{it.quantity} x ${Number(it.price || 0).toFixed(2)}</p>
+                                      <p className="text-xs font-mono text-zinc-500">${(Number(it.quantity || 0) * Number(it.price || 0)).toFixed(2)}</p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
               ))}
             </TableBody>
           </ShadcnTable>
@@ -434,6 +536,69 @@ export function Procurement() {
                   onChange={e => setExpectedDelivery(e.target.value)} 
                 />
               </div>
+            </div>
+
+            <div className="border border-zinc-200 rounded-lg p-3 space-y-3 bg-zinc-50/50">
+              <span className="text-xs font-bold text-zinc-750 block">Add Products to Order</span>
+              <div className="flex gap-2 items-end">
+                <div className="flex-1 space-y-1">
+                  <span className="text-[10px] text-zinc-500 font-semibold block">Select Product</span>
+                  <Select value={tempProductId} onValueChange={(val) => {
+                    setTempProductId(val);
+                    const prod = products.find(p => p.id === val);
+                    if (prod) {
+                      setTempPrice((prod.cost_price || prod.retail_price || 0).toString());
+                    }
+                  }}>
+                    <SelectTrigger className="bg-white h-9 text-xs">
+                      <SelectValue placeholder="Pick Product" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      {products.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.name} (${Number(p.cost_price || p.retail_price || 0).toFixed(2)})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-16 space-y-1">
+                  <span className="text-[10px] text-zinc-500 font-semibold block">Qty</span>
+                  <Input type="number" min="1" value={tempQty} onChange={e => setTempQty(e.target.value)} className="h-9 bg-white text-xs" />
+                </div>
+                <div className="w-20 space-y-1">
+                  <span className="text-[10px] text-zinc-500 font-semibold block">Price ($)</span>
+                  <Input type="number" step="0.01" value={tempPrice} onChange={e => setTempPrice(e.target.value)} className="h-9 bg-white text-xs" />
+                </div>
+                <Button type="button" onClick={handleAddItem} size="sm" className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-white h-9 p-2 text-xs">Add</Button>
+              </div>
+
+              {poItems.length > 0 && (
+                <div className="border border-zinc-200 rounded-md bg-white overflow-hidden max-h-[160px] overflow-y-auto shadow-sm">
+                  <table className="w-full text-[11px] text-left">
+                    <thead className="bg-zinc-50 text-[10px] text-zinc-500 font-semibold border-b">
+                      <tr>
+                        <th className="p-2">Product</th>
+                        <th className="p-2 text-center">Qty</th>
+                        <th className="p-2 text-right">Price</th>
+                        <th className="p-2 text-right">Total</th>
+                        <th className="p-2 text-center w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {poItems.map((item, index) => (
+                        <tr key={index}>
+                          <td className="p-2 font-medium truncate max-w-[120px]">{item.product_name}</td>
+                          <td className="p-2 text-center">{item.quantity}</td>
+                          <td className="p-2 text-right">${Number(item.price || 0).toFixed(2)}</td>
+                          <td className="p-2 text-right">${(item.quantity * item.price).toFixed(2)}</td>
+                          <td className="p-2 text-center">
+                            <button type="button" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-700">✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -527,9 +692,72 @@ export function Procurement() {
               </div>
             </div>
 
+            <div className="border border-zinc-200 rounded-lg p-3 space-y-3 bg-zinc-50/50">
+              <span className="text-xs font-bold text-zinc-750 block">Add Products to Order</span>
+              <div className="flex gap-2 items-end">
+                <div className="flex-1 space-y-1">
+                  <span className="text-[10px] text-zinc-500 font-semibold block">Select Product</span>
+                  <Select value={tempProductId} onValueChange={(val) => {
+                    setTempProductId(val);
+                    const prod = products.find(p => p.id === val);
+                    if (prod) {
+                      setTempPrice((prod.cost_price || prod.retail_price || 0).toString());
+                    }
+                  }}>
+                    <SelectTrigger className="bg-white h-9 text-xs">
+                      <SelectValue placeholder="Pick Product" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      {products.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.name} (${Number(p.cost_price || p.retail_price || 0).toFixed(2)})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-16 space-y-1">
+                  <span className="text-[10px] text-zinc-500 font-semibold block">Qty</span>
+                  <Input type="number" min="1" value={tempQty} onChange={e => setTempQty(e.target.value)} className="h-9 bg-white text-xs" />
+                </div>
+                <div className="w-20 space-y-1">
+                  <span className="text-[10px] text-zinc-500 font-semibold block">Price ($)</span>
+                  <Input type="number" step="0.01" value={tempPrice} onChange={e => setTempPrice(e.target.value)} className="h-9 bg-white text-xs" />
+                </div>
+                <Button type="button" onClick={handleAddItem} size="sm" className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-white h-9 p-2 text-xs">Add</Button>
+              </div>
+
+              {poItems.length > 0 && (
+                <div className="border border-zinc-200 rounded-md bg-white overflow-hidden max-h-[160px] overflow-y-auto shadow-sm">
+                  <table className="w-full text-[11px] text-left">
+                    <thead className="bg-zinc-50 text-[10px] text-zinc-500 font-semibold border-b">
+                      <tr>
+                        <th className="p-2">Product</th>
+                        <th className="p-2 text-center">Qty</th>
+                        <th className="p-2 text-right">Price</th>
+                        <th className="p-2 text-right">Total</th>
+                        <th className="p-2 text-center w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {poItems.map((item, index) => (
+                        <tr key={index}>
+                          <td className="p-2 font-medium truncate max-w-[120px]">{item.product_name}</td>
+                          <td className="p-2 text-center">{item.quantity}</td>
+                          <td className="p-2 text-right">${Number(item.price || 0).toFixed(2)}</td>
+                          <td className="p-2 text-right">${(item.quantity * item.price).toFixed(2)}</td>
+                          <td className="p-2 text-center">
+                            <button type="button" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-700">✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">Total Price ($)</label>
+                <label className="text-xs font-semibold text-zinc-650">Total Price ($)</label>
                 <Input 
                   type="number" 
                   step="0.01" 
@@ -540,7 +768,7 @@ export function Procurement() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">Status</label>
+                <label className="text-xs font-semibold text-zinc-650">Status</label>
                 <Select value={poStatus} onValueChange={setPoStatus}>
                   <SelectTrigger className="bg-white border-zinc-200">
                     <SelectValue />

@@ -52,7 +52,7 @@ export function SyncManager() {
             return next;
           });
           if (receiptNumber) {
-            toast.success(`ZIMRA Sync: Offline receipt ${receiptNumber} was synced successfully by another POS tab.`);
+            toast.success(`POS Sale Sync: Offline receipt ${receiptNumber} was synced successfully by another POS tab.`);
           }
           break;
 
@@ -105,9 +105,41 @@ export function SyncManager() {
       if (businessData?.branch_id) branchId = businessData.branch_id;
 
       // Ensure we have an active open cashier register session on Firestore to sync this sale
-      const activeRS = await getOpenRegisterSession(businessId, userData.user.id);
+      let activeRS = await getOpenRegisterSession(businessId, userData.user.id);
       if (!activeRS) {
-        throw new Error('No active shift session. Please start a shift first in your main tab.');
+        // Fallback: search for any OPEN session in the same business
+        const { data: anyOpen } = await supabase.from('register_sessions')
+          .select('*')
+          .eq('business_id', businessId)
+          .eq('status', 'OPEN')
+          .limit(1)
+          .maybeSingle();
+
+        if (anyOpen) {
+          activeRS = anyOpen;
+        } else {
+          // Double Fallback: Auto-create an open shift session with $0 float so we do not block POS offline-sales syncing!
+          const { data: newSession, error: createError } = await supabase.from('register_sessions')
+            .insert({
+              business_id: businessId,
+              branch_id: branchId !== 'default_branch' ? branchId : null,
+              user_id: userData.user.id,
+              opening_balance: 0,
+              expected_balance: 0,
+              status: 'OPEN',
+              opened_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+
+          if (!createError && newSession) {
+            activeRS = newSession;
+            console.log(`[SyncManager] Auto-created shift register session ${newSession.id} for seamless offline sync.`);
+          } else {
+            console.error('[SyncManager] Failed to auto-create register session:', createError);
+            throw new Error('No active shift session. Please start a shift first in your main tab.');
+          }
+        }
       }
 
       // Safeguard Idempotency: Don't insert duplicates if transaction was successfully synced previously
@@ -265,7 +297,7 @@ export function SyncManager() {
         receiptNumber: sale.receiptNumber
       });
 
-      toast.success(`ZIMRA Sync: Offline receipt ${sale.receiptNumber} successfully synced with Firebase.`);
+      toast.success(`POS Sale Sync: Offline receipt ${sale.receiptNumber} successfully synced with Firebase.`);
     } catch (error) {
       console.error('[SyncManager] Error syncing transaction:', error);
 
@@ -278,7 +310,7 @@ export function SyncManager() {
       // Avoid spamming offline notifications if the backend is simply unreachable
       const errMsg = error instanceof Error ? error.message : String(error);
       if (!errMsg.includes('unavailable') && !errMsg.includes('No active cashier register session')) {
-        toast.error(`ZIMRA Sync Delay: Could not upload receipt ${sale.receiptNumber}. Retrying in background.`);
+        toast.error(`POS Sale Sync Delay: Could not upload receipt ${sale.receiptNumber}. Retrying in background.`);
       }
     }
   };
