@@ -47,22 +47,21 @@ export async function initializeChartOfAccounts(businessId: string): Promise<voi
       { code: '6000', name: 'Operating and Cash Expenses', type: 'Expense', balance: 0, is_system: true }
     ];
 
-    const batch = writeBatch(db);
-    for (const acct of defaultAccounts) {
-      const newId = doc(collection(db, 'accounts')).id;
-      const docRef = doc(db, 'accounts', newId);
-      batch.set(docRef, {
-        business_id: businessId,
-        code: acct.code,
-        name: acct.name,
-        type: acct.type,
-        balance: acct.balance,
-        is_system: acct.is_system,
-        created_at: new Date().toISOString()
-      });
+    const accountsToInsert = defaultAccounts.map((acct) => ({
+      business_id: businessId,
+      code: acct.code,
+      name: acct.name,
+      type: acct.type,
+      balance: acct.balance,
+      is_system: acct.is_system,
+      created_at: new Date().toISOString()
+    }));
+
+    const { error: insertError } = await supabase.from('accounts').insert(accountsToInsert);
+    if (insertError) {
+      throw insertError;
     }
 
-    await batch.commit();
     await logAuditEvent(businessId, 'system', 'INITIALIZE', 'ACCOUNTING', null, { message: 'Initialized Standard Chart of Accounts' });
   } catch (error) {
     console.error('Failed to initialize chart of accounts:', error);

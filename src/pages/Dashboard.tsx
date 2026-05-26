@@ -20,10 +20,17 @@ export default function Dashboard() {
   useEffect(() => {
     async function loadStats() {
       try {
-        const { data: salesInfo } = await supabase.from('sales').select('total_amount, created_at');
+        const { data: salesInfo } = await supabase.from('sales').select('total, created_at');
         const { count: branchesCount } = await supabase.from('branches').select('*', { count: 'exact', head: true });
-        const { count: lowStockCount } = await supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_active', true);
-        // Note: lowStock should actually be based on quantity, but we'll leave it as a placeholder.
+        
+        // Fetch active products and their inventory stock levels to determine true low stock counts
+        const { data: activeProducts } = await supabase.from('products').select('id').eq('is_active', true);
+        const { data: inventoryData } = await supabase.from('inventory').select('product_id, quantity, reorder_level');
+
+        const activeProductIds = new Set(activeProducts?.map((p: any) => p.id) || []);
+        const lowStockCount = (inventoryData || []).filter((inv: any) => {
+          return activeProductIds.has(inv.product_id) && Number(inv.quantity || 0) <= Number(inv.reorder_level || 0);
+        }).length;
         
         let realSales = 0;
         let chartPoints: Record<string, number> = {};
@@ -37,14 +44,14 @@ export default function Dashboard() {
         }
 
         if (salesInfo && salesInfo.length > 0) {
-           realSales = salesInfo.reduce((acc: number, sale: any) => acc + Number(sale.total_amount || 0), 0);
+           realSales = salesInfo.reduce((acc: number, sale: any) => acc + Number(sale.total || 0), 0);
            
            salesInfo.forEach((sale: any) => {
               if (!sale.created_at) return;
               const d = new Date(sale.created_at);
               const dayName = days[d.getDay()];
               if (chartPoints[dayName] !== undefined) {
-                  chartPoints[dayName] += Number(sale.total_amount || 0);
+                  chartPoints[dayName] += Number(sale.total || 0);
               }
            });
         }

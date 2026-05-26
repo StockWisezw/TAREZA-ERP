@@ -374,7 +374,15 @@ export function ProductList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase())).map((item) => {
+              {products.filter(item => {
+                const sTerm = searchTerm.toLowerCase();
+                return (
+                  (item.name || '').toLowerCase().includes(sTerm) ||
+                  (item.sku || '').toLowerCase().includes(sTerm) ||
+                  (item.barcode || '').toLowerCase().includes(sTerm) ||
+                  (item.code || '').toLowerCase().includes(sTerm)
+                );
+              }).map((item) => {
                 const stockRecord = selectedBranchId 
                   ? item.inventory?.find((i: any) => i.branch_id === selectedBranchId)
                   : item.inventory?.[0];

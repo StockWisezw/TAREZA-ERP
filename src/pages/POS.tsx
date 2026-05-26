@@ -311,143 +311,157 @@ export default function POS() {
       return;
     }
 
-    const sale = completeSale();
+    const isOffline = !navigator.onLine || localStorage.getItem('tareza_offline_mode') === 'true';
+
+    const sale = completeSale({ isOffline });
     if (sale) {
       setLastSale(sale);
       setShowPayment(false);
       setShowPostSale(true);
-      toast.success('Sale Completed and Recorded!');
+      toast.success(isOffline ? 'Sale Saved Offline!' : 'Sale Completed and Recorded!');
       shouldPrintRef.current = true;
       
-      try {
-        const { supabase } = await import('../lib/supabaseClient');
+      if (!isOffline) {
+        try {
+          const { supabase } = await import('../lib/supabaseClient');
 
-        const { data: userData } = await supabase.auth.getUser();
-        let businessId = 'default_business';
-        let branchId = 'default_branch';
-        if (userData?.user) {
-          const { data: businessData } = await supabase.from('business_users').select('business_id, branch_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
-          if (businessData?.business_id) businessId = businessData.business_id;
-          if (businessData?.branch_id) branchId = businessData.branch_id;
-        }
+          const { data: userData } = await supabase.auth.getUser();
+          let businessId = 'default_business';
+          let branchId = 'default_branch';
+          if (userData?.user) {
+            const { data: businessData } = await supabase.from('business_users').select('business_id, branch_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
+            if (businessData?.business_id) businessId = businessData.business_id;
+            if (businessData?.branch_id) branchId = businessData.branch_id;
+          }
 
-        const salePayload: any = {
-           receipt_number: sale.receiptNumber,
-           total_amount: sale.total,
-           total_tax_amount: sale.vatTotal,
-           total_discount: sale.discountTotal,
-           payment_method: sale.payments.length > 0 ? sale.payments[0].method : 'cash',
-           status: 'COMPLETED',
-           register_session_id: activeSession.id,
-           created_at: new Date().toISOString()
-        };
-        if (businessId) salePayload.business_id = businessId;
-        if (sale.customerId) salePayload.customer_id = sale.customerId;
+          const salePayload: any = {
+             receipt_number: sale.receiptNumber,
+             total: sale.total,
+             vat_total: sale.vatTotal,
+             discount_total: sale.discountTotal,
+             subtotal: sale.total - sale.vatTotal,
+             payment_method: sale.payments.length > 0 ? sale.payments[0].method : 'cash',
+             payments: sale.payments,
+             status: 'COMPLETED',
+             created_at: new Date().toISOString()
+          };
+          if (businessId) salePayload.business_id = businessId;
+          if (sale.customerId) salePayload.customer_id = sale.customerId;
 
-        const { data: saleDoc, error: saleErr } = await supabase.from('sales').insert([salePayload]).select().single();
+          const { data: saleDoc, error: saleErr } = await supabase.from('sales').insert([salePayload]).select().single();
 
-        if (saleDoc) {
-          // 1. Log sale items and update real-time stock levels with matching double-entry COGS
-          if (sale.items.length > 0) {
-            const itemsPayload = sale.items.map(item => ({
-              sale_id: saleDoc.id,
-              product_id: item.product.id,
-              quantity: item.quantity,
-              unit_price: item.unitPrice,
-              line_total: item.subtotal,
-              vat_amount: item.vatAmount
-            }));
-            await supabase.from('sale_items').insert(itemsPayload);
+          if (saleErr || !saleDoc) {
+             throw new Error(saleErr?.message || 'Failed to initialize sale document in remote DB.');
+          }
 
-            for (const item of sale.items) {
-              await recordStockMovement(
-                businessId,
-                branchId,
-                item.product.id,
-                -Math.abs(item.quantity), // negative for stock depletion
-                'POS_SALE',
-                userData?.user?.id || 'unknown',
-                sale.receiptNumber,
-                item.product.wholesalePrice
-              );
+          if (saleDoc) {
+            // 1. Log sale items and update real-time stock levels with matching double-entry COGS
+            if (sale.items.length > 0) {
+              const itemsPayload = sale.items.map(item => ({
+                sale_id: saleDoc.id,
+                product_id: item.product.id,
+                quantity: item.quantity,
+                unit_price: item.unitPrice,
+                line_total: item.subtotal,
+                vat_amount: item.vatAmount
+              }));
+              await supabase.from('sale_items').insert(itemsPayload);
+
+              for (const item of sale.items) {
+                await recordStockMovement(
+                  businessId,
+                  branchId,
+                  item.product.id,
+                  -Math.abs(item.quantity), // negative for stock depletion
+                  'POS_SALE',
+                  userData?.user?.id || 'unknown',
+                  sale.receiptNumber,
+                  item.product.wholesalePrice
+                );
+              }
             }
-          }
 
-          // 2. Double-Entry Accounting postings for sale receipts
-          const creditPayment = sale.payments.find(p => p.method === 'credit');
-          const isCredit = !!creditPayment;
-          const mainAccount = isCredit ? '1100' : '1000'; // Accounts Receivable vs POS Cash Till
+            // 2. Double-Entry Accounting postings for sale receipts
+            const creditPayment = sale.payments.find(p => p.method === 'credit');
+            const isCredit = !!creditPayment;
+            const mainAccount = isCredit ? '1100' : '1000'; // Accounts Receivable vs POS Cash Till
 
-          const ledgerLines = [
-            { accountCode: mainAccount, debit: sale.total, credit: 0, description: `Receipt payment ${sale.receiptNumber}` },
-            { accountCode: '4000', debit: 0, credit: sale.total, description: `Sales Revenue registered [${sale.receiptNumber}]` }
-          ];
+            const ledgerLines = [
+              { accountCode: mainAccount, debit: sale.total, credit: 0, description: `Receipt payment ${sale.receiptNumber}` },
+              { accountCode: '4000', debit: 0, credit: sale.total, description: `Sales Revenue registered [${sale.receiptNumber}]` }
+            ];
 
-          await postJournalEntry(
-            businessId,
-            branchId,
-            userData?.user?.id || 'unknown',
-            sale.receiptNumber,
-            `POS Sale Checkout ${sale.receiptNumber}`,
-            ledgerLines
-          );
+            await postJournalEntry(
+              businessId,
+              branchId,
+              userData?.user?.id || 'unknown',
+              sale.receiptNumber,
+              `POS Sale Checkout ${sale.receiptNumber}`,
+              ledgerLines
+            );
 
-          // 3. Update active session metrics
-          const sessRef = doc(db, 'register_sessions', activeSession.id);
-          const sessSnap = await getDoc(sessRef);
-          if (sessSnap.exists()) {
-            const sessData = sessSnap.data();
-            const currentTotalSales = Number(sessData.sales_total || 0) + sale.total;
-            const currentCountSales = Number(sessData.sales_count || 0) + 1;
-            const currentExpectedObj = Number(sessData.expected_balance || 0) + sale.total;
-            await updateDoc(sessRef, {
-              sales_total: currentTotalSales,
-              sales_count: currentCountSales,
-              expected_balance: currentExpectedObj
-            });
-            // Update activeSession state
-            setActiveSession({
-              ...activeSession,
-              sales_total: currentTotalSales,
-              sales_count: currentCountSales,
-              expected_balance: currentExpectedObj
-            });
-          }
-
-          // 4. Update Customer credit balance if credit purchase
-          if (creditPayment && sale.customerId) {
-            const { data: custData } = await supabase.from('customers').select('*').eq('id', sale.customerId).single();
-            if (custData) {
-              const newBalance = Number(custData.balance || 0) + creditPayment.amount;
-              await supabase.from('customers').update({ balance: newBalance }).eq('id', sale.customerId);
+            // 3. Update active session metrics
+            const sessRef = doc(db, 'register_sessions', activeSession.id);
+            const sessSnap = await getDoc(sessRef);
+            if (sessSnap.exists()) {
+              const sessData = sessSnap.data();
+              const currentTotalSales = Number(sessData.sales_total || 0) + sale.total;
+              const currentCountSales = Number(sessData.sales_count || 0) + 1;
+              const currentExpectedObj = Number(sessData.expected_balance || 0) + sale.total;
+              await updateDoc(sessRef, {
+                sales_total: currentTotalSales,
+                sales_count: currentCountSales,
+                expected_balance: currentExpectedObj
+              });
+              // Update activeSession state
+              setActiveSession({
+                ...activeSession,
+                sales_total: currentTotalSales,
+                sales_count: currentCountSales,
+                expected_balance: currentExpectedObj
+              });
             }
-          }
 
-          // 5. Update Cash Drawer Log (Cash Management)
-          const cashPayment = sale.payments.find(p => p.method === 'cash' || p.method === 'usd_cash');
-          if (cashPayment) {
-            await supabase.from('cash_drawer_logs').insert([{
-              amount: cashPayment.amount,
-              transaction_type: 'cash_sale',
-              notes: `Sale ${sale.receiptNumber}`,
-              sale_id: saleDoc.id,
-              created_at: new Date().toISOString()
-            }]);
-          }
+            // 4. Update Customer credit balance if credit purchase
+            if (creditPayment && sale.customerId) {
+              const { data: custData } = await supabase.from('customers').select('*').eq('id', sale.customerId).single();
+              if (custData) {
+                const newBalance = Number(custData.balance || 0) + creditPayment.amount;
+                await supabase.from('customers').update({ balance: newBalance }).eq('id', sale.customerId);
+              }
+            }
 
-          // 6. Log Audit Trail
-          await logAuditEvent(
-            businessId,
-            userData?.user?.id || 'unknown',
-            'CREATE',
-            'POS',
-            null,
-            { receipt: sale.receiptNumber, total: sale.total }
-          );
+            // 5. Update Cash Drawer Log (Cash Management)
+            const cashPayment = sale.payments.find(p => p.method === 'cash' || p.method === 'usd_cash');
+            if (cashPayment) {
+              await supabase.from('cash_drawer_logs').insert([{
+                amount: cashPayment.amount,
+                transaction_type: 'cash_sale',
+                notes: `Sale ${sale.receiptNumber}`,
+                sale_id: saleDoc.id,
+                created_at: new Date().toISOString()
+              }]);
+            }
+
+            // 6. Log Audit Trail
+            await logAuditEvent(
+              businessId,
+              userData?.user?.id || 'unknown',
+              'CREATE',
+              'POS',
+              null,
+              { receipt: sale.receiptNumber, total: sale.total }
+            );
+          }
+        } catch (err) {
+          console.error('Failed to sync sale to Firebase directly, saving to offline queue:', err);
+          // If online sync fails, push to offline queue so SyncManager retries it
+          const offlineSale = { ...sale, status: 'offline_pending' as const };
+          usePOSStore.setState((s: any) => ({
+            offlineQueue: [...s.offlineQueue, offlineSale]
+          }));
+          toast.warning('Network delay: Sale saved to offline queue and will sync automatically in the background.');
         }
-      } catch (err) {
-        console.error('Failed to sync sale to Firebase / update credit balance', err);
-        toast.error('Local sale logged but ledger syncer experienced delay.');
       }
     } else {
       toast.error('Could not complete sale. Check balance.');
@@ -521,9 +535,11 @@ export default function POS() {
   }, [lastSale, handlePrint]);
 
   const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          p.barcode.includes(searchTerm) || 
-                          p.sku.toLowerCase().includes(searchTerm.toLowerCase());
+    const sTerm = searchTerm.toLowerCase();
+    const matchesSearch = (p.name || '').toLowerCase().includes(sTerm) || 
+                          (p.barcode || '').toLowerCase().includes(sTerm) || 
+                          (p.sku || '').toLowerCase().includes(sTerm) ||
+                          (p.code || '').toLowerCase().includes(sTerm);
     const matchesCategory = activeCategory === 'all' || p.category === activeCategory;
     return matchesSearch && matchesCategory;
   });

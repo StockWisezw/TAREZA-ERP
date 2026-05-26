@@ -89,7 +89,7 @@ interface POSState {
   clearCart: () => void;
   parkSale: () => void;
   resumeSale: (saleId: string) => void;
-  completeSale: () => SaleRecord | null;
+  completeSale: (options?: { isOffline?: boolean }) => SaleRecord | null;
   getTotals: () => { subtotal: number; vat: number; discount: number; total: number; amountPaid: number; balance: number };
   removeSaleFromOfflineQueue: (saleId: string) => void;
   clearOfflineQueue: () => void;
@@ -314,11 +314,23 @@ export const usePOSStore = create<POSState>()(
         return { subtotal, vat: totalVat, discount: totalDiscount, total, amountPaid, balance };
       },
 
-      completeSale: () => {
+      completeSale: (options) => {
         const state = get();
         const totals = state.getTotals();
         
         if (state.cart.length === 0 || totals.balance > 0.01) return null;
+
+        const isOffline = options?.isOffline ?? (!navigator.onLine || localStorage.getItem('tareza_offline_mode') === 'true');
+
+        // Check stock availability before completing the sale
+        for (const item of state.cart) {
+          const itemStock = item.product.stock;
+          if (itemStock !== undefined && itemStock !== null) {
+            if (item.quantity > itemStock) {
+              throw new Error(`Insufficient stock for "${item.product.name}". (Available: ${itemStock}, requested: ${item.quantity})`);
+            }
+          }
+        }
 
         const newSale: SaleRecord = {
           id: uuidv4(),
@@ -329,13 +341,13 @@ export const usePOSStore = create<POSState>()(
           discountTotal: totals.discount,
           total: totals.total,
           timestamp: new Date().toISOString(),
-          status: 'offline_pending',
+          status: isOffline ? 'offline_pending' : 'synced',
           receiptNumber: `RCPT-${Math.floor(Date.now() / 1000).toString(16).toUpperCase()}`,
           customerId: state.currentCustomer?.id,
         };
 
         set((state) => ({
-          offlineQueue: [...state.offlineQueue, newSale],
+          offlineQueue: isOffline ? [...state.offlineQueue, newSale] : state.offlineQueue,
           cart: [],
           payments: [],
           currentCustomer: null,

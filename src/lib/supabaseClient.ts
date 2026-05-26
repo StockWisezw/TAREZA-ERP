@@ -500,7 +500,16 @@ export const account = {
     });
   },
   deleteSession: async (sessionId: string) => {
-    return supabase.auth.signOut();
+    try {
+      const { error } = await rawSupabase.auth.signOut();
+      if (error) {
+        throw error;
+      }
+      supabaseClientUser = null;
+    } catch (err) {
+      console.error('[Supabase Client] Exception in deleteSession:', err);
+      throw err;
+    }
   }
 };
 

@@ -23,7 +23,8 @@ export default function Reports() {
   useEffect(() => {
     async function fetchReports() {
       try {
-        const { data: salesInfo } = await supabase.from('sales').select('total_amount, created_at, total_tax_amount');
+        const { data: salesInfo } = await supabase.from('sales').select('total, created_at, vat_total');
+        const { data: expensesInfo } = await supabase.from('expenses').select('amount, status, created_at');
         
         let revenue = 0;
         let expenses = 0;
@@ -40,17 +41,30 @@ export default function Reports() {
 
         if (salesInfo && salesInfo.length > 0) {
             salesInfo.forEach((sale: any) => {
-                const amt = Number(sale.total_amount || 0);
-                const tax = Number(sale.total_tax_amount || 0);
+                const amt = Number(sale.total || 0);
                 revenue += amt;
-                expenses += tax; // using tax as a placeholder for expenses
 
                 if (sale.created_at) {
                     const d = new Date(sale.created_at);
                     const dayName = days[d.getDay()];
                     if (chartPoints[dayName]) {
                         chartPoints[dayName].sales += amt;
-                        chartPoints[dayName].costs += tax;
+                    }
+                }
+            });
+        }
+
+        if (expensesInfo && expensesInfo.length > 0) {
+            expensesInfo.forEach((exp: any) => {
+                if (exp.status === 'rejected') return;
+                const amt = Number(exp.amount || 0);
+                expenses += amt;
+
+                if (exp.created_at) {
+                    const d = new Date(exp.created_at);
+                    const dayName = days[d.getDay()];
+                    if (chartPoints[dayName]) {
+                        chartPoints[dayName].costs += amt;
                     }
                 }
             });

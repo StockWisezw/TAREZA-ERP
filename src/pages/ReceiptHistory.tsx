@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useReactToPrint } from 'react-to-print';
 import { ReceiptPrint } from '../components/pos/ReceiptPrint';
 import { toast } from 'sonner';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, db, doc, getDoc, updateDoc } from '../lib/supabaseClient';
+import { recordStockMovement, postJournalEntry, logAuditEvent } from '../services/ledgerService';
 
 export default function ReceiptHistory() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -181,22 +182,14 @@ export default function ReceiptHistory() {
         branch_id: branchId || null,
         user_id: userData?.user?.id || null,
         customer_id: selectedCustomerId || null,
-        customerId: selectedCustomerId || '',
-        customerName: customerName,
-        receiptNumber: invoiceNumber,
-        items: invoiceItems, // stores array directly
         payments: [{ method: paymentMethod, amount: totalAmountVal }],
         subtotal: subtotalSum,
         vat_total: vatTotalVal,
-        vatTotal: vatTotalVal,
         discount_total: 0,
-        discountTotal: 0,
         total: totalAmountVal,
-        total_amount: totalAmountVal,
-        total_tax_amount: vatTotalVal,
         payment_method: paymentMethod,
         status: paymentMethod === 'Invoice' ? 'UNPAID' : 'COMPLETED',
-        timestamp: new Date().toISOString(),
+        receipt_number: invoiceNumber,
         created_at: new Date().toISOString()
       };
 
@@ -213,17 +206,158 @@ export default function ReceiptHistory() {
   };
 
   const refundSaleItem = async (id: string, refNum: string) => {
-    if (!confirm(`Are you sure you want to refund receipt/invoice ${refNum}?`)) {
+    if (!confirm(`Are you sure you want to refund receipt/invoice ${refNum}? This will re-credit stock levels and post a reversal to the ledger.`)) {
       return;
     }
 
     try {
-      const { error } = await supabase.from('sales')
+      // 1. Authenticated user & business/branch fetch
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id || 'unknown';
+      let businessId = '';
+      let branchId = '';
+
+      if (userData?.user) {
+        const { data: bUser } = await supabase.from('business_users').select('business_id, branch_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
+        if (bUser) {
+          businessId = bUser.business_id;
+          branchId = bUser.branch_id || '';
+        }
+      }
+
+      if (!businessId) {
+        const { data: fallbackB } = await supabase.from('businesses').select('id').limit(1).maybeSingle();
+        if (fallbackB?.id) {
+          businessId = fallbackB.id;
+          const { data: fallbackBr } = await supabase.from('branches').select('id').eq('business_id', fallbackB.id).limit(1).maybeSingle();
+          if (fallbackBr?.id) {
+            branchId = fallbackBr.id;
+          }
+        }
+      }
+      if (!businessId) businessId = 'default_business';
+      if (!branchId) branchId = 'default_branch';
+
+      // 2. Fetch sale record
+      const { data: sale, error: saleFetchError } = await supabase.from('sales').select('*').eq('id', id).maybeSingle();
+      if (saleFetchError || !sale) {
+        throw new Error(saleFetchError?.message || 'Could not find the sale record.');
+      }
+
+      if (sale.status === 'REFUNDED') {
+        toast.error('Transaction has already been refunded.');
+        return;
+      }
+
+      // 3. Perform database update
+      const { error: updateError } = await supabase.from('sales')
         .update({ status: 'REFUNDED' })
         .eq('id', id);
 
-      if (error) throw error;
-      toast.success(`Transaction ${refNum} has been marked as REFUNDED`);
+      if (updateError) throw updateError;
+
+      // 4. Re-credit stock to inventory for each item (positive quantity change)
+      if (sale.items && Array.isArray(sale.items)) {
+        for (const item of sale.items) {
+          const qtyToReturn = Math.abs(Number(item.quantity || 0));
+          const prodId = item.product?.id || item.productId;
+          if (prodId && qtyToReturn > 0) {
+            await recordStockMovement(
+              businessId,
+              branchId,
+              prodId,
+              qtyToReturn, // POSITIVE value to re-credit stock
+              'POS_RETURN',
+              userId,
+              refNum,
+              item.product?.wholesalePrice || item.product?.cost_price || 0
+            );
+          }
+        }
+      }
+
+      // 5. Post reverse double-entry accounting journal entries
+      try {
+        const saleTotal = Number(sale.total || sale.total_amount || 0);
+        const creditPayment = (sale.payments || []).find((p: any) => p.method === 'credit' || p.method === 'invoice');
+        const isCredit = !!creditPayment || sale.payment_method === 'Invoice' || sale.status === 'UNPAID';
+        const targetAssetAccount = isCredit ? '1100' : '1000'; // AR vs Till
+
+        const ledgerLines = [
+          { accountCode: '4000', debit: saleTotal, credit: 0, description: `Refund / Reversal of Service Revenue [${refNum}]` },
+          { accountCode: targetAssetAccount, debit: 0, credit: saleTotal, description: `Refund / Reversal of Receipt Asset [${refNum}]` }
+        ];
+
+        await postJournalEntry(
+          businessId,
+          branchId,
+          userId,
+          refNum,
+          `POS Refund Reversal ${refNum}`,
+          ledgerLines
+        );
+      } catch (err) {
+        console.warn('Deferred audit post event ledger recording error:', err);
+      }
+
+      // 6. Adjust Customer balance if credit sale
+      try {
+        const isCredit = sale.payment_method === 'Invoice' || sale.status === 'UNPAID' || (sale.payments || []).some((p: any) => p.method === 'credit');
+        const customerId = sale.customer_id || sale.customerId;
+        if (isCredit && customerId) {
+          const { data: custData } = await supabase.from('customers').select('*').eq('id', customerId).single();
+          if (custData) {
+            const saleTotal = Number(sale.total || sale.total_amount || 0);
+            const newBalance = Number(custData.balance || 0) - saleTotal;
+            await supabase.from('customers').update({ balance: newBalance }).eq('id', customerId);
+          }
+        }
+      } catch (err) {
+        console.warn('Customer account balance re-crediting error:', err);
+      }
+
+      // 7. Update Session expected balance stats
+      try {
+        const { data: openSession } = await supabase
+          .from('register_sessions')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('status', 'OPEN')
+          .order('opened_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (openSession) {
+          const sessRef = doc(db, 'register_sessions', openSession.id);
+          const sessSnap = await getDoc(sessRef);
+          if (sessSnap.exists()) {
+            const sessData = sessSnap.data();
+            const saleTotal = Number(sale.total || sale.total_amount || 0);
+            await updateDoc(sessRef, {
+              refunds_total: Number(sessData.refunds_total || 0) + saleTotal,
+              expected_balance: Number(sessData.expected_balance || 0) - saleTotal,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Register session update bypass during refund:', err);
+      }
+
+      // 8. Log audit trail
+      try {
+        await logAuditEvent(
+          businessId,
+          userId,
+          'VOID',
+          'POS',
+          sale,
+          { receipt_number: refNum, status: 'REFUNDED' }
+        );
+      } catch (err) {
+        console.warn('Audit logger recording error:', err);
+      }
+
+      toast.success(`Transaction ${refNum} has been completely REFUNDED. Inventory re-credited and general ledger adjusted.`);
       fetchData();
     } catch (err: any) {
       console.error(err);

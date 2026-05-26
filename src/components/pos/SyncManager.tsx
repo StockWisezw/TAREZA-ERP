@@ -1,357 +1,293 @@
-import { useEffect, useState, useRef } from 'react';
-import { usePOSStore, SaleRecord } from '../../store/posStore';
+import React, { useEffect, useRef } from 'react';
+import { usePOSStore } from '../../store/posStore';
+import { supabase, db, doc, getDoc, updateDoc } from '../../lib/supabaseClient';
+import { recordStockMovement, postJournalEntry, logAuditEvent } from '../../services/ledgerService';
 import { toast } from 'sonner';
-import {
-  getOpenRegisterSession,
-  recordStockMovement,
-  postJournalEntry,
-  logAuditEvent
-} from '../../services/ledgerService';
-import { db, doc, getDoc, updateDoc } from '../../lib/supabaseClient';
-
-const CHANNEL_NAME = 'tareza-pos-sync-channel';
-
-interface SyncMessage {
-  type: 'SYNC_START' | 'SYNC_SUCCESS' | 'SYNC_FAIL';
-  saleId: string;
-  receiptNumber?: string;
-}
 
 export function SyncManager() {
   const { offlineQueue, removeSaleFromOfflineQueue } = usePOSStore();
-  const [syncingByOtherTabIds, setSyncingByOtherTabIds] = useState<Set<string>>(new Set());
-  
-  const channelRef = useRef<BroadcastChannel | null>(null);
-  const isSyncingRef = useRef<boolean>(false);
+  const isSyncingRef = useRef(false);
 
-  // Initialize BroadcastChannel to coordinate multi-tab sync operations
   useEffect(() => {
-    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
+    const processSync = async () => {
+      // 1. Connectivity check
+      if (!navigator.onLine) return;
 
-    const channel = new BroadcastChannel(CHANNEL_NAME);
-    channelRef.current = channel;
+      // 2. Queue empty check
+      if (offlineQueue.length === 0) return;
 
-    const handleMessage = (event: MessageEvent<SyncMessage>) => {
-      const { type, saleId, receiptNumber } = event.data;
+      // 3. Single-flight lock
+      if (isSyncingRef.current) return;
+      isSyncingRef.current = true;
 
-      switch (type) {
-        case 'SYNC_START':
-          setSyncingByOtherTabIds(prev => {
-            const next = new Set(prev);
-            next.add(saleId);
-            return next;
-          });
-          break;
+      try {
+        console.log(`[SyncManager] Background sync started. Found ${offlineQueue.length} transactions pending.`);
 
-        case 'SYNC_SUCCESS':
-          // Critical: Keep other tabs' in-memory Zustand store perfectly synchronized in real-time
-          removeSaleFromOfflineQueue(saleId);
-          setSyncingByOtherTabIds(prev => {
-            const next = new Set(prev);
-            next.delete(saleId);
-            return next;
-          });
-          if (receiptNumber) {
-            toast.success(`POS Sale Sync: Offline receipt ${receiptNumber} was synced successfully by another POS tab.`);
-          }
-          break;
+        // Pick the first sale and process it
+        const sale = offlineQueue[0];
 
-        case 'SYNC_FAIL':
-          setSyncingByOtherTabIds(prev => {
-            const next = new Set(prev);
-            next.delete(saleId);
-            return next;
-          });
-          break;
-      }
-    };
+        // Ensure user session is verified
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData?.user) {
+          console.warn('[SyncManager] No authenticated user found. Postponing sync until signed in.');
+          isSyncingRef.current = false;
+          return;
+        }
 
-    channel.addEventListener('message', handleMessage);
+        const userId = userData.user.id;
 
-    return () => {
-      channel.removeEventListener('message', handleMessage);
-      channel.close();
-    };
-  }, [removeSaleFromOfflineQueue]);
+        // Determine businessId / branchId
+        let businessId = 'default_business';
+        let branchId = 'default_branch';
 
-  const syncOfflineSale = async (sale: SaleRecord) => {
-    if (!navigator.onLine) return;
-    if (syncingByOtherTabIds.has(sale.id)) return;
-
-    // Broadcast our intent to sync this transaction to prevent other open tabs from attempting the same sale
-    channelRef.current?.postMessage({
-      type: 'SYNC_START',
-      saleId: sale.id
-    });
-
-    try {
-      const { supabase } = await import('../../lib/supabaseClient');
-
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) {
-        throw new Error('No active user context found. Authenticate to sync offline sales.');
-      }
-
-      let businessId = 'default_business';
-      let branchId = 'default_branch';
-
-      const { data: businessData } = await supabase.from('business_users')
-        .select('business_id, branch_id')
-        .eq('user_id', userData.user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (businessData?.business_id) businessId = businessData.business_id;
-      if (businessData?.branch_id) branchId = businessData.branch_id;
-
-      // Ensure we have an active open cashier register session on Firestore to sync this sale
-      let activeRS = await getOpenRegisterSession(businessId, userData.user.id);
-      if (!activeRS) {
-        // Fallback: search for any OPEN session in the same business
-        const { data: anyOpen } = await supabase.from('register_sessions')
-          .select('*')
-          .eq('business_id', businessId)
-          .eq('status', 'OPEN')
+        const { data: bUser } = await supabase
+          .from('business_users')
+          .select('business_id, branch_id')
+          .eq('user_id', userId)
           .limit(1)
           .maybeSingle();
 
-        if (anyOpen) {
-          activeRS = anyOpen;
+        if (bUser?.business_id) {
+          businessId = bUser.business_id;
+          branchId = bUser.branch_id || 'default_branch';
         } else {
-          // Double Fallback: Auto-create an open shift session with $0 float so we do not block POS offline-sales syncing!
-          const { data: newSession, error: createError } = await supabase.from('register_sessions')
-            .insert({
-              business_id: businessId,
-              branch_id: branchId !== 'default_branch' ? branchId : null,
-              user_id: userData.user.id,
-              opening_balance: 0,
-              expected_balance: 0,
-              status: 'OPEN',
-              opened_at: new Date().toISOString()
-            })
+          // Fallback to fetch first business
+          const { data: fallbackB } = await supabase.from('businesses').select('id').limit(1).maybeSingle();
+          if (fallbackB?.id) {
+            businessId = fallbackB.id;
+            const { data: fallbackBr } = await supabase.from('branches').select('id').eq('business_id', fallbackB.id).limit(1).maybeSingle();
+            if (fallbackBr?.id) {
+              branchId = fallbackBr.id;
+            }
+          }
+        }
+
+        // Check if sale has already been recorded in Supabase to prevent duplication
+        const { data: existingSale, error: checkError } = await supabase
+          .from('sales')
+          .select('id')
+          .eq('receipt_number', sale.receiptNumber)
+          .maybeSingle();
+
+        if (checkError) {
+          console.warn('[SyncManager] Error checking duplicate receipts:', checkError);
+        }
+
+        let saleDocId = existingSale?.id;
+
+        if (!saleDocId) {
+          // Prepare main sale payload
+          const salePayload: any = {
+            receipt_number: sale.receiptNumber,
+            total: sale.total,
+            vat_total: sale.vatTotal,
+            discount_total: sale.discountTotal,
+            subtotal: sale.subtotal || (sale.total - sale.vatTotal),
+            payment_method: sale.payments.length > 0 ? sale.payments[0].method : 'cash',
+            payments: sale.payments,
+            status: 'COMPLETED',
+            created_at: new Date(sale.timestamp).toISOString(),
+            business_id: businessId,
+          };
+
+          if (branchId && branchId !== 'default_branch') {
+            salePayload.branch_id = branchId;
+          }
+          if (userId) {
+            salePayload.user_id = userId;
+          }
+          if (sale.customerId) {
+            salePayload.customer_id = sale.customerId;
+            salePayload.customerId = sale.customerId;
+          }
+
+          // Step A: Insert Sale Record
+          const { data: saleDoc, error: saleErr } = await supabase
+            .from('sales')
+            .insert([salePayload])
             .select()
             .single();
 
-          if (!createError && newSession) {
-            activeRS = newSession;
-            console.log(`[SyncManager] Auto-created shift register session ${newSession.id} for seamless offline sync.`);
-          } else {
-            console.error('[SyncManager] Failed to auto-create register session:', createError);
-            throw new Error('No active shift session. Please start a shift first in your main tab.');
+          if (saleErr || !saleDoc) {
+            throw new Error(saleErr?.message || 'Could not instantiate sale row in Supabase.');
           }
+
+          saleDocId = saleDoc.id;
+
+          // Step B: Insert Sale Items
+          if (sale.items && sale.items.length > 0) {
+            const itemsPayload = sale.items.map((item) => ({
+              sale_id: saleDocId,
+              product_id: item.product.id,
+              quantity: item.quantity,
+              unit_price: item.unitPrice,
+              line_total: item.subtotal,
+              vat_amount: item.vatAmount,
+            }));
+
+            const { error: itemsErr } = await supabase.from('sale_items').insert(itemsPayload);
+            if (itemsErr) {
+              console.warn('[SyncManager] Error inserting sale items:', itemsErr);
+            }
+          }
+        } else {
+          console.log(`[SyncManager] Sale with receipt ${sale.receiptNumber} already exists in database. Skipping row insert.`);
         }
-      }
 
-      // Safeguard Idempotency: Don't insert duplicates if transaction was successfully synced previously
-      const { data: existingSales } = await supabase.from('sales')
-        .select('id')
-        .eq('receipt_number', sale.receiptNumber)
-        .limit(1)
-        .maybeSingle();
-
-      let saleDoc;
-      if (existingSales) {
-        saleDoc = existingSales;
-        console.log(`[SyncManager] Sale with receipt ${sale.receiptNumber} already exists in Firestore. Preventing duplication.`);
-      } else {
-        const salePayload: any = {
-          receipt_number: sale.receiptNumber,
-          total_amount: sale.total,
-          total_tax_amount: sale.vatTotal,
-          total_discount: sale.discountTotal,
-          payment_method: sale.payments.length > 0 ? sale.payments[0].method : 'cash',
-          status: 'COMPLETED',
-          register_session_id: activeRS.id,
-          created_at: sale.timestamp || new Date().toISOString()
-        };
-        if (businessId) salePayload.business_id = businessId;
-        if (sale.customerId) salePayload.customer_id = sale.customerId;
-
-        const { data: newDoc, error: saleErr } = await supabase.from('sales').insert([salePayload]).select().single();
-        if (saleErr || !newDoc) {
-          throw new Error(saleErr?.message || 'Failed to initialize sale document in Firestore.');
-        }
-        saleDoc = newDoc;
-
-        // 1. Log sale items and update real-time stock levels
-        if (sale.items.length > 0) {
-          const itemsPayload = sale.items.map(item => ({
-            sale_id: saleDoc.id,
-            product_id: item.product.id,
-            quantity: item.quantity,
-            unit_price: item.unitPrice,
-            line_total: item.subtotal,
-            vat_amount: item.vatAmount
-          }));
-          await supabase.from('sale_items').insert(itemsPayload);
-
-          for (const item of sale.items) {
-            try {
+        // Step C: Trigger secondary accounting and warehouse routines (wrapped safely in try-catches)
+        // 1. Stock Movements
+        try {
+          if (sale.items && sale.items.length > 0) {
+            for (const item of sale.items) {
               await recordStockMovement(
                 businessId,
                 branchId,
                 item.product.id,
                 -Math.abs(item.quantity),
                 'POS_SALE',
-                userData.user.id,
+                userId,
                 sale.receiptNumber,
-                item.product.wholesalePrice
+                item.product.wholesalePrice || 0
               );
-            } catch (err) {
-              console.error('[SyncManager] Failed to record stock movement:', err);
             }
           }
+        } catch (e) {
+          console.warn('[SyncManager] Stock movement registration deferred or failed:', e);
         }
 
-        // 2. Double-Entry Accounting journal entries
-        const creditPayment = sale.payments.find(p => p.method === 'credit');
-        const isCredit = !!creditPayment;
-        const mainAccount = isCredit ? '1100' : '1000';
-
-        const ledgerLines = [
-          { accountCode: mainAccount, debit: sale.total, credit: 0, description: `Receipt payment ${sale.receiptNumber}` },
-          { accountCode: '4000', debit: 0, credit: sale.total, description: `Sales Revenue registered [${sale.receiptNumber}]` }
-        ];
-
+        // 2. Journal Entry
         try {
+          const creditPayment = sale.payments.find((p) => p.method === 'credit');
+          const isCredit = !!creditPayment;
+          const mainAccount = isCredit ? '1100' : '1000'; // AR vs Cash Till
+
+          const ledgerLines = [
+            { accountCode: mainAccount, debit: sale.total, credit: 0, description: `Receipt payment ${sale.receiptNumber}` },
+            { accountCode: '4000', debit: 0, credit: sale.total, description: `Sales Revenue registered [${sale.receiptNumber}]` }
+          ];
+
           await postJournalEntry(
             businessId,
             branchId,
-            userData.user.id,
+            userId,
             sale.receiptNumber,
             `POS Sale Checkout ${sale.receiptNumber}`,
             ledgerLines
           );
-        } catch (err) {
-          console.error('[SyncManager] Failed to register ledger entry:', err);
+        } catch (e) {
+          console.warn('[SyncManager] Accounting ledger posting deferred or failed:', e);
         }
 
-        // 3. Update active session values
+        // 3. Keep Register Session Stats Updated
         try {
-          const sessRef = doc(db, 'register_sessions', activeRS.id);
-          const sessSnap = await getDoc(sessRef);
-          if (sessSnap.exists()) {
-            const sessData = sessSnap.data();
-            const currentTotalSales = Number(sessData.sales_total || 0) + sale.total;
-            const currentCountSales = Number(sessData.sales_count || 0) + 1;
-            const currentExpectedObj = Number(sessData.expected_balance || 0) + sale.total;
-            await updateDoc(sessRef, {
-              sales_total: currentTotalSales,
-              sales_count: currentCountSales,
-              expected_balance: currentExpectedObj
-            });
+          // Locate any live open session for this cashier
+          const { data: openSession } = await supabase
+            .from('register_sessions')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'OPEN')
+            .order('opened_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (openSession) {
+            const sessRef = doc(db, 'register_sessions', openSession.id);
+            const sessSnap = await getDoc(sessRef);
+            if (sessSnap.exists()) {
+              const sessData = sessSnap.data();
+              await updateDoc(sessRef, {
+                sales_total: Number(sessData.sales_total || 0) + sale.total,
+                sales_count: Number(sessData.sales_count || 0) + 1,
+                expected_balance: Number(sessData.expected_balance || 0) + sale.total,
+              });
+            }
           }
-        } catch (err) {
-          console.error('[SyncManager] Failed to update shift stats:', err);
+        } catch (e) {
+          console.warn('[SyncManager] Register session stats update bypassed:', e);
         }
 
-        // 4. Update Customer credit balances
-        if (creditPayment && sale.customerId) {
-          try {
+        // 4. Update Customer Balance if credit was extended
+        try {
+          const creditPayment = sale.payments.find((p) => p.method === 'credit');
+          if (creditPayment && sale.customerId) {
             const { data: custData } = await supabase.from('customers').select('*').eq('id', sale.customerId).single();
             if (custData) {
               const newBalance = Number(custData.balance || 0) + creditPayment.amount;
               await supabase.from('customers').update({ balance: newBalance }).eq('id', sale.customerId);
             }
-          } catch (err) {
-            console.error('[SyncManager] Failed to update customer credit balance:', err);
           }
+        } catch (e) {
+          console.warn('[SyncManager] Customer credit update bypassed:', e);
         }
 
-        // 5. Update Cash Drawer records
-        const cashPayment = sale.payments.find(p => p.method === 'cash' || p.method === 'usd_cash');
-        if (cashPayment) {
-          try {
+        // 5. Cash Drawer Log
+        try {
+          const cashPayment = sale.payments.find((p) => p.method === 'cash' || p.method === 'usd_cash');
+          if (cashPayment && saleDocId) {
             await supabase.from('cash_drawer_logs').insert([{
               amount: cashPayment.amount,
               transaction_type: 'cash_sale',
               notes: `Sale ${sale.receiptNumber}`,
-              sale_id: saleDoc.id,
-              created_at: new Date().toISOString()
+              sale_id: saleDocId,
+              created_at: new Date(sale.timestamp).toISOString()
             }]);
-          } catch (err) {
-            console.error('[SyncManager] Failed to write cash drawer log:', err);
           }
+        } catch (e) {
+          console.warn('[SyncManager] Cash drawer log write bypassed:', e);
         }
 
-        // 6. Log secure Audit Trail
+        // 6. Log Audit Trail
         try {
           await logAuditEvent(
             businessId,
-            userData.user.id,
+            userId,
             'CREATE',
             'POS',
             null,
-            { receipt: sale.receiptNumber, total: sale.total }
+            { receipt: sale.receiptNumber, total: sale.total, source: 'offline_sync' }
           );
-        } catch (err) {
-          console.error('[SyncManager] Failed to create audit log:', err);
+        } catch (e) {
+          console.warn('[SyncManager] Audit log write bypassed:', e);
         }
-      }
 
-      // Success: Remove from offlineQueue in Zustand/localStorage and broadcast success
-      removeSaleFromOfflineQueue(sale.id);
-      channelRef.current?.postMessage({
-        type: 'SYNC_SUCCESS',
-        saleId: sale.id,
-        receiptNumber: sale.receiptNumber
-      });
+        // Step D: Clean Removal & Success Toast
+        removeSaleFromOfflineQueue(sale.id);
+        toast.success(`Transaction ${sale.receiptNumber} successfully synchronized over active internet connection!`);
+        console.log(`[SyncManager] Successfully completed background sync of sale ${sale.receiptNumber}.`);
 
-      toast.success(`POS Sale Sync: Offline receipt ${sale.receiptNumber} successfully synced with Firebase.`);
-    } catch (error) {
-      console.error('[SyncManager] Error syncing transaction:', error);
-
-      // Reset sync permission across other tabs
-      channelRef.current?.postMessage({
-        type: 'SYNC_FAIL',
-        saleId: sale.id
-      });
-
-      // Avoid spamming offline notifications if the backend is simply unreachable
-      const errMsg = error instanceof Error ? error.message : String(error);
-      if (!errMsg.includes('unavailable') && !errMsg.includes('No active cashier register session')) {
-        toast.error(`POS Sale Sync Delay: Could not upload receipt ${sale.receiptNumber}. Retrying in background.`);
-      }
-    }
-  };
-
-  useEffect(() => {
-    const processSync = async () => {
-      if (isSyncingRef.current) return;
-      if (!navigator.onLine) return;
-      if (offlineQueue.length === 0) return;
-
-      isSyncingRef.current = true;
-      try {
-        for (const sale of offlineQueue) {
-          if (syncingByOtherTabIds.has(sale.id)) {
-            continue; // Skipped because another open tab is currently processing this ID
-          }
-          await syncOfflineSale(sale);
-        }
+      } catch (err: any) {
+        console.error('[SyncManager] Error syncing transaction from queue:', err);
       } finally {
         isSyncingRef.current = false;
+        // Schedule next sync run immediately to clean up remaining items if any
+        setTimeout(processSync, 100);
       }
     };
 
-    // Process immediately
-    processSync();
-
     const handleOnline = () => {
-      console.log('[SyncManager] Network status: ONLINE. Commencing background queue sync.');
+      processSync();
+    };
+
+    const handleManualSync = () => {
+      console.log('[SyncManager] Manual sync trigger received via global event.');
       processSync();
     };
 
     window.addEventListener('online', handleOnline);
+    window.addEventListener('tareza-trigger-sync', handleManualSync);
 
-    // Periodic synchronization check every 15 seconds
-    const interval = setInterval(processSync, 15000);
+    // Run automatically every 10 seconds if online
+    const interval = setInterval(processSync, 10000);
+
+    // Initial check on load
+    processSync();
 
     return () => {
       window.removeEventListener('online', handleOnline);
+      window.removeEventListener('tareza-trigger-sync', handleManualSync);
       clearInterval(interval);
     };
-  }, [offlineQueue, syncingByOtherTabIds]);
+  }, [offlineQueue, removeSaleFromOfflineQueue]);
 
-  return null; // Headless service
+  return null;
 }

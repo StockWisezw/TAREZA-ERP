@@ -48,10 +48,43 @@ export default function CashManagement() {
       // 1. Fetch sales
       const { data: salesData } = await supabase.from('sales')
         .select('*')
-        .eq('status', 'completed')
         .gte('created_at', isoStartOfDay);
       
-      const totalCashSales = salesData?.filter(s => s.payment_method === 'cash').reduce((sum, sale) => sum + Number(sale.total), 0) || 0;
+      let totalCashSales = 0;
+      if (salesData && salesData.length > 0) {
+        salesData.forEach((s: any) => {
+          const stat = String(s.status || '').toUpperCase();
+          if (stat !== 'COMPLETED') return;
+
+          let paymentsArray: any[] = [];
+          
+          if (Array.isArray(s.payments)) {
+            paymentsArray = s.payments;
+          } else if (typeof s.payments === 'string') {
+            try {
+              paymentsArray = JSON.parse(s.payments);
+            } catch (e) {
+              paymentsArray = [];
+            }
+          }
+
+          if (paymentsArray && paymentsArray.length > 0) {
+            let cashAmt = 0;
+            paymentsArray.forEach((p: any) => {
+              const m = String(p.method || '').toLowerCase();
+              if (m === 'cash' || m === 'usd_cash') {
+                cashAmt += Number(p.amount || 0);
+              }
+            });
+            totalCashSales += cashAmt;
+          } else {
+            const pm = String(s.payment_method || '').toLowerCase();
+            if (pm === 'cash' || pm === 'usd_cash') {
+              totalCashSales += Number(s.total || 0);
+            }
+          }
+        });
+      }
       
       // 2. Fetch cash logs
       const { data: logsDocs } = await supabase.from('cash_drawer_logs')
