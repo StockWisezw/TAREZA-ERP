@@ -1,12 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { usePOSStore } from '../../store/posStore';
-import { rawSupabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/supabaseClient';
 import { recordStockMovement, postJournalEntry, logAuditEvent } from '../../services/ledgerService';
 import { toast } from 'sonner';
 
 export function SyncManager() {
   const { offlineQueue, removeSaleFromOfflineQueue } = usePOSStore();
   const isSyncingRef = useRef(false);
+  const retryCountRef = useRef<Record<string, number>>({});
 
   const processSync = async () => {
     // 1. Connectivity check
@@ -19,14 +20,13 @@ export function SyncManager() {
     if (isSyncingRef.current) return;
     isSyncingRef.current = true;
 
+    const sale = offlineQueue[0];
+
     try {
       console.log(`[SyncManager] Background sync started. Found ${offlineQueue.length} transactions pending.`);
 
-      // Pick the first sale and process it
-      const sale = offlineQueue[0];
-
       // Ensure user session is verified
-      const { data: userData } = await rawSupabase.auth.getUser();
+      const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) {
         console.warn('[SyncManager] No authenticated user found. Postponing sync until signed in.');
         isSyncingRef.current = false;
@@ -39,7 +39,7 @@ export function SyncManager() {
       let businessId = 'default_business';
       let branchId = 'default_branch';
 
-      const { data: bUser } = await rawSupabase
+      const { data: bUser } = await supabase
         .from('business_users')
         .select('business_id, branch_id')
         .eq('user_id', userId)
@@ -51,10 +51,10 @@ export function SyncManager() {
         branchId = bUser.branch_id || 'default_branch';
       } else {
         // Fallback to fetch first business
-        const { data: fallbackB } = await rawSupabase.from('businesses').select('id').limit(1).maybeSingle();
+        const { data: fallbackB } = await supabase.from('businesses').select('id').limit(1).maybeSingle();
         if (fallbackB?.id) {
           businessId = fallbackB.id;
-          const { data: fallbackBr } = await rawSupabase.from('branches').select('id').eq('business_id', fallbackB.id).limit(1).maybeSingle();
+          const { data: fallbackBr } = await supabase.from('branches').select('id').eq('business_id', fallbackB.id).limit(1).maybeSingle();
           if (fallbackBr?.id) {
             branchId = fallbackBr.id;
           }
@@ -62,7 +62,7 @@ export function SyncManager() {
       }
 
       // Check if sale has already been recorded in Supabase to prevent duplication
-      const { data: existingSale, error: checkError } = await rawSupabase
+      const { data: existingSale, error: checkError } = await supabase
         .from('sales')
         .select('id')
         .eq('receipt_number', sale.receiptNumber)
@@ -103,7 +103,7 @@ export function SyncManager() {
           salePayload.customer_id = sale.customerId;
           salePayload.customerId = sale.customerId;
           try {
-            const { data: custVal } = await rawSupabase.from('customers').select('name').eq('id', sale.customerId).maybeSingle();
+            const { data: custVal } = await supabase.from('customers').select('name').eq('id', sale.customerId).maybeSingle();
             salePayload.customerName = custVal?.name || 'Walk-In Customer';
           } catch (e) {
             salePayload.customerName = 'Walk-In Customer';
@@ -113,7 +113,7 @@ export function SyncManager() {
         }
 
         // Step A: Insert Sale Record
-        const { data: saleDoc, error: saleErr } = await rawSupabase
+        const { data: saleDoc, error: saleErr } = await supabase
           .from('sales')
           .insert([salePayload])
           .select()
@@ -136,7 +136,7 @@ export function SyncManager() {
             vat_amount: item.vatAmount,
           }));
 
-          const { error: itemsErr } = await rawSupabase.from('sale_items').insert(itemsPayload);
+          const { error: itemsErr } = await supabase.from('sale_items').insert(itemsPayload);
           if (itemsErr) {
             console.warn('[SyncManager] Error inserting sale items:', itemsErr);
           }
@@ -150,136 +150,155 @@ export function SyncManager() {
       if (isNewSale) {
         // Step C: Trigger secondary accounting and warehouse routines (wrapped safely in catches)
       
-      // 1. Stock Movements
-      try {
-        if (sale.items && sale.items.length > 0) {
-          await Promise.all(
-            sale.items.map((item) =>
-              recordStockMovement(
-                businessId,
-                branchId,
-                item.product.id,
-                -Math.abs(item.quantity),
-                'POS_SALE',
-                userId,
-                sale.receiptNumber,
-                item.product.wholesalePrice || 0
+        // 1. Stock Movements
+        try {
+          if (sale.items && sale.items.length > 0) {
+            await Promise.all(
+              sale.items.map((item) =>
+                recordStockMovement(
+                  businessId,
+                  branchId,
+                  item.product.id,
+                  -Math.abs(item.quantity),
+                  'POS_SALE',
+                  userId,
+                  sale.receiptNumber,
+                  item.product.wholesalePrice || 0
+                )
               )
-            )
-          );
-        }
-      } catch (e) {
-        console.warn('[SyncManager] Stock movements registration error:', e);
-      }
-
-      // 2. Journal Entry
-      const creditPayment = sale.payments.find((p) => p.method === 'credit');
-      const isCredit = !!creditPayment;
-      try {
-        const mainAccount = isCredit ? '1100' : '1000'; // AR vs Cash Till
-
-        const ledgerLines = [
-          { accountCode: mainAccount, debit: sale.total, credit: 0, description: `Receipt payment ${sale.receiptNumber}` },
-          { accountCode: '4000', debit: 0, credit: sale.total, description: `Sales Revenue registered [${sale.receiptNumber}]` }
-        ];
-
-        await postJournalEntry(
-          businessId,
-          branchId,
-          userId,
-          sale.receiptNumber,
-          `POS Sale Checkout ${sale.receiptNumber}`,
-          ledgerLines
-        );
-      } catch (e) {
-        console.warn('[SyncManager] Ledger recording error:', e);
-      }
-
-      // 3. Keep Register Session Stats Updated
-      try {
-        const { data: openSession } = await rawSupabase
-          .from('register_sessions')
-          .select('*')
-          .eq('user_id', userId)
-          .eq('status', 'OPEN')
-          .order('opened_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (openSession) {
-          await rawSupabase
-            .from('register_sessions')
-            .update({
-              sales_total: Number(openSession.sales_total || 0) + sale.total,
-              sales_count: Number(openSession.sales_count || 0) + 1,
-              expected_balance: Number(openSession.expected_balance || 0) + sale.total,
-            })
-            .eq('id', openSession.id);
-        }
-      } catch (e) {
-        console.warn('[SyncManager] Register session stats update bypassed:', e);
-      }
-
-      // 4. Update Customer Balance if credit was extended
-      try {
-        if (isCredit && sale.customerId) {
-          const { data: custData } = await rawSupabase
-            .from('customers')
-            .select('*')
-            .eq('id', sale.customerId)
-            .single();
-
-          if (custData && creditPayment) {
-            const newBalance = Number(custData.balance || 0) + creditPayment.amount;
-            await rawSupabase.from('customers').update({ balance: newBalance }).eq('id', sale.customerId);
+            );
           }
+        } catch (e) {
+          console.warn('[SyncManager] Stock movements registration error:', e);
         }
-      } catch (e) {
-        console.warn('[SyncManager] Customer credit update bypassed:', e);
-      }
 
-      // 5. Cash Drawer Log
-      try {
-        const cashPayment = sale.payments.find((p) => p.method === 'cash' || p.method === 'usd_cash');
-        if (cashPayment && saleDocId) {
-          await rawSupabase.from('cash_drawer_logs').insert([{
-            amount: cashPayment.amount,
-            transaction_type: 'cash_sale',
-            notes: `Sale ${sale.receiptNumber}`,
-            sale_id: saleDocId,
-            created_at: new Date(sale.timestamp).toISOString()
-          }]);
+        // 2. Journal Entry
+        const creditPayment = sale.payments.find((p) => p.method === 'credit');
+        const isCredit = !!creditPayment;
+        try {
+          const mainAccount = isCredit ? '1100' : '1000'; // AR vs Cash Till
+
+          const ledgerLines = [
+            { accountCode: mainAccount, debit: sale.total, credit: 0, description: `Receipt payment ${sale.receiptNumber}` },
+            { accountCode: '4000', debit: 0, credit: sale.total, description: `Sales Revenue registered [${sale.receiptNumber}]` }
+          ];
+
+          await postJournalEntry(
+            businessId,
+            branchId,
+            userId,
+            sale.receiptNumber,
+            `POS Sale Checkout ${sale.receiptNumber}`,
+            ledgerLines
+          );
+        } catch (e) {
+          console.warn('[SyncManager] Ledger recording error:', e);
         }
-      } catch (e) {
-        console.warn('[SyncManager] Cash drawer log write bypassed:', e);
-      }
 
-      // 6. Log Audit Trail
-      try {
-        await logAuditEvent(
-          businessId,
-          userId,
-          'CREATE',
-          'POS',
-          null,
-          { receipt: sale.receiptNumber, total: sale.total, source: 'offline_sync' }
-        );
-      } catch (e) {
-        console.warn('[SyncManager] Audit log write bypassed:', e);
-      }
+        // 3. Keep Register Session Stats Updated
+        try {
+          const { data: openSession } = await supabase
+            .from('register_sessions')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'OPEN')
+            .order('opened_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (openSession) {
+            await supabase
+              .from('register_sessions')
+              .update({
+                sales_total: Number(openSession.sales_total || 0) + sale.total,
+                sales_count: Number(openSession.sales_count || 0) + 1,
+                expected_balance: Number(openSession.expected_balance || 0) + sale.total,
+              })
+              .eq('id', openSession.id);
+          }
+        } catch (e) {
+          console.warn('[SyncManager] Register session stats update bypassed:', e);
+        }
+
+        // 4. Update Customer Balance if credit was extended
+        try {
+          if (isCredit && sale.customerId) {
+            const { data: custData } = await supabase
+              .from('customers')
+              .select('*')
+              .eq('id', sale.customerId)
+              .single();
+
+            if (custData && creditPayment) {
+              const newBalance = Number(custData.balance || 0) + creditPayment.amount;
+              await supabase.from('customers').update({ balance: newBalance }).eq('id', sale.customerId);
+            }
+          }
+        } catch (e) {
+          console.warn('[SyncManager] Customer credit update bypassed:', e);
+        }
+
+        // 5. Cash Drawer Log
+        try {
+          const cashPayment = sale.payments.find((p) => p.method === 'cash' || p.method === 'usd_cash');
+          if (cashPayment && saleDocId) {
+            await supabase.from('cash_drawer_logs').insert([{
+              amount: cashPayment.amount,
+              transaction_type: 'cash_sale',
+              notes: `Sale ${sale.receiptNumber}`,
+              sale_id: saleDocId,
+              created_at: new Date(sale.timestamp).toISOString()
+            }]);
+          }
+        } catch (e) {
+          console.warn('[SyncManager] Cash drawer log write bypassed:', e);
+        }
+
+        // 6. Log Audit Trail
+        try {
+          await logAuditEvent(
+            businessId,
+            userId,
+            'CREATE',
+            'POS',
+            null,
+            { receipt: sale.receiptNumber, total: sale.total, source: 'offline_sync' }
+          );
+        } catch (e) {
+          console.warn('[SyncManager] Audit log write bypassed:', e);
+        }
       }
 
       // Step D: Clean Removal & Success Toast
       removeSaleFromOfflineQueue(sale.id);
+      if (retryCountRef.current[sale.id] !== undefined) {
+        delete retryCountRef.current[sale.id];
+      }
       toast.success(`Transaction ${sale.receiptNumber} successfully synchronized over active internet connection!`);
       console.log(`[SyncManager] Successfully completed background sync of sale ${sale.receiptNumber}.`);
 
     } catch (err: any) {
       console.error('[SyncManager] Error syncing transaction from queue:', err);
+      
+      // Increment failure count to guard against infinite browser lockups on schema deviations or permanent errors
+      if (sale?.id) {
+        const count = (retryCountRef.current[sale.id] || 0) + 1;
+        retryCountRef.current[sale.id] = count;
+        
+        if (count >= 3) {
+          console.warn(`[SyncManager] Removing blocked transaction ${sale.receiptNumber} after 3 continuous failures.`);
+          removeSaleFromOfflineQueue(sale.id);
+          delete retryCountRef.current[sale.id];
+          toast.error(`Auto-Sync: Bypassed receipt ${sale.receiptNumber} to unblock other pending transactions.`);
+        }
+      }
     } finally {
       isSyncingRef.current = false;
-      // After finishing one item, call setTimeout(processSync, 0) to drain remaining items immediately
-      setTimeout(processSync, 0);
+      // After finishing one item, call setTimeout(processSync, count >= 3 ? 1000 : 0) to avoid excessive spinning on error blocks
+      const saleId = sale?.id;
+      const failCount = saleId ? (retryCountRef.current[saleId] || 0) : 0;
+      const delay = failCount > 0 ? 3000 : 0; // Wait 3s before retrying a failed transaction to alleviate server hammering
+      setTimeout(processSync, delay);
     }
   };
 
