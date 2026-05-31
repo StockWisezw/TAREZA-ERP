@@ -64,6 +64,12 @@ self.addEventListener('fetch', (event) => {
           if (event.request.mode === 'navigate') {
             return caches.match('/');
           }
+          // Avoid TypeError: Failed to convert value to 'Response' by returning a transparent offline Response
+          return new Response('Offline asset unavailable', { 
+            status: 503, 
+            statusText: 'Service Unavailable (Offline)',
+            headers: { 'Content-Type': 'text/plain' }
+          });
         });
       })
   );
