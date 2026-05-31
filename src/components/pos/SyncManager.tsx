@@ -4,6 +4,12 @@ import { supabase } from '../../lib/supabaseClient';
 import { recordStockMovement, postJournalEntry, logAuditEvent } from '../../services/ledgerService';
 import { toast } from 'sonner';
 
+const getPackSize = (sku: string | undefined): number => {
+  if (!sku) return 1;
+  const match = sku.match(/\|PK:(\d+)/i);
+  return match ? parseInt(match[1], 10) : 1;
+};
+
 export function SyncManager() {
   const { offlineQueue, removeSaleFromOfflineQueue } = usePOSStore();
   const isSyncingRef = useRef(false);
@@ -65,7 +71,7 @@ export function SyncManager() {
       const { data: existingSale, error: checkError } = await supabase
         .from('sales')
         .select('id')
-        .eq('receipt_number', sale.receiptNumber)
+        .eq('receiptNumber', sale.receiptNumber)
         .maybeSingle();
 
       if (checkError) {
@@ -131,6 +137,7 @@ export function SyncManager() {
             sale_id: saleDocId,
             product_id: item.product.id,
             quantity: item.quantity,
+            price: item.unitPrice,
             unit_price: item.unitPrice,
             line_total: item.subtotal,
             vat_amount: item.vatAmount,
@@ -154,18 +161,20 @@ export function SyncManager() {
         try {
           if (sale.items && sale.items.length > 0) {
             await Promise.all(
-              sale.items.map((item) =>
-                recordStockMovement(
+              sale.items.map((item) => {
+                const isWholesale = item.tier === 'wholesale';
+                const multiplier = isWholesale ? getPackSize(item.product.sku) : 1;
+                return recordStockMovement(
                   businessId,
                   branchId,
                   item.product.id,
-                  -Math.abs(item.quantity),
+                  -Math.abs(item.quantity * multiplier),
                   'POS_SALE',
                   userId,
                   sale.receiptNumber,
                   item.product.wholesalePrice || 0
-                )
-              )
+                );
+              })
             );
           }
         } catch (e) {
@@ -243,10 +252,12 @@ export function SyncManager() {
           const cashPayment = sale.payments.find((p) => p.method === 'cash' || p.method === 'usd_cash');
           if (cashPayment && saleDocId) {
             await supabase.from('cash_drawer_logs').insert([{
+              business_id: businessId,
+              branch_id: branchId,
               amount: cashPayment.amount,
+              type: 'sale',
               transaction_type: 'cash_sale',
               notes: `Sale ${sale.receiptNumber}`,
-              sale_id: saleDocId,
               created_at: new Date(sale.timestamp).toISOString()
             }]);
           }
@@ -269,12 +280,12 @@ export function SyncManager() {
         }
       }
 
-      // Step D: Clean Removal & Success Toast
+      // Step D: Clean Removal
       removeSaleFromOfflineQueue(sale.id);
       if (retryCountRef.current[sale.id] !== undefined) {
         delete retryCountRef.current[sale.id];
       }
-      toast.success(`Transaction ${sale.receiptNumber} successfully synchronized over active internet connection!`);
+      console.log(`[SyncManager] Background Sync: Transaction ${sale.receiptNumber} successfully synchronized over active internet connection!`);
       console.log(`[SyncManager] Successfully completed background sync of sale ${sale.receiptNumber}.`);
 
     } catch (err: any) {
@@ -289,7 +300,7 @@ export function SyncManager() {
           console.warn(`[SyncManager] Removing blocked transaction ${sale.receiptNumber} after 3 continuous failures.`);
           removeSaleFromOfflineQueue(sale.id);
           delete retryCountRef.current[sale.id];
-          toast.error(`Auto-Sync: Bypassed receipt ${sale.receiptNumber} to unblock other pending transactions.`);
+          console.error(`[SyncManager] Auto-Sync: Bypassed receipt ${sale.receiptNumber} after 3 continuous failures to unblock other pending transactions.`);
         }
       }
     } finally {

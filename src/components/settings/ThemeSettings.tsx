@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { CheckCircle2, Moon, Sun, Monitor } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTheme } from 'next-themes';
+import { applyWorkspaceThemeColor } from '../ThemeProvider';
 
 const themes = [
   { id: 'tareza-gold', name: 'Tareza Gold', primary: '#d97706', base: 'light' },
@@ -10,23 +12,43 @@ const themes = [
   { id: 'emerald-pro', name: 'Emerald Pro', primary: '#059669', base: 'light' },
   { id: 'carbon-dark', name: 'Carbon Dark', primary: '#171717', base: 'dark' },
   { id: 'royal-purple', name: 'Royal Purple', primary: '#7c3aed', base: 'dark' },
-  { id: 'light-minimal', name: 'Light Minimal', primary: '#f3f4f6', base: 'light' },
+  { id: 'light-minimal', name: 'Light Minimal', primary: '#4b5563', base: 'light' },
   { id: 'oceanic', name: 'Oceanic', primary: '#0891b2', base: 'light' },
   { id: 'modern-gray', name: 'Modern Gray', primary: '#4b5563', base: 'dark' },
 ];
 
 export function ThemeSettings() {
-  const [activeTheme, setActiveTheme] = useState('tareza-gold');
+  const { theme, setTheme } = useTheme();
+  const [activeTheme, setActiveTheme] = useState('royal-purple');
   const [mode, setMode] = useState<'light'|'dark'|'system'>('system');
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('tareza_workspace_theme') || 'royal-purple';
+    setActiveTheme(savedTheme);
+    setMode((theme as 'light'|'dark'|'system') || 'system');
+  }, [theme]);
 
   const handleModeChange = (newMode: 'light'|'dark'|'system') => {
     setMode(newMode);
+    setTheme(newMode);
+    localStorage.setItem('theme', newMode);
     toast.success(`Color mode updated to ${newMode}`);
   };
 
   const handleThemeChange = (id: string) => {
     setActiveTheme(id);
-    toast.success(`Workspace theme updated successfully`);
+    localStorage.setItem('tareza_workspace_theme', id);
+    applyWorkspaceThemeColor(id);
+    const themeName = themes.find(t => t.id === id)?.name || id;
+    toast.success(`Workspace theme updated to ${themeName}`);
+  };
+
+  const handleSavePreferences = () => {
+    localStorage.setItem('theme', mode);
+    localStorage.setItem('tareza_workspace_theme', activeTheme);
+    setTheme(mode);
+    applyWorkspaceThemeColor(activeTheme);
+    toast.success('Theme preferences saved and applied globally!');
   };
 
   return (
@@ -97,7 +119,7 @@ export function ThemeSettings() {
                   </div>
                 )}
                 <div 
-                  className="w-12 h-12 rounded-full shadow-sm mb-4 border border-black/10 group-hover:scale-110 transition-transform"
+                   className="w-12 h-12 rounded-full shadow-sm mb-4 border border-black/10 group-hover:scale-110 transition-transform"
                   style={{ backgroundColor: theme.primary }} 
                 />
                 <span className={`font-semibold text-sm ${activeTheme === theme.id ? 'text-primary' : 'text-zinc-700'}`}>
@@ -110,7 +132,7 @@ export function ThemeSettings() {
       </Card>
       
       <div className="flex justify-end">
-        <Button size="lg" className="px-8 shadow-sm font-semibold">Save Theme Preferences</Button>
+        <Button onClick={handleSavePreferences} size="lg" className="px-8 shadow-sm font-semibold">Save Theme Preferences</Button>
       </div>
     </div>
   );

@@ -70,6 +70,12 @@ export type SaleRecord = {
   branch_id?: string;
 };
 
+export const getPackSize = (sku: string | undefined): number => {
+  if (!sku) return 1;
+  const match = sku.match(/\|PK:(\d+)/i);
+  return match ? parseInt(match[1], 10) : 1;
+};
+
 interface POSState {
   cart: CartItem[];
   pricingTier: PricingTier;
@@ -80,7 +86,7 @@ interface POSState {
   globalDiscount?: Discount;
   
   // Actions
-  addToCart: (product: Product, quantity?: number) => void;
+  addToCart: (product: Product, quantity?: number, forcedTier?: PricingTier) => void;
   removeFromCart: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
   applyItemDiscount: (itemId: string, discount: Discount) => void;
@@ -117,10 +123,10 @@ export const usePOSStore = create<POSState>()(
       parkedSales: [],
       currentCustomer: null,
 
-      addToCart: (product, quantity = 1) => set((state) => {
-        const existingItem = state.cart.find((item) => item.product.id === product.id);
-        const unitPrice = state.pricingTier === 'wholesale' ? product.wholesalePrice : product.retailPrice;
-        const defaultTier = state.pricingTier;
+      addToCart: (product, quantity = 1, forcedTier = 'retail') => set((state) => {
+        const activeTier = forcedTier;
+        const existingItem = state.cart.find((item) => item.product.id === product.id && item.tier === activeTier);
+        const unitPrice = activeTier === 'wholesale' ? product.wholesalePrice : product.retailPrice;
         
         if (existingItem) {
           const newQty = existingItem.quantity + quantity;
@@ -146,7 +152,7 @@ export const usePOSStore = create<POSState>()(
         const vatAmount = product.taxClass === 'standard' ? subtotal * getVatRate() : 0;
 
         return {
-          cart: [...state.cart, { id: uuidv4(), product, quantity, unitPrice, subtotal, vatAmount, tier: defaultTier }],
+          cart: [...state.cart, { id: uuidv4(), product, quantity, unitPrice, subtotal, vatAmount, tier: activeTier }],
         };
       }),
 
@@ -330,8 +336,11 @@ export const usePOSStore = create<POSState>()(
         for (const item of state.cart) {
           const itemStock = item.product.stock;
           if (itemStock !== undefined && itemStock !== null) {
-            if (item.quantity > itemStock) {
-              throw new Error(`Insufficient stock for "${item.product.name}". (Available: ${itemStock}, requested: ${item.quantity})`);
+            const requestedUnits = item.tier === 'wholesale'
+              ? item.quantity * getPackSize(item.product.sku)
+              : item.quantity;
+            if (requestedUnits > itemStock) {
+              throw new Error(`Insufficient stock for "${item.product.name}". (Available: ${itemStock} units, requested: ${requestedUnits} units)`);
             }
           }
         }

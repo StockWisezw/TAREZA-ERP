@@ -34,6 +34,10 @@ export default function CashManagement() {
   // Starting float state
   const [startingFloat, setStartingFloat] = useState('');
 
+  const [businessId, setBusinessId] = useState('');
+  const [branchId, setBranchId] = useState('');
+  const [userId, setUserId] = useState('');
+
   useEffect(() => {
     fetchTodayCash();
   }, []);
@@ -45,10 +49,54 @@ export default function CashManagement() {
       startOfDay.setHours(0, 0, 0, 0);
       const isoStartOfDay = startOfDay.toISOString();
 
+      // Look up current auth profile info
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUserId = userData?.user?.id || '';
+      setUserId(currentUserId);
+      
+      let busId = '';
+      let brId = '';
+      if (currentUserId) {
+        const { data: businessData } = await supabase
+          .from('business_users')
+          .select('business_id, branch_id')
+          .eq('user_id', currentUserId)
+          .limit(1)
+          .maybeSingle();
+        if (businessData?.business_id) {
+          busId = businessData.business_id;
+          brId = businessData.branch_id || '';
+        }
+      }
+
+      if (!busId) {
+        const { data: fallbackB } = await supabase.from('businesses').select('id').limit(1).maybeSingle();
+        if (fallbackB?.id) {
+          busId = fallbackB.id;
+          const { data: fallbackBr } = await supabase.from('branches').select('id').eq('business_id', fallbackB.id).limit(1).maybeSingle();
+          if (fallbackBr?.id) {
+            brId = fallbackBr.id;
+          }
+        }
+      }
+
+      // Default backup UUID values if absolutely needed
+      if (!busId) busId = '00000000-0000-0000-0000-000000000000';
+      if (!brId) brId = '00000000-0000-0000-0000-000000000000';
+
+      setBusinessId(busId);
+      setBranchId(brId);
+
       // 1. Fetch sales
-      const { data: salesData } = await supabase.from('sales')
+      let salesQuery = supabase.from('sales')
         .select('*')
         .gte('created_at', isoStartOfDay);
+      
+      if (busId && busId !== '00000000-0000-0000-0000-000000000000') {
+        salesQuery = salesQuery.eq('business_id', busId);
+      }
+      
+      const { data: salesData } = await salesQuery;
       
       let totalCashSales = 0;
       if (salesData && salesData.length > 0) {
@@ -87,11 +135,16 @@ export default function CashManagement() {
       }
       
       // 2. Fetch cash logs
-      const { data: logsDocs } = await supabase.from('cash_drawer_logs')
+      let logsQuery = supabase.from('cash_drawer_logs')
         .select('*')
         .gte('created_at', isoStartOfDay)
         .order('created_at', { ascending: false });
 
+      if (busId && busId !== '00000000-0000-0000-0000-000000000000') {
+        logsQuery = logsQuery.eq('business_id', busId);
+      }
+      
+      const { data: logsDocs } = await logsQuery;
       const logsData = logsDocs || [];
         
       setCashLogs(logsData);
@@ -101,8 +154,6 @@ export default function CashManagement() {
       let restocks = 0;
       let ownerCollections = 0;
       
-      let isRegisterCurrentlyClosed = false;
-      
       logsData.forEach(log => {
         const amt = Number(log.amount);
         switch(log.transaction_type) {
@@ -110,28 +161,21 @@ export default function CashManagement() {
             case 'expense': expenses += amt; break;
             case 'restock': restocks += amt; break;
             case 'owner_collection': ownerCollections += amt; break;
-            case 'closing_count': isRegisterCurrentlyClosed = true; break;
         }
       });
       
       const calculatedExpected = float + totalCashSales - expenses - restocks - ownerCollections;
-      
       setExpectedCash(calculatedExpected);
       
-      if (isRegisterCurrentlyClosed && float === 0 && totalCashSales === 0) {
-          setIsDrawerOpen(false);
-      } else {
-          const hasClosing = logsData.some(l => l.transaction_type === 'closing_count');
-          const hasOpeningAfterClosing = logsData
-            .findIndex(l => l.transaction_type === 'opening_float') < 
-            logsData.findIndex(l => l.transaction_type === 'closing_count');
-            
-          if (hasClosing && !hasOpeningAfterClosing) {
-              setIsDrawerOpen(false);
-          } else {
-              setIsDrawerOpen(true);
-          }
-      }
+      // Look up if a register session is actively open
+      const { data: activeSess } = await supabase
+        .from('register_sessions')
+        .eq('business_id', busId)
+        .eq('status', 'OPEN')
+        .limit(1)
+        .maybeSingle();
+
+      setIsDrawerOpen(!!activeSess);
       
     } catch (error) {
       console.error(error);
@@ -148,12 +192,41 @@ export default function CashManagement() {
     }
     
     try {
+        let logType = 'payout';
+        if (entryType === 'owner_collection') {
+          logType = 'drop';
+        }
+
         await supabase.from('cash_drawer_logs').insert([{
+            business_id: businessId,
+            branch_id: branchId || null,
             amount: parseFloat(entryAmount),
+            type: logType,
             transaction_type: entryType,
             notes: entryNotes,
             created_at: new Date().toISOString()
         }]);
+
+        // If there is an active session in register_sessions, update its payouts and expected balance
+        const { data: openSess } = await supabase
+          .from('register_sessions')
+          .eq('business_id', businessId)
+          .eq('status', 'OPEN')
+          .limit(1)
+          .maybeSingle();
+
+        if (openSess) {
+          const currentPayoutsBytes = Number(openSess.payouts_total || 0) + parseFloat(entryAmount);
+          const currentExpectedBytes = Number(openSess.expected_balance || 0) - parseFloat(entryAmount);
+          
+          await supabase
+            .from('register_sessions')
+            .eq('id', openSess.id)
+            .update({
+              payouts_total: currentPayoutsBytes,
+              expected_balance: currentExpectedBytes
+            });
+        }
         
         toast.success('Transaction logged successfully');
         setEntryAmount('');
@@ -181,11 +254,34 @@ export default function CashManagement() {
 
     try {
         await supabase.from('cash_drawer_logs').insert([{
+            business_id: businessId,
+            branch_id: branchId || null,
             amount: countedCash,
+            type: 'closing',
             transaction_type: 'closing_count',
             notes: `Counted: $${countedCash.toFixed(2)}, Expected: $${expectedCash.toFixed(2)}, Variance: $${variance.toFixed(2)}. ${notes}`,
             created_at: new Date().toISOString()
         }]);
+
+        const { data: openSess } = await supabase
+          .from('register_sessions')
+          .eq('business_id', businessId)
+          .eq('status', 'OPEN')
+          .limit(1)
+          .maybeSingle();
+
+        if (openSess) {
+          const expected = Number(openSess.opening_balance) + Number(openSess.sales_total) - Number(openSess.refunds_total) - Number(openSess.payouts_total);
+          const varianceVal = countedCash - expected;
+          const patches = {
+            closing_balance: countedCash,
+            expected_balance: expected,
+            variance: varianceVal,
+            status: 'CLOSED' as const,
+            closed_at: new Date().toISOString()
+          };
+          await supabase.from('register_sessions').eq('id', openSess.id).update(patches);
+        }
         
         setIsDrawerOpen(false);
         setCountedCash(0);
@@ -203,11 +299,35 @@ export default function CashManagement() {
         const floatAmount = parseFloat(startingFloat) || 0;
         
         await supabase.from('cash_drawer_logs').insert([{
+            business_id: businessId,
+            branch_id: branchId || null,
             amount: floatAmount,
+            type: 'opening',
             transaction_type: 'opening_float',
             notes: 'Register opened',
             created_at: new Date().toISOString()
         }]);
+
+        const sessionId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+        const sessionItem = {
+          id: sessionId,
+          business_id: businessId,
+          branch_id: branchId || null,
+          user_id: userId || '00000000-0000-0000-0000-000000000000',
+          opening_balance: floatAmount,
+          closing_balance: 0,
+          expected_balance: floatAmount,
+          variance: 0,
+          status: 'OPEN' as const,
+          opened_at: new Date().toISOString(),
+          closed_at: '',
+          sales_count: 0,
+          sales_total: 0,
+          refunds_total: 0,
+          payouts_total: 0,
+          created_at: new Date().toISOString()
+        };
+        await supabase.from('register_sessions').insert(sessionItem);
         
         setIsDrawerOpen(true);
         setStartingFloat('');

@@ -19,6 +19,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { supabase } from '../../lib/supabaseClient';
 import { toast } from 'sonner';
 
+const getPackSize = (sku: string | undefined): number => {
+  if (!sku) return 1;
+  const match = sku.match(/\|PK:(\d+)/i);
+  return match ? parseInt(match[1], 10) : 1;
+};
+
 export function ProductList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState<any[]>([]);
@@ -540,7 +546,7 @@ export function ProductList() {
                   <TableCell><Badge variant="secondary" className="font-normal text-xs">{item.categories?.name || 'Uncategorized'}</Badge></TableCell>
                   
                   {/* Stock Column */}
-                  <TableCell className="text-right font-mono font-bold text-zinc-900">
+                  <TableCell className="text-right font-mono text-zinc-900">
                     {isInlineEditMode ? (
                       <Input
                         type="number"
@@ -557,7 +563,14 @@ export function ProductList() {
                         className="w-20 ml-auto text-right font-mono text-xs h-8 px-2 border-zinc-200 bg-white"
                       />
                     ) : (
-                      stock
+                      <div className="flex flex-col items-end">
+                        <span className="font-bold text-zinc-900">{stock} units</span>
+                        {getPackSize(item.sku) > 1 && (
+                          <span className="text-[10px] text-zinc-500 font-medium">
+                            (= {Math.floor(stock / getPackSize(item.sku))} packs & {stock % getPackSize(item.sku)} units)
+                          </span>
+                        )}
+                      </div>
                     )}
                   </TableCell>
 

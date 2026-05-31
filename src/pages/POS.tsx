@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { useReactToPrint } from 'react-to-print';
 import { useNavigate } from 'react-router-dom';
 
-import { usePOSStore, Product, SaleRecord, Customer } from '../store/posStore';
+import { usePOSStore, Product, SaleRecord, Customer, getPackSize } from '../store/posStore';
 import { PaymentDialog } from '../components/pos/PaymentDialog';
 import { ReceiptPrint } from '../components/pos/ReceiptPrint';
 import { 
@@ -276,11 +276,6 @@ export default function POS() {
         e.preventDefault();
         searchInputRef.current?.focus();
       }
-      // F4 to toggle pricing tier
-      if (e.key === 'F4') {
-        e.preventDefault();
-        setPricingTier(pricingTier === 'retail' ? 'wholesale' : 'retail');
-      }
       // Space for payment ONLY if not typing in an input
       if (e.key === ' ' && document.activeElement?.tagName !== 'INPUT' && cart.length > 0) {
         e.preventDefault();
@@ -289,7 +284,7 @@ export default function POS() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pricingTier, setPricingTier, cart.length]);
+  }, [cart.length]);
 
   const handlePrint = useReactToPrint({
     contentRef: receiptRef,
@@ -319,19 +314,40 @@ export default function POS() {
       setShowPayment(false);
       setShowPostSale(true);
       toast.success(isOffline ? 'Sale queued — will sync when online.' : 'Sale completed and recorded!');
-      shouldPrintRef.current = true;
+      shouldPrintRef.current = false;
       
       if (!isOffline) {
         try {
           const { supabase } = await import('../lib/supabaseClient');
 
           const { data: userData } = await supabase.auth.getUser();
-          let businessId = 'default_business';
-          let branchId = 'default_branch';
+          let businessId = '';
+          let branchId = '';
           if (userData?.user) {
             const { data: businessData } = await supabase.from('business_users').select('business_id, branch_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
-            if (businessData?.business_id) businessId = businessData.business_id;
-            if (businessData?.branch_id) branchId = businessData.branch_id;
+            if (businessData?.business_id) {
+              businessId = businessData.business_id;
+              branchId = businessData.branch_id || '';
+            }
+          }
+
+          if (!businessId) {
+            const { data: fallbackB } = await supabase.from('businesses').select('id').limit(1).maybeSingle();
+            if (fallbackB?.id) {
+              businessId = fallbackB.id;
+              const { data: fallbackBr } = await supabase.from('branches').select('id').eq('business_id', fallbackB.id).limit(1).maybeSingle();
+              if (fallbackBr?.id) {
+                branchId = fallbackBr.id;
+              }
+            }
+          }
+
+          // Ensure valid UUID format for any legacy/stub bypass prevention
+          if (!businessId || businessId === 'default_business') {
+            businessId = '00000000-0000-0000-0000-000000000000';
+          }
+          if (!branchId || branchId === 'default_branch') {
+            branchId = '00000000-0000-0000-0000-000000000000';
           }
 
           let customerNameVal = 'Walk-In Customer';
@@ -378,6 +394,7 @@ export default function POS() {
                 sale_id: saleDoc.id,
                 product_id: item.product.id,
                 quantity: item.quantity,
+                price: item.unitPrice,
                 unit_price: item.unitPrice,
                 line_total: item.subtotal,
                 vat_amount: item.vatAmount
@@ -385,11 +402,13 @@ export default function POS() {
               await supabase.from('sale_items').insert(itemsPayload);
 
               for (const item of sale.items) {
+                const isWholesale = item.tier === 'wholesale';
+                const multiplier = isWholesale ? getPackSize(item.product.sku) : 1;
                 await recordStockMovement(
                   businessId,
                   branchId,
                   item.product.id,
-                  -Math.abs(item.quantity), // negative for stock depletion
+                  -Math.abs(item.quantity * multiplier), // negative for stock depletion
                   'POS_SALE',
                   userData?.user?.id || 'unknown',
                   sale.receiptNumber,
@@ -452,10 +471,12 @@ export default function POS() {
             const cashPayment = sale.payments.find(p => p.method === 'cash' || p.method === 'usd_cash');
             if (cashPayment) {
               await supabase.from('cash_drawer_logs').insert([{
+                business_id: businessId,
+                branch_id: branchId,
                 amount: cashPayment.amount,
+                type: 'sale',
                 transaction_type: 'cash_sale',
                 notes: `Sale ${sale.receiptNumber}`,
-                sale_id: saleDoc.id,
                 created_at: new Date().toISOString()
               }]);
             }
@@ -782,11 +803,13 @@ export default function POS() {
             {filteredProducts.map((product) => {
               const bgColors = ['bg-rose-100 text-rose-600', 'bg-blue-100 text-blue-600', 'bg-emerald-100 text-emerald-600', 'bg-amber-100 text-amber-600', 'bg-purple-100 text-purple-600', 'bg-indigo-100 text-indigo-600', 'bg-cyan-100 text-cyan-600'];
               const colorClass = bgColors[product.name.charCodeAt(0) % bgColors.length];
+              const pSize = getPackSize(product.sku);
+              const hasPack = pSize > 1;
+
               return (
               <div 
                 key={product.id}
-                onClick={() => handleProductClick(product)}
-                className="group relative bg-white border border-zinc-200 rounded-2xl overflow-hidden hover:shadow-md transition-all cursor-pointer flex flex-col hover:border-primary/50"
+                className="group relative bg-white border border-zinc-200 rounded-2xl overflow-hidden hover:shadow-md transition-all flex flex-col hover:border-primary/50"
               >
                 <div className={`h-32 relative overflow-hidden flex items-center justify-center ${colorClass}`}>
                   <Package className="w-10 h-10 group-hover:scale-110 transition-transform duration-300 opacity-80" />
@@ -795,26 +818,66 @@ export default function POS() {
                       {product.taxClass}
                     </Badge>
                   )}
+                  {hasPack && (
+                    <Badge className="absolute top-2 right-2 text-[10px] bg-purple-600 text-white font-semibold shadow-sm border-0">
+                      Pack of {pSize} Available
+                    </Badge>
+                  )}
                 </div>
                 <div className="p-3 flex flex-col flex-1">
                   <h4 className="font-semibold text-sm line-clamp-2 leading-tight mb-1">{product.name}</h4>
                   <p className="text-xs text-zinc-500 font-mono mb-1">{product.sku}</p>
                   
-                  <div className="flex items-center gap-1 mb-2">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Stock:</span>
-                    <span className={`text-xs font-mono font-bold ${(product.stock || 0) > 0 ? ((product.stock || 0) <= 5 ? 'text-amber-500' : 'text-emerald-600') : 'text-rose-500'}`}>
-                      {product.stock ?? 0} left
-                    </span>
-                  </div>
+                  {product.stock !== undefined && (
+                    <div className="flex flex-col gap-0.5 mb-2">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Stock:</span>
+                        <span className={`text-xs font-mono font-bold ${(product.stock || 0) > 0 ? ((product.stock || 0) <= pSize * 2 ? 'text-amber-500' : 'text-emerald-505 font-bold') : 'text-rose-500'}`}>
+                          {product.stock} units
+                        </span>
+                      </div>
+                      {hasPack && (
+                        <span className="text-[10px] text-zinc-500 font-medium">
+                          (= {Math.floor(product.stock / pSize)} packs & {product.stock % pSize} units)
+                        </span>
+                      )}
+                    </div>
+                  )}
                   
-                  <div className="mt-auto flex items-center justify-between">
-                    <span className="font-bold text-primary text-base">
-                      ${(pricingTier === 'wholesale' ? product.wholesalePrice : product.retailPrice).toFixed(2)}
-                    </span>
-                    <Button size="icon" className="h-8 w-8 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
-                      <span className="text-lg leading-none mt-[-2px]">+</span>
-                    </Button>
-                  </div>
+                  {hasPack ? (
+                    <div className="space-y-1.5 mt-auto pt-2" onClick={(e) => e.stopPropagation()}>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="w-full text-xs h-8 flex justify-between px-2 text-zinc-700 border-zinc-200 hover:bg-zinc-50 hover:text-primary transition-all rounded-lg"
+                        onClick={() => addToCart(product, 1, 'retail')}
+                      >
+                        <span className="font-medium text-[11px]">Add Unit</span>
+                        <span className="font-mono font-bold text-[11px]">${product.retailPrice.toFixed(2)}</span>
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className="w-full text-xs h-8 flex justify-between px-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-all rounded-lg"
+                        onClick={() => addToCart(product, 1, 'wholesale')}
+                      >
+                        <span className="text-[11px]">Add Pack ({pSize})</span>
+                        <span className="font-mono font-bold text-[11px]">${product.wholesalePrice.toFixed(2)}</span>
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="mt-auto pt-2 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
+                      <span className="font-bold text-primary text-base">
+                        ${product.retailPrice.toFixed(2)}
+                      </span>
+                      <Button 
+                        size="icon" 
+                        className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90 text-white"
+                        onClick={() => addToCart(product, 1, 'retail')}
+                      >
+                        <span className="text-lg leading-none mt-[-2px]">+</span>
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
               );
@@ -879,25 +942,7 @@ export default function POS() {
           </CardContent>
         </Card>
 
-        {/* Pricing Tier Toggle */}
-        <Card className="border-zinc-200 shadow-sm shrink-0">
-          <CardContent className="p-1 flex">
-            <Button 
-              variant={pricingTier === 'retail' ? 'default' : 'ghost'} 
-              className={`flex-1 rounded-md ${pricingTier === 'retail' ? 'shadow-sm' : ''}`}
-              onClick={() => setPricingTier('retail')}
-            >
-              Retail
-            </Button>
-            <Button 
-              variant={pricingTier === 'wholesale' ? 'default' : 'ghost'} 
-              className={`flex-1 rounded-md ${pricingTier === 'wholesale' ? 'shadow-sm bg-purple-600 hover:bg-purple-700 text-white' : ''}`}
-              onClick={() => setPricingTier('wholesale')}
-            >
-              Wholesale (Packs)
-            </Button>
-          </CardContent>
-        </Card>
+        {/* Global toggle removed as per request of selecting packs with its own price */}
 
         {/* Cart items list */}
         <Card className="border-zinc-200 shadow-sm flex-1 min-h-[150px] flex flex-col pt-2">
@@ -915,21 +960,23 @@ export default function POS() {
                       <h4 className="text-[13px] font-bold leading-none mb-1 text-zinc-800 line-clamp-1 pr-2">{item.product.name}</h4>
                       <div className="flex items-center gap-2 text-[11px]">
                         <span className="font-mono text-zinc-650">${item.unitPrice.toFixed(2)}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newTier = item.tier === 'wholesale' ? 'retail' : 'wholesale';
-                            setItemPricingTier(item.id, newTier);
-                            toast.success(`Switched ${item.product.name} to ${newTier} pricing`);
-                          }}
-                          className={`px-1.5 py-0.5 rounded text-[8px] font-semibold border transition-all uppercase tracking-wider ${
-                            item.tier === 'wholesale' 
-                              ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" 
-                              : "bg-blue-50 text-blue-705 border-blue-200 hover:bg-blue-100"
-                          }`}
-                        >
-                          {item.tier === 'wholesale' ? 'Wholesale' : 'Retail'}
-                        </button>
+                        {getPackSize(item.product.sku) > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newTier = item.tier === 'wholesale' ? 'retail' : 'wholesale';
+                              setItemPricingTier(item.id, newTier);
+                              toast.success(`Switched ${item.product.name} to ${newTier === 'wholesale' ? 'Pack' : 'Unit'} pricing`);
+                            }}
+                            className={`px-1.5 py-0.5 rounded text-[8px] font-semibold border transition-all uppercase tracking-wider ${
+                              item.tier === 'wholesale' 
+                                ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" 
+                                : "bg-blue-50 text-blue-705 border-blue-200 hover:bg-blue-100"
+                            }`}
+                          >
+                            {item.tier === 'wholesale' ? `Pack (${getPackSize(item.product.sku)} units)` : 'Unit pricing'}
+                          </button>
+                        )}
                       </div>
                     </div>
                     

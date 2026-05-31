@@ -16,6 +16,12 @@ import { supabase, db, doc, getDoc, updateDoc } from '../lib/supabaseClient';
 import { recordStockMovement, postJournalEntry, logAuditEvent } from '../services/ledgerService';
 import { jsPDF } from 'jspdf';
 
+const getPackSize = (sku: string | undefined): number => {
+  if (!sku) return 1;
+  const match = sku.match(/\|PK:(\d+)/i);
+  return match ? parseInt(match[1], 10) : 1;
+};
+
 export default function ReceiptHistory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSale, setSelectedSale] = useState<any | null>(null);
@@ -440,6 +446,7 @@ export default function ReceiptHistory() {
           sale_id: saleId,
           product_id: item.product.id,
           quantity: item.quantity,
+          price: item.price,
           unit_price: item.price,
           line_total: item.subtotal,
           vat_amount: item.subtotal * 0.15
@@ -448,11 +455,13 @@ export default function ReceiptHistory() {
 
         for (const item of invoiceItems) {
           try {
+            const isWholesale = item.tier === 'wholesale' || item.pricing_tier === 'wholesale';
+            const multiplier = isWholesale ? getPackSize(item.product?.sku) : 1;
             await recordStockMovement(
               businessId || 'default_business',
               branchId || 'default_branch',
               item.product.id,
-              -Math.abs(item.quantity), // negative for stock depletion
+              -Math.abs(item.quantity * multiplier), // negative for stock depletion
               'POS_SALE',
               userData?.user?.id || 'unknown',
               invoiceNumber,
@@ -545,7 +554,9 @@ export default function ReceiptHistory() {
       // 4. Re-credit stock to inventory for each item (positive quantity change)
       if (sale.items && Array.isArray(sale.items)) {
         for (const item of sale.items) {
-          const qtyToReturn = Math.abs(Number(item.quantity || 0));
+          const isWholesale = item.tier === 'wholesale' || item.pricing_tier === 'wholesale';
+          const multiplier = isWholesale ? getPackSize(item.product?.sku) : 1;
+          const qtyToReturn = Math.abs(Number(item.quantity || 0)) * multiplier;
           const prodId = item.product?.id || item.productId;
           if (prodId && qtyToReturn > 0) {
             await recordStockMovement(
