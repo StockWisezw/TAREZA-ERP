@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Trash2, CreditCard, Receipt, Barcode, ShoppingCart, Package, ArrowRightLeft, UserPlus, Pause, Play, Tag, HelpCircle, X, ChevronDown, Check, Coins } from 'lucide-react';
+import { Search, Trash2, CreditCard, Receipt, Barcode, ShoppingCart, Package, ArrowRightLeft, UserPlus, Pause, Play, Tag, HelpCircle, X, ChevronDown, Check, Coins, User } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -40,7 +40,7 @@ export default function POS() {
   const { 
     cart, getTotals, addToCart, removeFromCart, updateQuantity, pricingTier, setPricingTier, setItemPricingTier,
     clearCart, completeSale, currentCustomer, setCurrentCustomer, parkSale, parkedSales, resumeSale,
-    applyGlobalDiscount
+    applyGlobalDiscount, applyItemDiscount
   } = usePOSStore();
   
   const totals = getTotals();
@@ -64,6 +64,139 @@ export default function POS() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [vatEnabled, setVatEnabled] = useState(false);
+
+  // Odoo-style POS numpad and selection state variables
+  const [selectedCartItemId, setSelectedCartItemId] = useState<string | null>(null);
+  const [numpadMode, setNumpadMode] = useState<'qty' | 'disc' | 'price'>('qty');
+  const [isNewInput, setIsNewInput] = useState<boolean>(true);
+
+  // Auto-select the last added item or maintain current selection
+  useEffect(() => {
+    if (cart.length > 0) {
+      const exists = cart.some(item => item.id === selectedCartItemId);
+      if (!exists) {
+        setSelectedCartItemId(cart[cart.length - 1].id);
+        setIsNewInput(true);
+      }
+    } else {
+      setSelectedCartItemId(null);
+    }
+  }, [cart, selectedCartItemId]);
+
+  const getVatRate = () => localStorage.getItem('tareza_vat_enabled') === 'true' ? 0.15 : 0;
+
+  const updateItemPriceInStore = (itemId: string, newPrice: number) => {
+    usePOSStore.setState((state) => {
+      const updatedCart = state.cart.map((item) => {
+        if (item.id === itemId) {
+          const subtotal = item.quantity * newPrice;
+          let itemDiscountValue = 0;
+          if (item.discount) {
+            itemDiscountValue = item.discount.type === 'percentage' 
+              ? subtotal * (item.discount.value / 100) 
+              : item.discount.value;
+          }
+          const vatAmount = item.product.taxClass === 'standard' 
+            ? Math.max(0, subtotal - itemDiscountValue) * getVatRate() 
+            : 0;
+          return { ...item, unitPrice: newPrice, subtotal, vatAmount };
+        }
+        return item;
+      });
+      return { cart: updatedCart };
+    });
+  };
+
+  const handleNumpadKey = (key: string) => {
+    if (cart.length === 0) {
+      toast.error("Please add a product to the cart first.");
+      return;
+    }
+    const activeId = selectedCartItemId || (cart.length > 0 ? cart[cart.length - 1].id : null);
+    if (!activeId) return;
+
+    const selectedItem = cart.find(item => item.id === activeId);
+    if (!selectedItem) return;
+
+    if (numpadMode === 'qty') {
+      if (key === 'backspace') {
+        const currentStr = selectedItem.quantity.toString();
+        if (currentStr.length <= 1) {
+          updateQuantity(selectedItem.id, 0);
+        } else {
+          updateQuantity(selectedItem.id, parseInt(currentStr.slice(0, -1)) || 0);
+        }
+      } else if (key === '+/-') {
+        updateQuantity(selectedItem.id, -selectedItem.quantity);
+      } else if (key === '.') {
+        // Quantity integer only
+      } else {
+        let newQty = selectedItem.quantity;
+        if (isNewInput) {
+          newQty = parseInt(key);
+          setIsNewInput(false);
+        } else {
+          newQty = parseInt(selectedItem.quantity.toString() + key);
+        }
+        if (!isNaN(newQty)) {
+          updateQuantity(selectedItem.id, newQty);
+        }
+      }
+    } else if (numpadMode === 'disc') {
+      const currentVal = selectedItem.discount?.value || 0;
+      if (key === 'backspace') {
+        const currentStr = currentVal.toString();
+        if (currentStr.length <= 1) {
+          applyItemDiscount(selectedItem.id, { type: 'percentage', value: 0 });
+        } else {
+          const discVal = parseFloat(currentStr.slice(0, -1)) || 0;
+          applyItemDiscount(selectedItem.id, { type: 'percentage', value: discVal });
+        }
+      } else if (key === '+/-') {
+        // No-op for item discount
+      } else if (key === '.') {
+        setIsNewInput(false);
+      } else {
+        let newVal = 0;
+        if (isNewInput) {
+          newVal = parseFloat(key);
+          setIsNewInput(false);
+        } else {
+          newVal = parseFloat(currentVal.toString() + key);
+        }
+        if (!isNaN(newVal)) {
+          if (newVal > 100) newVal = 100;
+          applyItemDiscount(selectedItem.id, { type: 'percentage', value: newVal });
+        }
+      }
+    } else if (numpadMode === 'price') {
+      const currentVal = selectedItem.unitPrice;
+      if (key === 'backspace') {
+        const currentStr = currentVal.toString();
+        if (currentStr.length <= 1) {
+          updateItemPriceInStore(selectedItem.id, 0);
+        } else {
+          const priceVal = parseFloat(currentStr.slice(0, -1)) || 0;
+          updateItemPriceInStore(selectedItem.id, priceVal);
+        }
+      } else if (key === '+/-') {
+        updateItemPriceInStore(selectedItem.id, -currentVal);
+      } else if (key === '.') {
+        setIsNewInput(false);
+      } else {
+        let newVal = 0;
+        if (isNewInput) {
+          newVal = parseFloat(key);
+          setIsNewInput(false);
+        } else {
+          newVal = parseFloat(currentVal.toString() + key);
+        }
+        if (!isNaN(newVal)) {
+          updateItemPriceInStore(selectedItem.id, newVal);
+        }
+      }
+    }
+  };
 
   useEffect(() => {
     const isVat = localStorage.getItem('tareza_vat_enabled') === 'true';
@@ -153,44 +286,49 @@ export default function POS() {
             ]);
           }
           
-          // Setup realtime subscription for products
-          const channel = supabase.channel('public:products')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, payload => {
-               Promise.all([
-                 supabase.from('products').select('*'),
-                 Promise.resolve(supabase.from('inventory').select('*')).catch(() => ({ data: [] }))
-               ]).then(([pRes, iRes]) => {
-                  const data = pRes.data || [];
-                  const invData = iRes.data || [];
-                  if (data && data.length > 0) {
-                     const updatedProducts = data.map(p => {
-                       const productInventory = invData.filter((i: any) => i.product_id === p.id);
-                       const totalStock = productInventory.reduce((acc: number, cur: any) => acc + (cur.quantity || 0), 0);
-                       return {
-                         id: p.id,
-                         name: p.name || 'Unnamed',
-                         barcode: p.barcode || '',
-                         sku: p.sku || '',
-                         retailPrice: p.retail_price || p.retailPrice || 0,
-                         wholesalePrice: p.wholesale_price || p.wholesalePrice || 0,
-                         taxClass: p.tax_class || p.taxClass || 'standard',
-                         category: p.category_id || p.category || 'all',
-                         imageUrl: '', 
-                         stock: totalStock
-                       };
-                     });
-                     setProducts(updatedProducts);
-                     saveLocalProducts(updatedProducts);
-                  } else {
-                    setProducts([]);
-                    saveLocalProducts([]);
-                  }
-               });
-            })
+          const refreshPOSProducts = () => {
+             Promise.all([
+               supabase.from('products').select('*'),
+               Promise.resolve(supabase.from('inventory').select('*')).catch(() => ({ data: [] }))
+             ]).then(([pRes, iRes]) => {
+                const data = pRes.data || [];
+                const invData = iRes.data || [];
+                if (data && data.length > 0) {
+                   const updatedProducts = data.map(p => {
+                     const productInventory = invData.filter((i: any) => i.product_id === p.id);
+                     const totalStock = productInventory.reduce((acc: number, cur: any) => acc + (cur.quantity || 0), 0);
+                     return {
+                       id: p.id,
+                       name: p.name || 'Unnamed',
+                       barcode: p.barcode || '',
+                       sku: p.sku || '',
+                       retailPrice: p.retail_price || p.retailPrice || 0,
+                       wholesalePrice: p.wholesale_price || p.wholesalePrice || 0,
+                       taxClass: p.tax_class || p.taxClass || 'standard',
+                       category: p.category_id || p.category || 'all',
+                       imageUrl: '', 
+                       stock: totalStock
+                     };
+                   });
+                   setProducts(updatedProducts);
+                   saveLocalProducts(updatedProducts);
+                } else {
+                  setProducts([]);
+                  saveLocalProducts([]);
+                }
+             }).catch(err => {
+                console.error("Failed to refresh POS products dynamically:", err);
+             });
+          };
+
+          // Setup realtime subscription for products and inventory changes
+          const channel = supabase.channel('public:pos_sync')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, refreshPOSProducts)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, refreshPOSProducts)
             .subscribe();
             
           unsubscribeProducts = () => {
-            supabase.removeChannel(channel);
+             supabase.removeChannel(channel);
           };
 
           // Initial load from Supabase / local storage resolution
@@ -321,13 +459,14 @@ export default function POS() {
           const { supabase } = await import('../lib/supabaseClient');
 
           const { data: userData } = await supabase.auth.getUser();
-          let businessId = '';
-          let branchId = '';
-          if (userData?.user) {
+          let businessId = activeSession?.business_id || '';
+          let branchId = activeSession?.branch_id || '';
+
+          if (userData?.user && (!businessId || !branchId || branchId === 'default_branch')) {
             const { data: businessData } = await supabase.from('business_users').select('business_id, branch_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
-            if (businessData?.business_id) {
-              businessId = businessData.business_id;
-              branchId = businessData.branch_id || '';
+            if (businessData) {
+              if (!businessId) businessId = businessData.business_id || '';
+              if (!branchId || branchId === 'default_branch') branchId = businessData.branch_id || '';
             }
           }
 
@@ -350,18 +489,9 @@ export default function POS() {
             branchId = '00000000-0000-0000-0000-000000000000';
           }
 
-          let customerNameVal = 'Walk-In Customer';
-          if (sale.customerId) {
-            const { data: custVal } = await supabase.from('customers').select('name').eq('id', sale.customerId).maybeSingle();
-            if (custVal?.name) {
-              customerNameVal = custVal.name;
-            }
-          }
-
           const salePayload: any = {
              receipt_number: sale.receiptNumber,
              receiptNumber: sale.receiptNumber,
-             customerName: customerNameVal,
              total: sale.total,
              vat_total: sale.vatTotal,
              vatTotal: sale.vatTotal,
@@ -760,37 +890,33 @@ export default function POS() {
           
           <div className="relative z-20">
             <div className="relative flex-1 group">
-              <Search className="absolute left-4 top-3 h-5 w-5 text-zinc-400 group-focus-within:text-primary transition-colors" />
+              <Search className="absolute left-3.5 top-2.5 h-4.5 w-4.5 text-zinc-400 group-focus-within:text-primary transition-colors" />
               <Input 
                 ref={searchInputRef}
                 placeholder="Search products by name, SKU, or scan barcode (F2)..." 
-                className="pl-12 h-12 text-base shadow-sm font-sans border-zinc-200 focus-visible:ring-primary focus-visible:border-primary rounded-xl transition-all bg-white"
+                className="pl-10 h-10 text-sm shadow-sm font-sans border-zinc-200 focus-visible:ring-primary focus-visible:border-primary rounded-xl transition-all bg-white"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
-              <Button size="icon" variant="ghost" className="absolute right-2 top-1 h-10 w-10 text-zinc-400 hover:text-zinc-600">
-                <Barcode className="h-5 w-5" />
+              <Button size="icon" variant="ghost" className="absolute right-1.5 top-0.5 h-9 w-9 text-zinc-400 hover:text-zinc-650">
+                <Barcode className="h-4 w-4" />
               </Button>
             </div>
             
             {/* Categories */}
-            <div className="flex gap-2 mt-4 overflow-x-auto pb-2 scrollbar-hide">
+            <div className="flex gap-1.5 mt-2 overflow-x-auto pb-1.5 scrollbar-hide">
               {categories.map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => setActiveCategory(cat.id)}
-                  className={`flex flex-col items-center justify-center min-w-[100px] py-3 px-4 rounded-xl border transition-all duration-200 ${
+                  className={`flex items-center gap-1.5 py-1 px-3.5 rounded-lg border text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
                     activeCategory === cat.id 
                     ? 'border-primary bg-primary/5 text-primary shadow-sm' 
                     : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50'
                   }`}
                 >
-                  <div className={`mb-2 p-2 rounded-full ${
-                    activeCategory === cat.id ? 'bg-primary/20 text-primary' : 'bg-zinc-100 text-zinc-500'
-                  }`}>
-                    {cat.icon}
-                  </div>
-                  <span className="text-xs font-semibold whitespace-nowrap">{cat.name}</span>
+                  <span className="scale-75 text-zinc-400 opacity-80">{cat.icon}</span>
+                  <span>{cat.name}</span>
                 </button>
               ))}
             </div>
@@ -798,8 +924,8 @@ export default function POS() {
         </div>
 
         {/* Product Grid Area */}
-        <ScrollArea className="flex-1 bg-zinc-50/50 p-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-24">
+        <ScrollArea className="flex-1 bg-zinc-50/50 p-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-2 pb-16">
             {filteredProducts.map((product) => {
               const bgColors = ['bg-rose-100 text-rose-600', 'bg-blue-100 text-blue-600', 'bg-emerald-100 text-emerald-600', 'bg-amber-100 text-amber-600', 'bg-purple-100 text-purple-600', 'bg-indigo-100 text-indigo-600', 'bg-cyan-100 text-cyan-600'];
               const colorClass = bgColors[product.name.charCodeAt(0) % bgColors.length];
@@ -809,72 +935,67 @@ export default function POS() {
               return (
               <div 
                 key={product.id}
-                className="group relative bg-white border border-zinc-200 rounded-2xl overflow-hidden hover:shadow-md transition-all flex flex-col hover:border-primary/50"
+                onClick={() => addToCart(product, 1, 'retail')}
+                className="group relative bg-white border border-zinc-200 rounded-xl overflow-hidden hover:shadow-sm transition-all flex flex-col cursor-pointer hover:border-primary/50"
               >
-                <div className={`h-32 relative overflow-hidden flex items-center justify-center ${colorClass}`}>
-                  <Package className="w-10 h-10 group-hover:scale-110 transition-transform duration-300 opacity-80" />
+                <div className={`h-11 relative overflow-hidden flex items-center justify-center shrink-0 ${colorClass}`}>
+                  <Package className="w-5 h-5 group-hover:scale-110 transition-transform duration-300 opacity-80" />
                   {product.taxClass !== 'standard' && (
-                    <Badge variant="secondary" className="absolute top-2 left-2 text-[10px] bg-white/90 backdrop-blur-sm border-zinc-200 text-zinc-700">
+                    <Badge variant="secondary" className="absolute top-1 left-1 text-[8px] h-3 px-1 bg-white/90 backdrop-blur-sm border-zinc-200 text-zinc-700">
                       {product.taxClass}
                     </Badge>
                   )}
                   {hasPack && (
-                    <Badge className="absolute top-2 right-2 text-[10px] bg-purple-600 text-white font-semibold shadow-sm border-0">
-                      Pack of {pSize} Available
+                    <Badge className="absolute top-1 right-1 text-[8px] h-3 px-1 bg-purple-600 text-white font-semibold shadow-sm border-0">
+                      Pack ({pSize})
                     </Badge>
                   )}
                 </div>
-                <div className="p-3 flex flex-col flex-1">
-                  <h4 className="font-semibold text-sm line-clamp-2 leading-tight mb-1">{product.name}</h4>
-                  <p className="text-xs text-zinc-500 font-mono mb-1">{product.sku}</p>
+                <div className="p-1.5 flex flex-col flex-1">
+                  <h4 className="font-semibold text-xs text-zinc-800 line-clamp-2 leading-tight min-h-[1.75rem] mb-0.5">{product.name}</h4>
+                  <p className="text-[10px] text-zinc-400 font-mono leading-none mb-1">{product.sku}</p>
                   
                   {product.stock !== undefined && (
-                    <div className="flex flex-col gap-0.5 mb-2">
+                    <div className="flex flex-col gap-0.5 mb-1">
                       <div className="flex items-center gap-1">
-                        <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Stock:</span>
-                        <span className={`text-xs font-mono font-bold ${(product.stock || 0) > 0 ? ((product.stock || 0) <= pSize * 2 ? 'text-amber-500' : 'text-emerald-505 font-bold') : 'text-rose-500'}`}>
-                          {product.stock} units
+                        <span className={`text-[10px] font-mono font-medium ${(product.stock || 0) > 0 ? 'text-zinc-500' : 'text-rose-500 font-bold'}`}>
+                          Stock: {product.stock}
                         </span>
                       </div>
-                      {hasPack && (
-                        <span className="text-[10px] text-zinc-500 font-medium">
-                          (= {Math.floor(product.stock / pSize)} packs & {product.stock % pSize} units)
-                        </span>
-                      )}
                     </div>
                   )}
                   
                   {hasPack ? (
-                    <div className="space-y-1.5 mt-auto pt-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="space-y-1 mt-auto pt-1" onClick={(e) => e.stopPropagation()}>
                       <Button 
                         size="sm" 
                         variant="outline"
-                        className="w-full text-xs h-8 flex justify-between px-2 text-zinc-700 border-zinc-200 hover:bg-zinc-50 hover:text-primary transition-all rounded-lg"
+                        className="w-full text-[10px] h-6 flex justify-between px-1.5 text-zinc-700 border-zinc-200 hover:bg-zinc-50 hover:text-primary transition-all rounded-md"
                         onClick={() => addToCart(product, 1, 'retail')}
                       >
-                        <span className="font-medium text-[11px]">Add Unit</span>
-                        <span className="font-mono font-bold text-[11px]">${product.retailPrice.toFixed(2)}</span>
+                        <span>+1 Unit</span>
+                        <span className="font-mono font-bold">${product.retailPrice.toFixed(2)}</span>
                       </Button>
                       <Button 
                         size="sm" 
-                        className="w-full text-xs h-8 flex justify-between px-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-all rounded-lg"
+                        className="w-full text-[10px] h-6 flex justify-between px-1.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-all rounded-md"
                         onClick={() => addToCart(product, 1, 'wholesale')}
                       >
-                        <span className="text-[11px]">Add Pack ({pSize})</span>
-                        <span className="font-mono font-bold text-[11px]">${product.wholesalePrice.toFixed(2)}</span>
+                        <span>+Pack</span>
+                        <span className="font-mono font-bold">${product.wholesalePrice.toFixed(2)}</span>
                       </Button>
                     </div>
                   ) : (
-                    <div className="mt-auto pt-2 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
-                      <span className="font-bold text-primary text-base">
+                    <div className="mt-auto pt-1 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
+                      <span className="font-bold text-xs text-primary leading-none">
                         ${product.retailPrice.toFixed(2)}
                       </span>
                       <Button 
                         size="icon" 
-                        className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90 text-white"
+                        className="h-5 w-5 rounded-full bg-primary hover:bg-primary/90 text-white"
                         onClick={() => addToCart(product, 1, 'retail')}
                       >
-                        <span className="text-lg leading-none mt-[-2px]">+</span>
+                        <span className="text-xs leading-none">+</span>
                       </Button>
                     </div>
                   )}
@@ -894,41 +1015,44 @@ export default function POS() {
         </ScrollArea>
       </div>
 
-      {/* RIGHT COLUMN: Cart List, Totals & Payment (approx 400px fixed or flex ratio) */}
-      <div className="w-full lg:w-[400px] xl:w-[460px] flex flex-col gap-4">
+      {/* RIGHT COLUMN: Customer, Cart List, Totals & Odoo Numpad Panel */}
+      <div className="w-full lg:w-[400px] xl:w-[460px] flex flex-col gap-2 h-full overflow-hidden justify-between">
         
         {/* Customer Panel */}
         <Card className="border-zinc-200 shadow-sm shrink-0">
-          <CardContent className="p-4">
+          <CardContent className="p-2">
             {currentCustomer ? (
               <div className="flex justify-between items-center">
                 <div>
-                  <h3 className="font-bold text-zinc-800">{currentCustomer.name}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant="outline" className={currentCustomer.balance > 0 ? "text-amber-600 border-amber-200 bg-amber-50" : "text-emerald-600 border-emerald-200 bg-emerald-50"}>
+                  <h3 className="font-bold text-xs text-zinc-800 flex items-center gap-1">
+                    <User className="w-3 h-3 text-zinc-500" />
+                    {currentCustomer.name}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <Badge variant="outline" className={`text-[10px] py-0 px-1 border-0 h-4.5 font-semibold ${currentCustomer.balance > 0 ? "text-amber-600 bg-amber-50" : "text-emerald-600 bg-emerald-50"}`}>
                       Bal: ${currentCustomer.balance.toFixed(2)}
                     </Badge>
                     {currentCustomer.creditLimit > 0 && (
-                      <span className="text-xs text-zinc-500">Limit: ${currentCustomer.creditLimit.toFixed(2)}</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">Limit: ${currentCustomer.creditLimit.toFixed(2)}</span>
                     )}
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => setCurrentCustomer(null)} className="h-8 w-8 text-zinc-400 hover:text-zinc-600">
-                  <X className="h-4 w-4" />
+                <Button variant="ghost" size="icon" onClick={() => setCurrentCustomer(null)} className="h-6 w-6 text-zinc-400 hover:text-zinc-650">
+                  <X className="h-3.5 h-3.5" />
                 </Button>
               </div>
             ) : (
               <Dialog>
                 <DialogTrigger asChild>
-                  <Button variant="outline" className="w-full border-dashed border-zinc-300 text-zinc-500 hover:text-primary hover:border-primary hover:bg-zinc-50">
-                    <UserPlus className="w-4 h-4 mr-2" /> Add Customer to Sale
+                  <Button variant="outline" className="w-full h-8 text-xs border-dashed border-zinc-300 text-zinc-500 hover:text-primary hover:border-primary hover:bg-zinc-50 bg-white">
+                    <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Select Customer
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Select Customer</DialogTitle>
                   </DialogHeader>
-                  <div className="space-y-2 mt-4">
+                  <div className="space-y-2 mt-4 max-h-[60vh] overflow-y-auto">
                     {customers.map(c => (
                       <div key={c.id} className="flex justify-between items-center p-3 border rounded-lg hover:bg-zinc-50 cursor-pointer" onClick={() => setCurrentCustomer(c)}>
                         <span className="font-medium">{c.name}</span>
@@ -942,148 +1066,341 @@ export default function POS() {
           </CardContent>
         </Card>
 
-        {/* Global toggle removed as per request of selecting packs with its own price */}
-
-        {/* Cart items list */}
-        <Card className="border-zinc-200 shadow-sm flex-1 min-h-[150px] flex flex-col pt-2">
+        {/* Dynamic Interactive Shopping Cart items list container */}
+        <Card className="border-zinc-200 shadow-sm flex-1 min-h-[140px] max-h-[290px] flex flex-col pt-1.5 bg-white pb-1.5 rounded-xl overflow-hidden">
           {cart.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-zinc-400 p-4">
-              <ShoppingCart className="h-8 w-8 text-zinc-300 mb-2" />
-              <p className="text-sm">Cart is empty</p>
+            <div className="flex-grow flex flex-col items-center justify-center text-zinc-400 p-3">
+              <ShoppingCart className="h-7 w-7 text-zinc-300 mb-1.5" />
+              <p className="text-xs font-semibold">Cart is currently empty</p>
             </div>
           ) : (
-            <ScrollArea className="flex-1 px-3 pb-2">
-              <div className="space-y-2">
-                {cart.map((item, index) => (
-                  <div key={`${item.id}-${index}`} className="flex justify-between items-center group">
-                    <div className="flex flex-col flex-1">
-                      <h4 className="text-[13px] font-bold leading-none mb-1 text-zinc-800 line-clamp-1 pr-2">{item.product.name}</h4>
-                      <div className="flex items-center gap-2 text-[11px]">
-                        <span className="font-mono text-zinc-650">${item.unitPrice.toFixed(2)}</span>
-                        {getPackSize(item.product.sku) > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newTier = item.tier === 'wholesale' ? 'retail' : 'wholesale';
-                              setItemPricingTier(item.id, newTier);
-                              toast.success(`Switched ${item.product.name} to ${newTier === 'wholesale' ? 'Pack' : 'Unit'} pricing`);
-                            }}
-                            className={`px-1.5 py-0.5 rounded text-[8px] font-semibold border transition-all uppercase tracking-wider ${
-                              item.tier === 'wholesale' 
-                                ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" 
-                                : "bg-blue-50 text-blue-705 border-blue-200 hover:bg-blue-100"
-                            }`}
-                          >
-                            {item.tier === 'wholesale' ? `Pack (${getPackSize(item.product.sku)} units)` : 'Unit pricing'}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center bg-zinc-100 rounded-lg p-0.5 border border-zinc-200 shrink-0">
-                        <Button variant="ghost" size="icon" className="h-5 w-5 text-zinc-600 hover:bg-white hover:shadow-sm rounded-md" onClick={() => updateQuantity(item.id, item.quantity - 1)}>-</Button>
-                        <span className="text-[11px] w-5 text-center font-bold font-mono text-zinc-800">{item.quantity}</span>
-                        <Button variant="ghost" size="icon" className="h-5 w-5 text-zinc-600 hover:bg-white hover:shadow-sm rounded-md" onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</Button>
-                      </div>
-                      
-                      <div className="flex flex-col items-end min-w-[50px]">
-                        <span className="font-bold text-[13px] font-mono text-zinc-900">${(item.subtotal + item.vatAmount).toFixed(2)}</span>
-                      </div>
+            <div className="flex flex-col h-full overflow-hidden">
+              <ScrollArea className="flex-1 px-2.5">
+                <div className="space-y-1">
+                  {cart.map((item, index) => {
+                    const isSelected = selectedCartItemId === item.id;
+                    return (
+                      <div 
+                        key={`${item.id}-${index}`} 
+                        onClick={() => {
+                          setSelectedCartItemId(item.id);
+                          setIsNewInput(true);
+                        }}
+                        className={`flex justify-between items-center p-1.5 rounded-lg border transition-all cursor-pointer group ${
+                          isSelected 
+                            ? 'border-primary ring-1 ring-primary/30 bg-primary/[0.02]' 
+                            : 'border-zinc-100 hover:border-zinc-200 bg-white'
+                        }`}
+                      >
+                        <div className="flex flex-col flex-1 min-w-0 pr-1">
+                          <h4 className={`text-xs font-bold leading-tight line-clamp-1 ${isSelected ? 'text-primary' : 'text-zinc-800'}`}>
+                            {item.product.name}
+                          </h4>
+                          <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-zinc-500 font-mono">
+                            <span>${item.unitPrice.toFixed(2)}</span>
+                            {item.discount && item.discount.value > 0 && (
+                              <span className="text-rose-600 font-semibold bg-rose-50 px-1 rounded text-[8px]">
+                                -{item.discount.value}%
+                              </span>
+                            )}
+                            {getPackSize(item.product.sku) > 1 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newTier = item.tier === 'wholesale' ? 'retail' : 'wholesale';
+                                  setItemPricingTier(item.id, newTier);
+                                  toast.success(`Switched ${item.product.name} pricing`);
+                                }}
+                                className={`px-1 rounded-[3px] text-[7px] font-bold border transition-all uppercase leading-none h-4 flex items-center ${
+                                  item.tier === 'wholesale' 
+                                    ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" 
+                                    : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-105"
+                                }`}
+                              >
+                                {item.tier === 'wholesale' ? 'Pack' : 'Unit'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          {/* Numeric input for manual typed quantity as requested by the user */}
+                          <div className="flex items-center gap-1">
+                            <input 
+                              type="number"
+                              value={item.quantity === 0 ? '' : item.quantity}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                if (!isNaN(val) && val >= 0) {
+                                  updateQuantity(item.id, val);
+                                } else if (e.target.value === '') {
+                                  updateQuantity(item.id, 0);
+                                }
+                              }}
+                              onClick={() => {
+                                setSelectedCartItemId(item.id);
+                                setIsNewInput(true);
+                              }}
+                              className="w-10 h-6 text-center text-xs font-black font-mono border border-zinc-250 bg-zinc-50 rounded focus:bg-white text-zinc-900 p-0 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                              min="0"
+                            />
+                            <div className="flex flex-col gap-0.5">
+                              <button 
+                                className="h-3 w-3 flex items-center justify-center bg-zinc-100 text-zinc-700 text-[8px] hover:bg-zinc-250 rounded border border-zinc-200"
+                                onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                              >
+                                +
+                              </button>
+                              <button 
+                                className="h-3 w-3 flex items-center justify-center bg-zinc-100 text-zinc-700 text-[8px] hover:bg-zinc-250 rounded border border-zinc-200"
+                                onClick={() => updateQuantity(item.id, Math.max(0, item.quantity - 1))}
+                              >
+                                -
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <div className="text-right min-w-[50px]">
+                            <span className="font-bold text-xs font-mono text-zinc-900">${(item.subtotal + item.vatAmount).toFixed(2)}</span>
+                          </div>
 
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={() => removeFromCart(item.id)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-6 w-6 text-red-400 hover:text-red-650 hover:bg-red-50 rounded" 
+                            onClick={() => removeFromCart(item.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+              
+              <div className="text-[9px] text-zinc-500 text-center select-none font-medium mt-1 leading-none py-1 border-t border-zinc-100 bg-zinc-50/70 rounded-b-xl flex items-center justify-center gap-1.5 shrink-0">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Select cart row to alter Qty/Disc/Price using the Numpad.
               </div>
-            </ScrollArea>
+            </div>
           )}
         </Card>
 
-        {/* Totals Panel */}
-        <Card className="shrink-0 flex flex-col border-zinc-200 shadow-sm overflow-hidden">
-          <CardContent className="p-0 flex flex-col h-full">
-            <div className="flex-1 p-3 space-y-2 bg-white">
-              <div className="flex justify-between text-zinc-600 items-baseline">
-                <span className="text-xs">Subtotal ({cart.length} items)</span>
-                <span className="font-mono text-sm font-medium">${totals.subtotal.toFixed(2)}</span>
-              </div>
-              
-              {totals.discount > 0 && (
-                <div className="flex justify-between text-amber-600 items-baseline">
-                  <span className="text-xs">Discount</span>
-                  <span className="font-mono text-sm font-medium">-${totals.discount.toFixed(2)}</span>
-                </div>
-              )}
-              
-              {vatEnabled && (
-                <div className="flex justify-between text-zinc-650 items-baseline group">
-                  <span className="text-xs flex items-center">
-                    VAT (15%)
-                  </span>
-                  <span className="font-mono text-sm font-medium">${totals.vat.toFixed(2)}</span>
-                </div>
-              )}
-
-              <Separator className="my-1" />
-
-              <div className="pt-1">
-                <div className="flex justify-between items-end">
-                  <span className="text-base font-semibold text-secondary">Total</span>
-                  <span className="text-3xl font-extrabold tracking-tight font-mono text-primary">${totals.total.toFixed(2)}</span>
-                </div>
-              </div>
+        {/* Compact Totals Board Panel */}
+        <div className="bg-white border border-zinc-200 rounded-xl p-2.5 text-zinc-800 shadow-sm shrink-0">
+          <div className="flex justify-between items-baseline text-xs text-zinc-500 mb-0.5">
+            <span>Subtotal</span>
+            <span className="font-mono font-semibold">${totals.subtotal.toFixed(2)}</span>
+          </div>
+          {totals.discount > 0 && (
+            <div className="flex justify-between items-baseline text-xs text-amber-600 mb-0.5">
+              <span>Total Discount</span>
+              <span className="font-mono font-semibold">-${totals.discount.toFixed(2)}</span>
             </div>
+          )}
+          {vatEnabled && (
+            <div className="flex justify-between items-baseline text-xs text-zinc-500 mb-0.5">
+              <span>VAT (15%)</span>
+              <span className="font-mono font-semibold">${totals.vat.toFixed(2)}</span>
+            </div>
+          )}
+          <Separator className="my-1" />
+          <div className="flex justify-between items-end">
+            <span className="text-xs font-bold text-zinc-700">Total to Pay</span>
+            <span className="text-xl font-black font-mono text-primary leading-none">
+              ${totals.total.toFixed(2)}
+            </span>
+          </div>
+        </div>
 
-            <div className="p-3 bg-zinc-50 border-t border-zinc-200 space-y-2">
-              <div className="grid grid-cols-3 gap-2">
-                <Button variant="outline" className="bg-white h-10 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-semibold text-sm" onClick={clearCart} disabled={cart.length === 0}>
-                  Cancel
-                </Button>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" className="bg-white h-10 font-semibold text-sm" disabled={cart.length === 0}>
-                      <Tag className="w-3.5 h-3.5 mr-1 sm:mr-2" />
-                      <span className="hidden sm:inline">Discount</span>
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Apply Global Discount</DialogTitle>
-                    </DialogHeader>
-                    <div className="grid grid-cols-2 gap-4 mt-4">
-                      <Button variant="outline" className="h-12 text-base" onClick={() => applyGlobalDiscount({ type: 'percentage', value: 5 })}>5% Off</Button>
-                      <Button variant="outline" className="h-12 text-base" onClick={() => applyGlobalDiscount({ type: 'percentage', value: 10 })}>10% Off</Button>
-                      <Button variant="outline" className="h-12 text-base" onClick={() => applyGlobalDiscount({ type: 'fixed', value: 5 })}>$5 Off</Button>
-                      <Button variant="outline" className="h-12 text-base text-red-500" onClick={() => applyGlobalDiscount({ type: 'percentage', value: 0 })}>Remove Discount</Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-                <Button variant="outline" className="bg-white h-12 border-zinc-200 font-semibold" onClick={() => toast.info('Select order from history to refund.')}>
-                  Refund
-                </Button>
-              </div>
-              
-              <div className="grid grid-cols-1 gap-2">
-                <Button variant="outline" className="bg-white h-10 border-zinc-200 text-zinc-700 font-medium text-xs sm:text-sm" onClick={() => navigate('/cash-management')}>
-                   Open Drawer (Cash Management)
-                </Button>
-              </div>
-              
+        {/* Odoo POS Numpad Actions Widget */}
+        <div className="grid grid-cols-12 gap-1.5 p-1.5 bg-zinc-50/50 border border-zinc-200 rounded-xl shadow-inner shrink-0">
+          
+          {/* Left Part: 4x4 keypad matrix (takes 8 of 12 width) */}
+          <div className="col-span-8 grid grid-cols-4 gap-1">
+            <Button 
+              variant="outline" 
+              onClick={() => handleNumpadKey('1')} 
+              className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
+            >
+              1
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => handleNumpadKey('2')} 
+              className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
+            >
+              2
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => handleNumpadKey('3')} 
+              className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
+            >
+              3
+            </Button>
+            <Button 
+              type="button"
+              variant={numpadMode === 'qty' ? 'default' : 'outline'} 
+              onClick={() => { setNumpadMode('qty'); setIsNewInput(true); }}
+              className={`h-11 text-[10px] font-extrabold uppercase leading-none rounded-lg border ${
+                numpadMode === 'qty' ? 'bg-primary text-white border-primary shadow' : 'bg-white text-zinc-650 border-zinc-200'
+              }`}
+            >
+              Qty
+            </Button>
+
+            <Button 
+              variant="outline" 
+              onClick={() => handleNumpadKey('4')} 
+              className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
+            >
+              4
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => handleNumpadKey('5')} 
+              className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
+            >
+              5
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => handleNumpadKey('6')} 
+              className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
+            >
+              6
+            </Button>
+            <Button 
+              type="button"
+              variant={numpadMode === 'disc' ? 'default' : 'outline'} 
+              onClick={() => { setNumpadMode('disc'); setIsNewInput(true); }}
+              className={`h-11 text-[10px] font-extrabold uppercase leading-none rounded-lg border ${
+                numpadMode === 'disc' ? 'bg-primary text-white border-primary shadow' : 'bg-white text-zinc-650 border-zinc-200'
+              }`}
+              disabled={cart.length === 0}
+            >
+              % Disc
+            </Button>
+
+            <Button 
+              variant="outline" 
+              onClick={() => handleNumpadKey('7')} 
+              className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
+            >
+              7
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => handleNumpadKey('8')} 
+              className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
+            >
+              8
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => handleNumpadKey('9')} 
+              className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
+            >
+              9
+            </Button>
+            <Button 
+              type="button"
+              variant={numpadMode === 'price' ? 'default' : 'outline'} 
+              onClick={() => { setNumpadMode('price'); setIsNewInput(true); }}
+              className={`h-11 text-[10px] font-extrabold uppercase leading-none rounded-lg border ${
+                numpadMode === 'price' ? 'bg-primary text-white border-primary shadow' : 'bg-white text-zinc-650 border-zinc-200'
+              }`}
+              disabled={cart.length === 0}
+            >
+              Price
+            </Button>
+
+            <Button 
+              variant="outline" 
+              onClick={() => handleNumpadKey('+/-')} 
+              className="h-10 text-xs font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 rounded-lg shadow-sm"
+            >
+              +/-
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => handleNumpadKey('0')} 
+              className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 rounded-lg shadow-sm"
+            >
+              0
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => handleNumpadKey('.')} 
+              className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 rounded-lg shadow-sm"
+            >
+              .
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => handleNumpadKey('backspace')} 
+              className="h-10 text-base font-bold flex items-center justify-center bg-white hover:bg-rose-50 hover:text-rose-600 border-zinc-200 rounded-lg shadow-sm"
+            >
+              ⌫
+            </Button>
+          </div>
+
+          {/* Right Part: Quick checkout macro blocks (takes 4 of 12 width) */}
+          <div className="col-span-4 flex flex-col gap-1.5 justify-between">
+            <div className="flex gap-1">
               <Button 
-                className="w-full h-12 text-xl font-bold shadow-lg transition-transform active:scale-[0.98] bg-emerald-600 text-white hover:bg-emerald-700 relative overflow-hidden rounded-xl border border-emerald-700 mt-2"
-                disabled={cart.length === 0} 
-                onClick={() => setShowPayment(true)}
+                variant="outline" 
+                onClick={clearCart} 
+                disabled={cart.length === 0}
+                className="flex-1 h-9 px-1 text-[10px] font-bold text-rose-600 border-rose-200 bg-white hover:bg-rose-50 rounded-lg transition-colors"
+                title="Cancel sale / Clear order items"
               >
-                <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity" />
-                <span className="flex items-center ml-4">Pay Now</span>
-                <span className="absolute right-6 font-mono font-extrabold text-xl">${totals.total.toFixed(2)}</span>
+                Clear
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={parkSale} 
+                disabled={cart.length === 0}
+                className="flex-1 h-9 px-1 text-[10px] font-bold text-zinc-700 border-zinc-200 bg-white hover:bg-zinc-100 rounded-lg transition-all"
+                title="Put items on hold"
+              >
+                Hold
               </Button>
             </div>
-          </CardContent>
-        </Card>
+
+            <div className="grid grid-cols-2 gap-1">
+              <Button 
+                variant="outline" 
+                onClick={() => navigate('/cash-management')} 
+                className="h-9 px-0.5 text-[9px] font-bold text-center border-zinc-200 bg-white leading-tight rounded-lg hover:bg-zinc-105"
+                title="Drawer Control Dashboard"
+              >
+                Cash Control
+              </Button>
+              <Button 
+                type="button"
+                variant="outline" 
+                onClick={() => toast.info('To initiate a refund, please choose from active sales log.')} 
+                className="h-9 px-0.5 text-[9px] font-bold text-zinc-650 border-zinc-200 bg-white rounded-lg hover:bg-zinc-105"
+                title="Order return / customer refund log link"
+              >
+                Refund
+              </Button>
+            </div>
+
+            <Button 
+              onClick={() => setShowPayment(true)} 
+              disabled={cart.length === 0}
+              className="h-[4.25rem] w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm uppercase flex flex-col items-center justify-center gap-1 shadow border border-emerald-700 active:scale-[0.98] transition-transform"
+            >
+              <ShoppingCart className="w-4 h-4 shrink-0" />
+              <span className="tracking-widest">Pay Now</span>
+            </Button>
+          </div>
+        </div>
 
       </div>
 

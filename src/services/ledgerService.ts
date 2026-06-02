@@ -332,7 +332,7 @@ export async function recordStockMovement(
     const calculatedQtyAfter = currentQty + quantityChange;
 
     // Reject negative inventory checkout unless explicitly tolerated (or fallback)
-    if (calculatedQtyAfter < 0 && (type === 'POS_SALE' || type === 'DAMAGE')) {
+    if (calculatedQtyAfter < 0 && type === 'DAMAGE') {
       // Find product details
       const pSnap = await getDoc(doc(db, 'products', productId));
       const pName = pSnap.exists() ? pSnap.data()?.name : 'Product';

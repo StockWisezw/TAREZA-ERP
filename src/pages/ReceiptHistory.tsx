@@ -55,7 +55,7 @@ export default function ReceiptHistory() {
       setBranches(bDataList || []);
 
       const { data: salesData } = await supabase.from('sales')
-        .select('*, sale_items(*, products(*))')
+        .select('*, customer:customers(name), sale_items(*, products(*))')
         .order('created_at', { ascending: false })
         .limit(50);
         
@@ -89,6 +89,7 @@ export default function ReceiptHistory() {
         }
         return {
           ...sale,
+          customerName: (sale as any).customer?.name || (sale as any).customerName || 'Walk-In Customer',
           items: itemsList
         };
       });
@@ -421,7 +422,6 @@ export default function ReceiptHistory() {
         branch_id: branchId || null,
         user_id: userData?.user?.id || null,
         customer_id: selectedCustomerId || null,
-        customerName: customerName,
         receiptNumber: invoiceNumber,
         payments: [{ method: paymentMethod, amount: totalAmountVal }],
         subtotal: subtotalSum,

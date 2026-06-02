@@ -108,14 +108,6 @@ export function SyncManager() {
         if (sale.customerId) {
           salePayload.customer_id = sale.customerId;
           salePayload.customerId = sale.customerId;
-          try {
-            const { data: custVal } = await supabase.from('customers').select('name').eq('id', sale.customerId).maybeSingle();
-            salePayload.customerName = custVal?.name || 'Walk-In Customer';
-          } catch (e) {
-            salePayload.customerName = 'Walk-In Customer';
-          }
-        } else {
-          salePayload.customerName = 'Walk-In Customer';
         }
 
         // Step A: Insert Sale Record

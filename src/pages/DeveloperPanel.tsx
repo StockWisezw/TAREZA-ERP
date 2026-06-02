@@ -10,7 +10,18 @@ import {
   Database, 
   RefreshCw, 
   FileJson, 
-  DownloadCloud 
+  DownloadCloud,
+  Activity,
+  Globe,
+  Key,
+  Wifi,
+  AlertTriangle,
+  Terminal,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
+  Server
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -35,6 +46,163 @@ export default function DeveloperPanel() {
   const [backupLogs, setBackupLogs] = useState<any[]>([]);
   const [backupLoading, setBackupLoading] = useState(false);
   const [triggeringBackup, setTriggeringBackup] = useState(false);
+
+  // Supabase Diagnostics state
+  const [diagLogs, setDiagLogs] = useState<{ timestamp: string; type: 'info' | 'success' | 'warn' | 'error'; message: string }[]>([]);
+  const [diagRunning, setDiagRunning] = useState(false);
+  const [diagStatus, setDiagStatus] = useState<'idle' | 'running' | 'success' | 'warning' | 'error'>('idle');
+  const [revealKey, setRevealKey] = useState(false);
+  const [copiedText, setCopiedText] = useState<string | null>(null);
+
+  const handleCopy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedText(label);
+    setTimeout(() => setCopiedText(null), 2000);
+    toast.success(`${label} copied to clipboard`);
+  };
+
+  const runDiagnostics = async () => {
+    setDiagRunning(true);
+    setDiagStatus('running');
+    const logsList: { timestamp: string; type: 'info' | 'success' | 'warn' | 'error'; message: string }[] = [];
+    
+    const pushLog = (type: 'info' | 'success' | 'warn' | 'error', message: string) => {
+      logsList.push({
+        timestamp: new Date().toLocaleTimeString(),
+        type,
+        message
+      });
+      setDiagLogs([...logsList]);
+    };
+
+    pushLog('info', '================================================');
+    pushLog('info', '🚀 Starting Supabase Network Connection Diagnostics...');
+    pushLog('info', `Current local time: ${new Date().toISOString()}`);
+    pushLog('info', `Local Network Online Status (navigator.onLine): ${navigator.onLine ? 'ONLINE' : 'OFFLINE'}`);
+    pushLog('info', '================================================');
+
+    if (!navigator.onLine) {
+      pushLog('error', '❌ Browser reports OFFLINE. Active network interfaces might be disabled.');
+    } else {
+      pushLog('success', '✅ Wi-Fi / Local Network is active and reporting online status.');
+    }
+
+    pushLog('info', '🔍 Step 1: Loading Supabase configuration keys from environment...');
+    const currentUrl = import.meta.env.VITE_SUPABASE_URL || '';
+    const currentKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+    pushLog('info', `VITE_SUPABASE_URL: "${currentUrl || 'NOT DEFINED'}"`);
+    pushLog('info', `VITE_SUPABASE_ANON_KEY: "${currentKey ? (currentKey.substring(0, 8) + '...' + currentKey.substring(currentKey.length - 8)) : 'NOT DEFINED'}"`);
+
+    let isValid = true;
+    if (!currentUrl || currentUrl.includes('your-supabase-project') || currentUrl.includes('your-supabase-url')) {
+      pushLog('error', '❌ Supabase URL matches the default placeholder or is empty. Please set a valid your-project.supabase.co domain.');
+      isValid = false;
+    } else if (!currentUrl.startsWith('https://')) {
+      pushLog('warn', '⚠️ VITE_SUPABASE_URL should enter with secure "https://" protocol prefix.');
+      isValid = false;
+    } else {
+      pushLog('success', '✅ Connection URL prefix syntax is valid.');
+    }
+
+    if (!currentKey || currentKey === 'your-anon-key' || currentKey === 'your-anon-key-here') {
+      pushLog('error', '❌ Supabase Anon Key is empty or matches default placeholder value.');
+      isValid = false;
+    } else if (currentKey.length < 30) {
+      pushLog('warn', '⚠️ Supabase Anon Key appears shorter than typical JWT key configurations.');
+      isValid = false;
+    } else {
+      pushLog('success', '✅ Anonymous API payload key was detected.');
+    }
+
+    if (!isValid) {
+      pushLog('error', '❌ Pre-flight checks failed. Aborting API queries due to configuration mismatch.');
+      setDiagStatus('warning');
+      setDiagRunning(false);
+      return;
+    }
+
+    pushLog('info', '📡 Step 2: Testing host routing / raw IP ping with timed-out trigger...');
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), 6000);
+    const apiPingUrl = `${currentUrl}/rest/v1/?apikey=${currentKey}`;
+    const startTime = performance.now();
+
+    try {
+      pushLog('info', `Sending HTTP GET request to remote target: ${currentUrl}/rest/v1/`);
+      const response = await fetch(apiPingUrl, {
+        method: 'GET',
+        signal: abortController.signal,
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      clearTimeout(timeout);
+      const delay = Math.round(performance.now() - startTime);
+      pushLog('info', `HTTP Response status: ${response.status} ${response.statusText}`);
+      pushLog('info', `Direct API ping completed within ${delay}ms.`);
+
+      if (response.status === 200 || response.status === 204 || response.status === 401) {
+        pushLog('success', `✅ Direct REST entrypoint is reachable. Connection delay: ${delay}ms.`);
+        if (response.status === 401) {
+          pushLog('warn', '⚠️ HTTP 401 Unauthorized: Target is reachable, but token payload is rejected. Verify VITE_SUPABASE_ANON_KEY.');
+        }
+      } else {
+        pushLog('warn', `⚠️ Target responded with unexpected HTTP ${response.status}.`);
+      }
+    } catch (err: any) {
+      clearTimeout(timeout);
+      const delay = Math.round(performance.now() - startTime);
+
+      if (err.name === 'AbortError') {
+        pushLog('error', `❌ TIMEOUT ERROR (net::ERR_CONNECTION_TIMED_OUT) occurred after ${delay}ms!`);
+        pushLog('error', '👉 CAUSE A: Your Supabase DB Project is Paused or Stopped. Visit the Supabase Dashboard to unpause it.');
+        pushLog('error', '👉 CAUSE B: Corporate firewalls or internet service provider restrictions are blocking port 443 routes.');
+        pushLog('error', '👉 CAUSE C: Severe typo in VITE_SUPABASE_URL causing a routing blackhole.');
+      } else {
+        pushLog('error', `❌ Connection failure: ${err.message || String(err)}`);
+        pushLog('error', '👉 CAUSE A: CORS limitation. Browser blocked the preflight request.');
+        pushLog('error', '👉 CORS Fix: Open the Supabase Dashboard -> Settings -> API, find "Allowed Web Origins", and add:');
+        pushLog('error', `   • ${window.location.origin}`);
+        pushLog('error', '👉 CAUSE B: Bad SSL/TLS handshake or DNS lookup refusal.');
+      }
+    }
+
+    pushLog('info', '🛰️ Step 3: Verifying relational query parsing through Client wrapper...');
+    const dbQueryStart = performance.now();
+    try {
+      const { data, error } = await supabase.from('businesses').select('*').limit(1);
+      const dbQueryDelay = Math.round(performance.now() - dbQueryStart);
+
+      if (error) {
+        pushLog('error', `❌ Client select query failed after ${dbQueryDelay}ms: ${error.message} (Code: ${error.code || 'None'})`);
+        if (error.message?.includes('fetch') || error.message?.includes('Failed to fetch')) {
+          pushLog('error', '👉 The error is "Failed to fetch". This points directly to either CORS Blocking or DNS failures inside your browser.');
+        }
+      } else {
+        pushLog('success', `✅ Database query successful! Selected 1 row from "businesses" table in ${dbQueryDelay}ms.`);
+        pushLog('info', `Rows fetched payload context: ${data ? JSON.stringify(data.length) : '0'}`);
+      }
+    } catch (err: any) {
+      const dbQueryDelay = Math.round(performance.now() - dbQueryStart);
+      pushLog('error', `❌ Exception thrown during client query run after ${dbQueryDelay}ms: ${err.message || String(err)}`);
+    }
+
+    pushLog('info', '================================================');
+    pushLog('info', '🏆 Connection Diagnostics completed.');
+    pushLog('info', '================================================');
+
+    const hasErrors = logsList.some(l => l.type === 'error');
+    const hasWarnings = logsList.some(l => l.type === 'warn');
+    if (hasErrors) {
+      setDiagStatus('error');
+    } else if (hasWarnings) {
+      setDiagStatus('warning');
+    } else {
+      setDiagStatus('success');
+    }
+    setDiagRunning(false);
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,40 +285,250 @@ export default function DeveloperPanel() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center space-y-2">
-            <div className="mx-auto bg-primary/10 p-3 rounded-full w-16 h-16 flex items-center justify-center">
-              <ShieldCheck className="w-8 h-8 text-primary" />
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
+        {/* Navigation bar on unauthenticated layout to change theme */}
+        <nav className="w-full border-b bg-background px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <ShieldCheck className="w-5 h-5 text-primary" />
+            <span className="text-base font-bold">Tareza Developer Portal</span>
+          </div>
+          <ThemeToggle />
+        </nav>
+
+        <div className="flex-1 flex items-center justify-center p-4 md:p-8">
+          <div className="max-w-6xl w-full grid lg:grid-cols-12 gap-8 items-start">
+            
+            {/* Left Column: Sign In Form */}
+            <div className="lg:col-span-5 space-y-4">
+              <Card className="shadow-lg border-zinc-250 dark:border-zinc-800">
+                <CardHeader className="text-center space-y-2">
+                  <div className="mx-auto bg-primary/10 p-3 rounded-full w-14 h-14 flex items-center justify-center">
+                    <ShieldCheck className="w-7 h-7 text-primary" />
+                  </div>
+                  <CardTitle className="text-xl">Developer Sign In</CardTitle>
+                  <CardDescription>Enter admin credentials to authenticate the session</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-zinc-650 dark:text-zinc-400">Username</label>
+                      <Input 
+                         type="email" 
+                         value={email} 
+                         onChange={e => setEmail(e.target.value)} 
+                         placeholder="admin@tarezaerp.co.zw" 
+                         required
+                         className="h-10"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-zinc-650 dark:text-zinc-400">Password</label>
+                      <Input 
+                         type="password" 
+                         value={password} 
+                         onChange={e => setPassword(e.target.value)} 
+                         required
+                         className="h-10"
+                      />
+                    </div>
+                    <Button type="submit" className="w-full h-10 mt-2 font-medium">
+                      Authenticate Panel
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              <div className="p-4 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-900/30 text-xs text-zinc-500 leading-relaxed text-center">
+                Need developer console access? Live network testing and CORS preflight triggers are available on the right to assist with staging connection configurations.
+              </div>
             </div>
-            <CardTitle className="text-2xl">Developer Portal</CardTitle>
-            <CardDescription>Enter admin credentials to continue</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Username</label>
-                <Input 
-                   type="email" 
-                   value={email} 
-                   onChange={e => setEmail(e.target.value)} 
-                   placeholder="admin@tarezaerp.33mail.com" 
-                   required
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Password</label>
-                <Input 
-                   type="password" 
-                   value={password} 
-                   onChange={e => setPassword(e.target.value)} 
-                   required
-                />
-              </div>
-              <Button type="submit" className="w-full">Sign In</Button>
-            </form>
-          </CardContent>
-        </Card>
+
+            {/* Right Column: Connection Diagnostics Terminal */}
+            <div className="lg:col-span-7">
+              <Card className="shadow-lg border-zinc-200 dark:border-zinc-800">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <CardTitle className="text-base font-bold flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
+                        <Activity className="w-4 h-4 text-emerald-500" />
+                        Supabase Technical Connection Diagnostics
+                      </CardTitle>
+                      <CardDescription className="text-xs text-zinc-500 dark:text-zinc-450">
+                        Resolve DNS timeouts, ERR_CONNECTION_TIMED_OUT errors, and preflight browser limitations.
+                      </CardDescription>
+                    </div>
+                    <Badge 
+                      variant="outline" 
+                      className={`text-[10px] py-0.5 px-2 font-mono ${
+                        navigator.onLine 
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900' 
+                          : 'bg-rose-50 text-rose-700 border-rose-220 dark:bg-rose-950/20 dark:text-rose-450 dark:border-rose-900'
+                      }`}
+                    >
+                      <Wifi className="w-3 h-3 mr-1 inline" />
+                      {navigator.onLine ? 'ONLINE' : 'OFFLINE'}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  
+                  {/* Grid showing ENV variables current resolution */}
+                  <div className="grid sm:grid-cols-2 gap-3 text-xs bg-zinc-100/55 dark:bg-zinc-900/55 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800/80">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
+                        <Globe className="w-3 h-3" /> Configured URL
+                      </span>
+                      <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg">
+                        <span className="font-mono text-[11px] truncate flex-1 block" title={import.meta.env.VITE_SUPABASE_URL}>
+                          {import.meta.env.VITE_SUPABASE_URL || 'Not specified'}
+                        </span>
+                        {import.meta.env.VITE_SUPABASE_URL && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(import.meta.env.VITE_SUPABASE_URL || '', 'URL')}
+                            className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded transition-transform text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                          >
+                            {copiedText === 'URL' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
+                        <Key className="w-3 h-3" /> Configured ANON KEY
+                      </span>
+                      <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg">
+                        <span className="font-mono text-[11px] truncate flex-1 block">
+                          {revealKey 
+                            ? (import.meta.env.VITE_SUPABASE_ANON_KEY || 'Not specified') 
+                            : '••••••••••••••••••••••••••••••••'
+                          }
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setRevealKey(!revealKey)}
+                            className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                          >
+                            {revealKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          </button>
+                          {import.meta.env.VITE_SUPABASE_ANON_KEY && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(import.meta.env.VITE_SUPABASE_ANON_KEY || '', 'Anon Key')}
+                              className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                            >
+                              {copiedText === 'Anon Key' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Trigger diagnostics button */}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      disabled={diagRunning}
+                      onClick={runDiagnostics}
+                      className="flex-1 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 font-semibold"
+                    >
+                      <Activity className={`w-4 h-4 mr-2 ${diagRunning ? 'animate-spin' : ''}`} />
+                      {diagRunning ? 'Testing connections & latency...' : 'Run Comprehensive Connection Ping & Health Check'}
+                    </Button>
+                    {diagLogs.length > 0 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => { setDiagLogs([]); setDiagStatus('idle'); }}
+                        className="font-medium text-xs border-zinc-200"
+                      >
+                        Clear console
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Diagnostics Console terminal view */}
+                  {diagLogs.length > 0 && (
+                    <div className="rounded-xl border border-zinc-205 dark:border-zinc-800 overflow-hidden shadow-sm">
+                      {/* Terminal Header */}
+                      <div className="bg-zinc-100 dark:bg-zinc-905 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-3 h-3 rounded-full bg-red-400 block" />
+                          <span className="w-3 h-3 rounded-full bg-amber-400 block" />
+                          <span className="w-3 h-3 rounded-full bg-green-400 block" />
+                          <span className="text-[11px] font-mono font-bold text-zinc-500 dark:text-zinc-400 ml-2">diagnostic_report.sh</span>
+                        </div>
+                        {diagStatus !== 'idle' && diagStatus !== 'running' && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] uppercase font-bold font-mono tracking-wide text-zinc-450">Status:</span>
+                            <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded leading-none ${
+                              diagStatus === 'success' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-400' :
+                              diagStatus === 'warning' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/35 dark:text-amber-400' :
+                              'bg-rose-100 text-rose-800 dark:bg-rose-950/35 dark:text-rose-450'
+                            }`}>
+                              {diagStatus.toUpperCase()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Monospace Code output */}
+                      <div className="bg-zinc-950 p-4 max-h-72 overflow-y-auto font-mono text-xs space-y-1.5">
+                        {diagLogs.map((log, idx) => (
+                          <div 
+                            key={idx} 
+                            className={`leading-relaxed whitespace-pre-wrap ${
+                              log.type === 'error' ? 'text-red-450 font-semibold' :
+                              log.type === 'warn' ? 'text-amber-300 font-semibold' :
+                              log.type === 'success' ? 'text-emerald-400 font-semibold' :
+                              'text-zinc-400'
+                            }`}
+                          >
+                            <span className="text-zinc-650 inline-block mr-2 select-none">[{log.timestamp}]</span>
+                            {log.message}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Informative troubleshooting guide depending on connection problems */}
+                  <div className="p-4 rounded-xl bg-indigo-55/50 dark:bg-indigo-950/15 border border-indigo-100 dark:border-indigo-900/40 text-xs space-y-2">
+                    <h5 className="font-bold flex items-center gap-1.5 text-zinc-900 dark:text-zinc-200">
+                      <AlertTriangle className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      Troubleshooting TIMED_OUT (CORS / Network) guides:
+                    </h5>
+                    <ul className="list-disc pl-4 space-y-1 ml-1 leading-normal text-zinc-600 dark:text-zinc-350">
+                      <li>
+                        <strong>Verify Project Pause Status</strong>: If you haven't accessed your database for over a week, Supabase may automatically pause your project container. Visit your <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="underline font-semibold text-indigo-600 dark:text-indigo-450 hover:opacity-85">Supabase Dashboard</a> and hit "Restore Project".
+                      </li>
+                      <li>
+                        <strong>Configure CORS Origins</strong>: Supabase requires all domains to be explicitly registered to secure REST and Auth connections from clients. Copy your launcher hostname below and add it to "Settings -&gt; API -&gt; Allowed Web Origins" in the Supabase Portal:
+                      </li>
+                    </ul>
+                    <div className="flex items-center gap-2 mt-2 bg-indigo-100/60 dark:bg-indigo-950/45 border border-indigo-250 dark:border-indigo-900 py-1 px-2.5 rounded-lg">
+                      <span className="font-mono text-[10px] text-zinc-600 dark:text-zinc-300 select-all truncate flex-1 block">
+                        {window.location.origin}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(window.location.origin, 'Origin Domain')}
+                        className="p-1 hover:bg-zinc-200 dark:hover:bg-indigo-900 rounded font-semibold text-indigo-650"
+                      >
+                        Copy Origin
+                      </button>
+                    </div>
+                  </div>
+
+                </CardContent>
+              </Card>
+            </div>
+
+          </div>
+        </div>
       </div>
     );
   }
@@ -436,6 +814,187 @@ Deno.serve(async (req) => {
                      </ol>
                   </div>
                </div>
+            </CardContent>
+          </Card>
+
+          <Card className="md:col-span-2">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle className="text-base font-bold flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
+                    <Activity className="w-4 h-4 text-emerald-500" />
+                    Supabase Technical Connection Diagnostics
+                  </CardTitle>
+                  <CardDescription className="text-xs text-zinc-550 dark:text-zinc-450">
+                    Resolve DNS timeouts, ERR_CONNECTION_TIMED_OUT errors, and preflight browser limitations.
+                  </CardDescription>
+                </div>
+                <Badge 
+                  variant="outline" 
+                  className={`text-[10px] py-0.5 px-2 font-mono ${
+                    navigator.onLine 
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900' 
+                      : 'bg-rose-50 text-rose-700 border-rose-220 dark:bg-rose-950/20 dark:text-rose-450 dark:border-rose-900'
+                  }`}
+                >
+                  <Wifi className="w-3 h-3 mr-1 inline" />
+                  {navigator.onLine ? 'ONLINE' : 'OFFLINE'}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              
+              {/* Grid showing ENV variables current resolution */}
+              <div className="grid sm:grid-cols-2 gap-3 text-xs bg-zinc-100/55 dark:bg-zinc-900/55 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800/80">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
+                    <Globe className="w-3 h-3" /> Configured URL
+                  </span>
+                  <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg">
+                    <span className="font-mono text-[11px] truncate flex-1 block" title={import.meta.env.VITE_SUPABASE_URL}>
+                      {import.meta.env.VITE_SUPABASE_URL || 'Not specified'}
+                    </span>
+                    {import.meta.env.VITE_SUPABASE_URL && (
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(import.meta.env.VITE_SUPABASE_URL || '', 'URL')}
+                        className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded transition-transform text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                      >
+                        {copiedText === 'URL' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
+                    <Key className="w-3 h-3" /> Configured ANON KEY
+                  </span>
+                  <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg">
+                    <span className="font-mono text-[11px] truncate flex-1 block">
+                      {revealKey 
+                        ? (import.meta.env.VITE_SUPABASE_ANON_KEY || 'Not specified') 
+                        : '••••••••••••••••••••••••••••••••'
+                      }
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setRevealKey(!revealKey)}
+                        className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                      >
+                        {revealKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      </button>
+                      {import.meta.env.VITE_SUPABASE_ANON_KEY && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(import.meta.env.VITE_SUPABASE_ANON_KEY || '', 'Anon Key')}
+                          className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                        >
+                          {copiedText === 'Anon Key' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Trigger diagnostics button */}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  disabled={diagRunning}
+                  onClick={runDiagnostics}
+                  className="flex-1 bg-zinc-900 hover:bg-zinc-805 dark:bg-zinc-100 dark:text-zinc-905 dark:hover:bg-zinc-200 font-semibold"
+                >
+                  <Activity className={`w-4 h-4 mr-2 ${diagRunning ? 'animate-spin' : ''}`} />
+                  {diagRunning ? 'Testing connections & latency...' : 'Run Comprehensive Connection Ping & Health Check'}
+                </Button>
+                {diagLogs.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => { setDiagLogs([]); setDiagStatus('idle'); }}
+                    className="font-medium text-xs border-zinc-200"
+                  >
+                    Clear console
+                  </Button>
+                )}
+              </div>
+
+              {/* Diagnostics Console terminal view */}
+              {diagLogs.length > 0 && (
+                <div className="rounded-xl border border-zinc-205 dark:border-zinc-800 overflow-hidden shadow-sm">
+                  {/* Terminal Header */}
+                  <div className="bg-zinc-100 dark:bg-zinc-905 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 rounded-full bg-red-400 block" />
+                      <span className="w-3 h-3 rounded-full bg-amber-400 block" />
+                      <span className="w-3 h-3 rounded-full bg-green-400 block" />
+                      <span className="text-[11px] font-mono font-bold text-zinc-500 dark:text-zinc-400 ml-2">diagnostic_report.sh</span>
+                    </div>
+                    {diagStatus !== 'idle' && diagStatus !== 'running' && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] uppercase font-bold font-mono tracking-wide text-zinc-455">Status:</span>
+                        <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded leading-none ${
+                          diagStatus === 'success' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-400' :
+                          diagStatus === 'warning' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/35 dark:text-amber-400' :
+                          'bg-rose-100 text-rose-800 dark:bg-rose-950/35 dark:text-rose-450'
+                        }`}>
+                          {diagStatus.toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Monospace Code output */}
+                  <div className="bg-zinc-950 p-4 max-h-72 overflow-y-auto font-mono text-xs space-y-1.5">
+                    {diagLogs.map((log, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`leading-relaxed whitespace-pre-wrap ${
+                          log.type === 'error' ? 'text-red-450 font-semibold' :
+                          log.type === 'warn' ? 'text-amber-305 font-semibold' :
+                          log.type === 'success' ? 'text-emerald-400 font-semibold' :
+                          'text-zinc-450'
+                        }`}
+                      >
+                        <span className="text-zinc-650 inline-block mr-2 select-none">[{log.timestamp}]</span>
+                        {log.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Informative troubleshooting guide depending on connection problems */}
+              <div className="p-4 rounded-xl bg-indigo-55/50 dark:bg-indigo-950/15 border border-indigo-150 dark:border-indigo-900/45 text-xs space-y-2">
+                <h5 className="font-bold flex items-center gap-1.5 text-zinc-900 dark:text-zinc-200">
+                  <AlertTriangle className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  Troubleshooting TIMED_OUT (CORS / Network) guides:
+                </h5>
+                <ul className="list-disc pl-4 space-y-1 ml-1 leading-normal text-zinc-650 dark:text-zinc-350">
+                  <li>
+                    <strong>Verify Project Pause Status</strong>: If you haven't accessed your database for over a week, Supabase may automatically pause your project container. Visit your <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="underline font-semibold text-indigo-650 dark:text-indigo-420 hover:opacity-85">Supabase Dashboard</a> and hit "Restore Project".
+                  </li>
+                  <li>
+                    <strong>Configure CORS Origins</strong>: Supabase requires all domains to be explicitly registered to secure REST and Auth connections from clients. Copy your launcher hostname below and add it to "Settings -&gt; API -&gt; Allowed Web Origins" in the Supabase Portal:
+                  </li>
+                </ul>
+                <div className="flex items-center gap-2 mt-2 bg-indigo-100/60 dark:bg-indigo-950/45 border border-indigo-250 dark:border-indigo-900 py-1 px-2.5 rounded-lg">
+                  <span className="font-mono text-[10px] text-zinc-600 dark:text-zinc-300 select-all truncate flex-1 block">
+                    {window.location.origin}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(window.location.origin, 'Origin Domain')}
+                    className="p-1 hover:bg-zinc-200 dark:hover:bg-indigo-900 rounded font-semibold text-indigo-650"
+                  >
+                    Copy Origin
+                  </button>
+                </div>
+              </div>
+
             </CardContent>
           </Card>
         </div>

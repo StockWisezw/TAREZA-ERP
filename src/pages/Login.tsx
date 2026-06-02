@@ -235,7 +235,7 @@ export default function Login() {
     setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: provider,
+        provider: provider as any,
       });
       if (error) throw error;
     } catch (error: any) {

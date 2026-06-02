@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 
 // Environment variables for Supabase configuration
-export const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-supabase-url.supabase.co';
+export const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://qakdoycgwhasiidgqzvt.supabase.co';
 export const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key';
 
 // Initialize live low-level Supabase Client
@@ -27,6 +27,7 @@ export const auth = {
   get currentUser() {
     if (!supabaseClientUser) return null;
     return {
+      id: supabaseClientUser.id,
       uid: supabaseClientUser.id,
       email: supabaseClientUser.email,
       displayName: supabaseClientUser.user_metadata?.full_name || supabaseClientUser.email?.split('@')[0] || '',
@@ -44,6 +45,7 @@ export const auth = {
       const user = session?.user;
       if (user) {
         callback({
+          id: user.id,
           uid: user.id,
           email: user.email,
           displayName: user.user_metadata?.full_name || user.email?.split('@')[0] || '',
@@ -520,111 +522,138 @@ export const databases = {};
 
 // Unified compatibility client mock/wrapper
 export const supabase = {
-  auth: {
-    getUser: async () => {
-      try {
-        const { data: { user }, error } = await rawSupabase.auth.getUser();
-        if (error) return { data: { user: null }, error };
-        return { data: { user: user ? { id: user.id, email: user.email } : null }, error: null };
-      } catch (error) {
-        return { data: { user: null }, error };
-      }
-    },
-    getSession: async () => {
-      try {
-        const { data: { session }, error } = await rawSupabase.auth.getSession();
-        if (error) return { data: { session: null }, error };
-        return { data: { session }, error: null };
-      } catch (error) {
-        return { data: { session: null }, error };
-      }
-    },
-    signUp: async ({ email, password }: any) => {
-      try {
-        const { data: { user }, error } = await rawSupabase.auth.signUp({ email, password });
-        if (error) throw error;
-        return { data: { user: user ? { id: user.id, email: user.email } : null }, error: null };
-      } catch (error) {
-        return { data: null, error };
-      }
-    },
-    signInWithPassword: async ({ email, password }: any) => {
-      try {
-        const { data: { user, session }, error } = await rawSupabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        return { data: { user: user ? { id: user.id, email: user.email } : null, session }, error: null };
-      } catch (error) {
-        return { data: null, error };
-      }
-    },
-    signInWithOAuth: async ({ provider }: any) => {
-      try {
-        const { error } = await rawSupabase.auth.signInWithOAuth({ provider });
-        return { error };
-      } catch (error) {
-        return { error };
-      }
-    },
-    signInAnonymously: async () => {
-      try {
-        const anonId = 'anon-' + uuidv4();
-        const anonSession = { user: { id: anonId, email: 'anonymous@tareza.co.zw', isAnonymous: true } };
-        supabaseClientUser = anonSession.user;
-        return { data: { session: anonSession }, error: null };
-      } catch (error) {
-        return { data: null, error };
-      }
-    },
-    sendMagicLink: async (email: string) => {
-      try {
-        const { error } = await rawSupabase.auth.signInWithOtp({
-          email,
-          options: {
-            emailRedirectTo: window.location.origin + '/login',
+  auth: new Proxy(rawSupabase.auth, {
+    get(target, prop, receiver) {
+      if (prop === 'getUser') {
+        return async () => {
+          try {
+            const { data: { user }, error } = await rawSupabase.auth.getUser();
+            if (error) return { data: { user: null }, error };
+            return { data: { user: user ? { id: user.id, email: user.email } : null }, error: null };
+          } catch (error) {
+            return { data: { user: null }, error };
           }
-        });
-        if (error) throw error;
-        return { data: true, error: null };
-      } catch (error) {
-        return { data: null, error };
+        };
       }
-    },
-    sendPasswordReset: async (email: string) => {
-      try {
-        const { error } = await rawSupabase.auth.resetPasswordForEmail(email, {
-          redirectTo: window.location.origin + '/login',
-        });
-        if (error) throw error;
-        return { data: true, error: null };
-      } catch (error) {
-        return { data: null, error };
+      if (prop === 'getSession') {
+        return async () => {
+          try {
+            const { data: { session }, error } = await rawSupabase.auth.getSession();
+            if (error) return { data: { session: null }, error };
+            return { data: { session }, error: null };
+          } catch (error) {
+            return { data: { session: null }, error };
+          }
+        };
       }
-    },
-    completeMagicLinkSession: async (_userId: string, _secret: string) => {
-      try {
-        const { data: { session }, error } = await rawSupabase.auth.getSession();
-        if (error) throw error;
-        return { data: { session }, error: null };
-      } catch (error) {
-        return { data: null, error };
+      if (prop === 'signUp') {
+        return async (args: any) => {
+          try {
+            const { data: { user }, error } = await rawSupabase.auth.signUp(args);
+            if (error) throw error;
+            return { data: { user: user ? { id: user.id, email: user.email } : null }, error: null };
+          } catch (error) {
+            return { data: null, error };
+          }
+        };
       }
-    },
-    signOut: async () => {
-      try {
-        const { error } = await rawSupabase.auth.signOut();
-        supabaseClientUser = null;
-        return { error };
-      } catch (error) {
-        return { error };
+      if (prop === 'signInWithPassword') {
+        return async ({ email, password }: any) => {
+          try {
+            const { data: { user, session }, error } = await rawSupabase.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            return { data: { user: user ? { id: user.id, email: user.email } : null, session }, error: null };
+          } catch (error) {
+            return { data: null, error };
+          }
+        };
       }
-    },
-    onAuthStateChange: (cb: (user: any) => void) => {
-      const { data: { subscription } } = rawSupabase.auth.onAuthStateChange((_event, session) => {
-        cb(session?.user ? { user: { id: session.user.id, email: session.user.email } } : null);
-      });
-      return { data: { subscription: { unsubscribe: () => subscription.unsubscribe() } } };
+      if (prop === 'signInWithOAuth') {
+        return async ({ provider }: any) => {
+          try {
+            const { error } = await rawSupabase.auth.signInWithOAuth({ provider });
+            return { error };
+          } catch (error) {
+            return { error };
+          }
+        };
+      }
+      if (prop === 'signInAnonymously') {
+        return async () => {
+          try {
+            const anonId = 'anon-' + uuidv4();
+            const anonSession = { user: { id: anonId, email: 'anonymous@tareza.co.zw', isAnonymous: true } };
+            supabaseClientUser = anonSession.user;
+            return { data: { session: anonSession }, error: null };
+          } catch (error) {
+            return { data: null, error };
+          }
+        };
+      }
+      if (prop === 'sendMagicLink') {
+        return async (email: string) => {
+          try {
+            const { error } = await rawSupabase.auth.signInWithOtp({
+              email,
+              options: {
+                emailRedirectTo: window.location.origin + '/login',
+              }
+            });
+            if (error) throw error;
+            return { data: true, error: null };
+          } catch (error) {
+            return { data: null, error };
+          }
+        };
+      }
+      if (prop === 'sendPasswordReset') {
+        return async (email: string) => {
+          try {
+            const { error } = await rawSupabase.auth.resetPasswordForEmail(email, {
+              redirectTo: window.location.origin + '/login',
+            });
+            if (error) throw error;
+            return { data: true, error: null };
+          } catch (error) {
+            return { data: null, error };
+          }
+        };
+      }
+      if (prop === 'completeMagicLinkSession') {
+        return async (_userId: string, _secret: string) => {
+          try {
+            const { data: { session }, error } = await rawSupabase.auth.getSession();
+            if (error) throw error;
+            return { data: { session }, error: null };
+          } catch (error) {
+            return { data: null, error };
+          }
+        };
+      }
+      if (prop === 'signOut') {
+        return async () => {
+          try {
+            const { error } = await rawSupabase.auth.signOut();
+            supabaseClientUser = null;
+            return { error };
+          } catch (error) {
+            return { error };
+          }
+        };
+      }
+      if (prop === 'onAuthStateChange') {
+        return (cb: (user: any) => void) => {
+          const { data: { subscription } } = rawSupabase.auth.onAuthStateChange((_event, session) => {
+            cb(session?.user ? { user: { id: session.user.id, email: session.user.email } } : null);
+          });
+          return { data: { subscription: { unsubscribe: () => subscription.unsubscribe() } } };
+        };
+      }
+
+      const val = Reflect.get(target, prop, receiver);
+      return typeof val === 'function' ? val.bind(target) : val;
     }
-  },
+  }) as any,
   from: (table: string) => new SupabaseQueryBuilder(table),
   storage: {
     uploadFile: async (file: File) => {
@@ -655,12 +684,11 @@ export const supabase = {
     }
   },
   channel: (name: string) => {
-    return {
-      on: (event: string, filter: any, callback: any) => ({
-        subscribe: () => {}
-      }),
+    const obj = {
+      on: (event: string, filter: any, callback: any) => obj,
       subscribe: () => {}
     };
+    return obj;
   },
   removeChannel: (channel: any) => {}
 };

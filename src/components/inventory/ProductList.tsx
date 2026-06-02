@@ -117,10 +117,13 @@ export function ProductList() {
   useEffect(() => {
     fetchProducts();
 
-    // Subscribe to realtime changes on products
+    // Subscribe to realtime changes on products and inventory
     const channel = supabase
-      .channel('public:products')
+      .channel('public:products_inventory')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
+        fetchProducts(); // Refresh list on change
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, (payload) => {
         fetchProducts(); // Refresh list on change
       })
       .subscribe();
