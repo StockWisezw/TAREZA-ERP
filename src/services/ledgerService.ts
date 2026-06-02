@@ -240,7 +240,11 @@ export async function openRegisterSession(
       created_at: new Date().toISOString()
     };
 
-    await supabase.from('register_sessions').insert(item);
+    const { error: insertErr } = await supabase.from('register_sessions').insert(item);
+    if (insertErr) {
+      console.error('[openRegisterSession] Failed to start register session:', insertErr);
+      return { success: false, error: insertErr.message || 'Database error occurred while starting register session.' };
+    }
     await logAuditEvent(businessId, userId, 'OPEN_SHIFT', 'POS', null, item);
 
     return { success: true, session: item };
@@ -276,7 +280,11 @@ export async function closeRegisterSession(
       closed_at: new Date().toISOString()
     };
 
-    await supabase.from('register_sessions').eq('id', sessionId).update(patches);
+    const { error: updateErr } = await supabase.from('register_sessions').eq('id', sessionId).update(patches);
+    if (updateErr) {
+      console.error('[closeRegisterSession] Failed to update session:', updateErr);
+      return { success: false, error: updateErr.message || 'Database error occurred while closing register session.' };
+    }
     await logAuditEvent(s.business_id, s.user_id, 'CLOSE_SHIFT', 'POS', s, { ...s, ...patches });
 
     return { success: true, session: { ...s, ...patches } };
@@ -314,21 +322,6 @@ export async function recordStockMovement(
       currentQty = Number(invDoc.quantity || 0);
     }
 
-    // 0. Idempotency Check: prevent duplicate stock movement execution for the same transaction reference
-    if (associatedTxRef) {
-      const { data: duplicateMovement } = await supabase.from('stock_movements')
-        .eq('reference', associatedTxRef)
-        .eq('product_id', productId)
-        .eq('type', type)
-        .limit(1)
-        .maybeSingle();
-
-      if (duplicateMovement) {
-        console.log(`[recordStockMovement] Idempotency guard triggered: Stock movement for product ${productId} and reference ${associatedTxRef} already processed. Skipping duplicate subtraction.`);
-        return { success: true, quantityAfter: currentQty };
-      }
-    }
-
     const calculatedQtyAfter = currentQty + quantityChange;
 
     // Reject negative inventory checkout unless explicitly tolerated (or fallback)
@@ -357,13 +350,10 @@ export async function recordStockMovement(
 
     // 3. Create unique stock movement record in Supabase directly
     const { error: moveInsertErr } = await supabase.from('stock_movements').insert({
-      business_id: businessId,
       branch_id: branchId,
       product_id: productId,
       quantity: quantityChange,
       type: type,
-      reference: associatedTxRef || null,
-      user_id: userId || null,
       created_at: new Date().toISOString()
     });
 

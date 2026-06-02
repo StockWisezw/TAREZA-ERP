@@ -529,7 +529,11 @@ export default function POS() {
                 line_total: item.subtotal,
                 vat_amount: item.vatAmount
               }));
-              await supabase.from('sale_items').insert(itemsPayload);
+              const { error: itemsErr } = await supabase.from('sale_items').insert(itemsPayload);
+              if (itemsErr) {
+                console.error('[POS] Failed to save sale items:', itemsErr);
+                throw new Error(itemsErr.message || 'Failed to save items for this sale.');
+              }
 
               for (const item of sale.items) {
                 const isWholesale = item.tier === 'wholesale';
