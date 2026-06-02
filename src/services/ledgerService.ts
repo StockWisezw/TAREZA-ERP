@@ -232,7 +232,7 @@ export async function openRegisterSession(
       variance: 0,
       status: 'OPEN' as const,
       opened_at: new Date().toISOString(),
-      closed_at: '',
+      closed_at: null,
       sales_count: 0,
       sales_total: 0,
       refunds_total: 0,

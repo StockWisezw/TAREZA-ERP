@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -49,6 +50,7 @@ interface Profile {
 }
 
 export default function CashManagement() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('active-shift');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [activeSession, setActiveSession] = useState<RegisterSession | null>(null);
@@ -341,7 +343,7 @@ export default function CashManagement() {
           variance: 0,
           status: 'OPEN' as const,
           opened_at: new Date().toISOString(),
-          closed_at: '',
+          closed_at: null,
           sales_count: 0,
           sales_total: 0,
           refunds_total: 0,
@@ -899,39 +901,26 @@ export default function CashManagement() {
             <div className="lg:col-span-6 space-y-6">
               {!isDrawerOpen ? (
                 <Card className="border-indigo-100 bg-white shadow-xl rounded-2xl overflow-hidden relative">
-                  <div className="h-1.5 w-full bg-indigo-600"></div>
+                  <div className="h-1.5 w-full bg-amber-500"></div>
                   <CardHeader className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <div className="p-2 bg-indigo-50 text-indigo-700 rounded-lg">
+                       <div className="p-2 bg-amber-50 text-amber-700 rounded-lg">
                         <Lock className="w-5 h-5" />
                       </div>
-                      <CardTitle className="text-lg font-bold text-zinc-950">Unlock Till Register</CardTitle>
+                      <CardTitle className="text-lg font-bold text-zinc-950">Register Shift is Closed</CardTitle>
                     </div>
                     <CardDescription className="text-sm">
-                      Establish the initial physical banknotes float to record till drops and checkout sales properly.
+                      Shifts must be initialized and started directly from the POS Terminal module.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="float" className="text-xs font-bold text-zinc-650 uppercase tracking-wider">
-                        Starting Shift Float (USD / base) {requireFloat ? '*' : '(Optional)'}
-                      </Label>
-                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-3 h-5 w-5 text-indigo-600" />
-                        <Input 
-                          id="float" 
-                          type="number" 
-                          placeholder={requireFloat ? "0.00" : "0.00 (Optional - Defaults to zero)"} 
-                          className="pl-10 text-xl font-mono border-zinc-200 h-11 focus-visible:ring-indigo-500 bg-zinc-50/50"
-                          value={startingFloatInput}
-                          onChange={(e) => setStartingFloatInput(e.target.value)}
-                        />
-                      </div>
-                    </div>
+                    <p className="text-sm text-zinc-600 leading-relaxed">
+                      To open a cashier shift and start making transactions, please navigate to the active POS module. Opening a register session from POS ensures correct browser-terminal sync and cashier accountability.
+                    </p>
 
                     <div className="flex items-center justify-between p-3 bg-zinc-50 border border-zinc-200 rounded-xl transition-all">
                       <div className="space-y-0.5">
-                        <Label htmlFor="req-float-toggle" className="text-xs font-bold text-zinc-800 cursor-pointer block">Require Cash Float to Open</Label>
+                        <Label htmlFor="req-float-toggle" className="text-xs font-bold text-zinc-805 cursor-pointer block">Require Cash Float to Open</Label>
                         <span className="text-[10px] text-zinc-500 max-w-[240px] block leading-normal">
                           When disabled, registers can start immediately with empty/optional starting cash.
                         </span>
@@ -946,16 +935,9 @@ export default function CashManagement() {
                         }} 
                       />
                     </div>
-                    
-                    <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-xs leading-relaxed text-zinc-600">
-                      <p className="font-semibold text-zinc-800 mb-1">Operational Protocol Note:</p>
-                      <p>
-                        Opening a register generates a session trace ID linking to your profile. This audit record tracks all till payments and deposits until end of shift closing cash reconciliations.
-                      </p>
-                    </div>
 
-                    <Button className="w-full bg-indigo-600 text-white hover:bg-indigo-700 h-11" onClick={handleOpenRegister}>
-                      <Unlock className="w-4 h-4 mr-2" /> Open Drawer Session
+                    <Button className="w-full bg-zinc-900 text-white hover:bg-zinc-800 h-11" onClick={() => navigate('/pos')}>
+                      <Coins className="w-4 h-4 mr-2" /> Open Shift via POS Module
                     </Button>
                   </CardContent>
                 </Card>
