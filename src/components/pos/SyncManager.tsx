@@ -1,14 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { usePOSStore } from '../../store/posStore';
-import { supabase } from '../../lib/supabaseClient';
-import { recordStockMovement, postJournalEntry, logAuditEvent } from '../../services/ledgerService';
-import { toast } from 'sonner';
-
-const getPackSize = (sku: string | undefined): number => {
-  if (!sku) return 1;
-  const match = sku.match(/\|PK:(\d+)/i);
-  return match ? parseInt(match[1], 10) : 1;
-};
+import { usePOSStore, getItemPackSize, CartItem } from '../../store/posStore';
 
 export function SyncManager() {
   const { offlineQueue, removeSaleFromOfflineQueue } = usePOSStore();
@@ -41,9 +32,9 @@ export function SyncManager() {
 
       const userId = userData.user.id;
 
-      // Determine businessId / branchId
-      let businessId = 'default_business';
-      let branchId = 'default_branch';
+      // Determine businessId / branchId with robust DB resolution
+      let businessId = '';
+      let branchId = '';
 
       const { data: bUser } = await supabase
         .from('business_users')
@@ -52,17 +43,31 @@ export function SyncManager() {
         .limit(1)
         .maybeSingle();
 
-      if (bUser?.business_id) {
+      if (bUser?.business_id && bUser.business_id !== 'default_business') {
         businessId = bUser.business_id;
-        branchId = bUser.branch_id || 'default_branch';
-      } else {
-        // Fallback to fetch first business
+        branchId = bUser.branch_id && bUser.branch_id !== 'default_branch' ? bUser.branch_id : '';
+      }
+
+      if (!businessId) {
         const { data: fallbackB } = await supabase.from('businesses').select('id').limit(1).maybeSingle();
         if (fallbackB?.id) {
           businessId = fallbackB.id;
-          const { data: fallbackBr } = await supabase.from('branches').select('id').eq('business_id', fallbackB.id).limit(1).maybeSingle();
-          if (fallbackBr?.id) {
-            branchId = fallbackBr.id;
+        } else {
+          const { data: newB } = await supabase.from('businesses').insert({ name: 'Default Business' }).select().single();
+          if (newB) {
+            businessId = newB.id;
+          }
+        }
+      }
+
+      if (businessId && !branchId) {
+        const { data: fallbackBr } = await supabase.from('branches').select('id').eq('business_id', businessId).limit(1).maybeSingle();
+        if (fallbackBr?.id) {
+          branchId = fallbackBr.id;
+        } else {
+          const { data: newBr } = await supabase.from('branches').insert({ business_id: businessId, name: 'Default Branch' }).select().single();
+          if (newBr) {
+            branchId = newBr.id;
           }
         }
       }

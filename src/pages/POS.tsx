@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { useReactToPrint } from 'react-to-print';
 import { useNavigate } from 'react-router-dom';
 
-import { usePOSStore, Product, SaleRecord, Customer, getPackSize } from '../store/posStore';
+import { usePOSStore, Product, SaleRecord, Customer, getPackSize, getItemPackSize } from '../store/posStore';
 import { PaymentDialog } from '../components/pos/PaymentDialog';
 import { ReceiptPrint } from '../components/pos/ReceiptPrint';
 import { 
@@ -468,6 +468,24 @@ export default function POS() {
       toast.success(isOffline ? 'Sale queued — will sync when online.' : 'Sale completed and recorded!');
       shouldPrintRef.current = false;
       
+      // Decrement stock in local state immediately so UI updates instantly
+      setProducts(prevProducts => {
+        const updated = prevProducts.map(p => {
+          const cartItem = sale.items.find(item => item.product.id === p.id);
+          if (cartItem) {
+            const multiplier = getItemPackSize(cartItem);
+            const deduction = cartItem.quantity * multiplier;
+            return {
+              ...p,
+              stock: Math.max(0, (p.stock || 0) - deduction)
+            };
+          }
+          return p;
+        });
+        saveLocalProducts(updated);
+        return updated;
+      });
+
       if (!isOffline) {
         try {
           const { supabase } = await import('../lib/supabaseClient');
@@ -476,15 +494,15 @@ export default function POS() {
           let businessId = activeSession?.business_id || '';
           let branchId = activeSession?.branch_id || '';
 
-          if (userData?.user && (!businessId || !branchId || branchId === 'default_branch')) {
+          if (userData?.user && (!businessId || businessId === 'default_business' || !branchId || branchId === 'default_branch')) {
             const { data: businessData } = await supabase.from('business_users').select('business_id, branch_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
             if (businessData) {
-              if (!businessId) businessId = businessData.business_id || '';
+              if (!businessId || businessId === 'default_business') businessId = businessData.business_id || '';
               if (!branchId || branchId === 'default_branch') branchId = businessData.branch_id || '';
             }
           }
 
-          if (!businessId) {
+          if (!businessId || businessId === 'default_business' || businessId === '00000000-0000-0000-0000-000000000000') {
             const { data: fallbackB } = await supabase.from('businesses').select('id').limit(1).maybeSingle();
             if (fallbackB?.id) {
               businessId = fallbackB.id;
@@ -492,15 +510,28 @@ export default function POS() {
               if (fallbackBr?.id) {
                 branchId = fallbackBr.id;
               }
+            } else {
+              const { data: newB } = await supabase.from('businesses').insert({ name: 'Default Business' }).select().single();
+              if (newB) {
+                businessId = newB.id;
+                const { data: newBr } = await supabase.from('branches').insert({ business_id: businessId, name: 'Default Branch' }).select().single();
+                if (newBr) {
+                  branchId = newBr.id;
+                }
+              }
             }
           }
 
-          // Ensure valid UUID format for any legacy/stub bypass prevention
-          if (!businessId || businessId === 'default_business') {
-            businessId = '00000000-0000-0000-0000-000000000000';
-          }
-          if (!branchId || branchId === 'default_branch') {
-            branchId = '00000000-0000-0000-0000-000000000000';
+          if (!branchId || branchId === 'default_branch' || branchId === '00000000-0000-0000-0000-000000000000') {
+            const { data: fallbackBr } = await supabase.from('branches').select('id').eq('business_id', businessId).limit(1).maybeSingle();
+            if (fallbackBr?.id) {
+              branchId = fallbackBr.id;
+            } else {
+              const { data: newBr } = await supabase.from('branches').insert({ business_id: businessId, name: 'Default Branch' }).select().single();
+              if (newBr) {
+                branchId = newBr.id;
+              }
+            }
           }
 
           const salePayload: any = {
@@ -550,8 +581,7 @@ export default function POS() {
               }
 
               for (const item of sale.items) {
-                const isWholesale = item.tier === 'wholesale';
-                const multiplier = isWholesale ? getPackSize(item.product.sku) : 1;
+                const multiplier = getItemPackSize(item);
                 await recordStockMovement(
                   businessId,
                   branchId,
@@ -678,10 +708,34 @@ export default function POS() {
         .limit(1)
         .maybeSingle();
 
-      const bid = businessData?.business_id || 'default_business';
-      const brid = businessData?.branch_id || 'default_branch';
+      let bid = businessData?.business_id;
+      let brid = businessData?.branch_id;
 
-      const res = await openRegisterSession(bid, brid, userData.user.id, floatVal);
+      if (!bid || bid === 'default_business') {
+        const { data: fallbackB } = await appService.from('businesses').select('id').limit(1).maybeSingle();
+        if (fallbackB?.id) {
+          bid = fallbackB.id;
+        } else {
+          const { data: newB } = await appService.from('businesses').insert({ name: 'Default Business' }).select().single();
+          if (newB) {
+            bid = newB.id;
+          }
+        }
+      }
+
+      if (bid && (!brid || brid === 'default_branch')) {
+        const { data: fallbackBr } = await appService.from('branches').select('id').eq('business_id', bid).limit(1).maybeSingle();
+        if (fallbackBr?.id) {
+          brid = fallbackBr.id;
+        } else {
+          const { data: newBr } = await appService.from('branches').insert({ business_id: bid, name: 'Default Branch' }).select().single();
+          if (newBr) {
+            brid = newBr.id;
+          }
+        }
+      }
+
+      const res = await openRegisterSession(bid || '00000000-0000-0000-0000-000000000000', brid || '00000000-0000-0000-0000-000000000000', userData.user.id, floatVal);
       if (res.success) {
         setActiveSession(res.session);
         toast.success(`Active register session successfully started with float $${floatVal.toFixed(2)}.`);
@@ -1013,8 +1067,8 @@ export default function POS() {
                     </div>
                   )}
                   
-                  {hasPack ? (
-                    <div className="space-y-1 mt-auto pt-1" onClick={(e) => e.stopPropagation()}>
+                  {((product.bundles && product.bundles.length > 0) || hasPack) ? (
+                    <div className="space-y-1 mt-auto pt-1 select-none" onClick={(e) => e.stopPropagation()}>
                       <Button 
                         size="sm" 
                         variant="outline"
@@ -1024,14 +1078,27 @@ export default function POS() {
                         <span>+1 Unit</span>
                         <span className="font-mono font-bold">${product.retailPrice.toFixed(2)}</span>
                       </Button>
-                      <Button 
-                        size="sm" 
-                        className="w-full text-[10px] h-6 flex justify-between px-1.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-all rounded-md"
-                        onClick={() => addToCart(product, 1, 'wholesale')}
-                      >
-                        <span>+Pack</span>
-                        <span className="font-mono font-bold">${product.wholesalePrice.toFixed(2)}</span>
-                      </Button>
+                      {hasPack && (
+                        <Button 
+                          size="sm" 
+                          className="w-full text-[10px] h-6 flex justify-between px-1.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-all rounded-md"
+                          onClick={() => addToCart(product, 1, 'wholesale')}
+                        >
+                          <span>+Pack ({pSize})</span>
+                          <span className="font-mono font-bold">${product.wholesalePrice.toFixed(2)}</span>
+                        </Button>
+                      )}
+                      {product.bundles?.map((b: any, index: number) => (
+                        <Button 
+                          key={index}
+                          size="sm" 
+                          className="w-full text-[10px] h-6 flex justify-between px-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold transition-all rounded-md"
+                          onClick={() => addToCart(product, 1, b.name)}
+                        >
+                          <span>+{b.name} ({b.pack_size || b.packSize})</span>
+                          <span className="font-mono font-bold">${Number(b.price || 0).toFixed(2)}</span>
+                        </Button>
+                      ))}
                     </div>
                   ) : (
                     <div className="mt-auto pt-1 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
@@ -1151,23 +1218,25 @@ export default function POS() {
                                 -{item.discount.value}%
                               </span>
                             )}
-                            {getPackSize(item.product.sku) > 1 && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const newTier = item.tier === 'wholesale' ? 'retail' : 'wholesale';
-                                  setItemPricingTier(item.id, newTier);
-                                  toast.success(`Switched ${item.product.name} pricing`);
+                            {(getPackSize(item.product.sku) > 1 || (item.product.bundles && item.product.bundles.length > 0)) && (
+                              <select
+                                value={item.tier || 'retail'}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  const selectedTier = e.target.value;
+                                  setItemPricingTier(item.id, selectedTier);
+                                  toast.success(`Switched ${item.product.name} to ${selectedTier === 'retail' ? 'Unit' : (selectedTier === 'wholesale' ? 'Pack' : selectedTier)}`);
                                 }}
-                                className={`px-1 rounded-[3px] text-[7px] font-bold border transition-all uppercase leading-none h-4 flex items-center ${
-                                  item.tier === 'wholesale' 
-                                    ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" 
-                                    : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-105"
-                                }`}
+                                className="bg-zinc-50 border border-zinc-200 text-zinc-700 text-[9px] font-bold py-0.5 px-1 rounded cursor-pointer max-w-[120px] h-5 focus:outline-none focus:ring-1 focus:ring-primary"
                               >
-                                {item.tier === 'wholesale' ? 'Pack' : 'Unit'}
-                              </button>
+                                <option value="retail">Unit (1)</option>
+                                {getPackSize(item.product.sku) > 1 && (
+                                  <option value="wholesale">Pack ({getPackSize(item.product.sku)})</option>
+                                )}
+                                {item.product.bundles?.map((b: any, bIdx: number) => (
+                                  <option key={bIdx} value={b.name}>{b.name} ({b.pack_size || b.packSize})</option>
+                                ))}
+                              </select>
                             )}
                           </div>
                         </div>

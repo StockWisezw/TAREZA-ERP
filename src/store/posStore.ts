@@ -2,6 +2,12 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 
+export type ProductBundle = {
+  name: string;
+  pack_size: number;
+  price: number;
+};
+
 export type Product = {
   id: string;
   name: string;
@@ -14,6 +20,7 @@ export type Product = {
   imageUrl?: string;
   stock?: number;
   code?: string;
+  bundles?: ProductBundle[];
 };
 
 export type Customer = {
@@ -40,7 +47,7 @@ export type CartItem = {
   subtotal: number;
   vatAmount: number;
   discount?: Discount;
-  tier?: PricingTier;
+  tier?: string; // Change from PricingTier to string to support custom bundle names
 };
 
 export type PaymentMethod = 'cash' | 'card' | 'ecocash' | 'usd_cash' | 'credit';
@@ -74,6 +81,17 @@ export const getPackSize = (sku: string | undefined): number => {
   if (!sku) return 1;
   const match = sku.match(/\|PK:(\d+)/i);
   return match ? parseInt(match[1], 10) : 1;
+};
+
+export const getItemPackSize = (item: CartItem): number => {
+  if (item.tier === 'wholesale') {
+    return getPackSize(item.product.sku);
+  }
+  if (item.tier && item.tier !== 'retail' && item.product.bundles && item.product.bundles.length > 0) {
+    const b = item.product.bundles.find((x: any) => x.name === item.tier);
+    if (b) return Number(b.pack_size || b.packSize || 1);
+  }
+  return 1;
 };
 
 interface POSState {
@@ -126,7 +144,16 @@ export const usePOSStore = create<POSState>()(
       addToCart: (product, quantity = 1, forcedTier = 'retail') => set((state) => {
         const activeTier = forcedTier;
         const existingItem = state.cart.find((item) => item.product.id === product.id && item.tier === activeTier);
-        const unitPrice = activeTier === 'wholesale' ? product.wholesalePrice : product.retailPrice;
+        
+        let unitPrice = product.retailPrice;
+        if (activeTier === 'wholesale') {
+          unitPrice = product.wholesalePrice;
+        } else if (activeTier !== 'retail' && product.bundles && product.bundles.length > 0) {
+          const b = product.bundles.find((x: any) => x.name === activeTier);
+          if (b) {
+            unitPrice = Number(b.price || 0);
+          }
+        }
         
         if (existingItem) {
           const newQty = existingItem.quantity + quantity;
@@ -218,7 +245,15 @@ export const usePOSStore = create<POSState>()(
       setItemPricingTier: (itemId, tier) => set((state) => {
         const updatedCart = state.cart.map(item => {
           if (item.id === itemId) {
-            const unitPrice = tier === 'wholesale' ? item.product.wholesalePrice : item.product.retailPrice;
+            let unitPrice = item.product.retailPrice;
+            if (tier === 'wholesale') {
+              unitPrice = item.product.wholesalePrice;
+            } else if (tier && tier !== 'retail' && item.product.bundles && item.product.bundles.length > 0) {
+              const b = item.product.bundles.find((x: any) => x.name === tier);
+              if (b) {
+                unitPrice = Number(b.price || 0);
+              }
+            }
             const subtotal = item.quantity * unitPrice;
             let itemDiscountValue = 0;
             if (item.discount) {
@@ -338,9 +373,7 @@ export const usePOSStore = create<POSState>()(
           for (const item of state.cart) {
             const itemStock = item.product.stock;
             if (itemStock !== undefined && itemStock !== null) {
-              const requestedUnits = item.tier === 'wholesale'
-                ? item.quantity * getPackSize(item.product.sku)
-                : item.quantity;
+              const requestedUnits = item.quantity * getItemPackSize(item);
               if (requestedUnits > itemStock) {
                 throw new Error(`Insufficient stock for "${item.product.name}". (Available: ${itemStock} units, requested: ${requestedUnits} units)`);
               }

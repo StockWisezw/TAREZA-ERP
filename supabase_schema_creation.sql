@@ -122,6 +122,7 @@ CREATE TABLE IF NOT EXISTS public.products (
     price numeric(12,2) DEFAULT 0.00 NOT NULL,
     tax_class text, -- 'standard', 'exempt', 'zeroed'
     tax_rate_id uuid REFERENCES public.tax_rates(id) ON DELETE SET NULL,
+    bundles jsonb DEFAULT '[]'::jsonb NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
