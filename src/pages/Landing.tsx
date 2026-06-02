@@ -133,13 +133,13 @@ export default function Landing() {
             <div className="relative rounded-2xl overflow-hidden border border-border/50 shadow-2xl glass-effect p-2 bg-gradient-to-br from-white/40 to-white/10 dark:from-zinc-900/80 dark:to-zinc-950/80 backdrop-blur-xl">
               <div className="rounded-xl overflow-hidden shadow-inner relative aspect-[4/3] sm:aspect-video bg-zinc-900 flex flex-col group">
                 <img 
-                  src="/src/assets/images/tareza_dashboard_mockup_1779363946895.png"
+                  src="/tareza_dashboard_mockup.png"
                   alt="Tareza ERP Dashboard"
                   referrerPolicy="no-referrer"
                   className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
                 <img 
-                  src="/src/assets/images/tareza_pos_mockup_1779363968403.png"
+                  src="/tareza_pos_mockup.png"
                   alt="Tareza POS Interface"
                   referrerPolicy="no-referrer"
                   className="absolute bottom-0 right-0 w-2/3 h-auto rounded-tl-xl shadow-2xl border-t border-l border-white/20 translate-y-8 translate-x-8 group-hover:translate-y-4 group-hover:translate-x-4 transition-transform duration-700"
