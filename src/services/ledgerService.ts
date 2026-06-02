@@ -299,7 +299,7 @@ export async function recordStockMovement(
   customCostPrice?: number
 ): Promise<{ success: boolean; quantityAfter: number; error?: string }> {
   try {
-    // 1. Fetch current inventory stock for product at branch
+    // 1. Fetch current inventory stock for product at branch using direct Supabase select
     const invRes = await supabase.from('inventory')
       .eq('business_id', businessId)
       .eq('branch_id', branchId)
@@ -334,8 +334,8 @@ export async function recordStockMovement(
     // Reject negative inventory checkout unless explicitly tolerated (or fallback)
     if (calculatedQtyAfter < 0 && type === 'DAMAGE') {
       // Find product details
-      const pSnap = await getDoc(doc(db, 'products', productId));
-      const pName = pSnap.exists() ? pSnap.data()?.name : 'Product';
+      const { data: product } = await supabase.from('products').eq('id', productId).maybeSingle();
+      const pName = product ? product.name : 'Product';
       return {
         success: false,
         quantityAfter: currentQty,
@@ -343,53 +343,67 @@ export async function recordStockMovement(
       };
     }
 
-    // 2. Fetch product specs to determine pricing metrics
-    const pSnap = await getDoc(doc(db, 'products', productId));
-    if (!pSnap.exists()) {
+    // 2. Fetch product specs directly from Supabase
+    const { data: product, error: prodErr } = await supabase.from('products')
+      .eq('id', productId)
+      .maybeSingle();
+
+    if (prodErr || !product) {
       return { success: false, quantityAfter: currentQty, error: `Catalog error: Product referenced does not exist.` };
     }
-    const product = pSnap.data();
+
     const costPrice = customCostPrice !== undefined ? customCostPrice : Number(product.cost_price || product.wholesale_price || 0);
     const valueImpact = Math.abs(quantityChange) * costPrice;
 
-    // Use Firestore Transaction / Batch to write atomic updates
-    const batch = writeBatch(db);
-
-    // Create unique stock movement record
-    const movementId = doc(collection(db, 'stock_movements')).id;
-    batch.set(doc(db, 'stock_movements', movementId), {
+    // 3. Create unique stock movement record in Supabase directly
+    const { error: moveInsertErr } = await supabase.from('stock_movements').insert({
       business_id: businessId,
       branch_id: branchId,
       product_id: productId,
       quantity: quantityChange,
       type: type,
-      reference: associatedTxRef,
-      created_at: new Date().toISOString(),
-      user_id: userId
+      reference: associatedTxRef || null,
+      user_id: userId || null,
+      created_at: new Date().toISOString()
     });
 
-    // Update inventory stock count
-    if (invDoc) {
-      batch.update(doc(db, 'inventory', invDoc.id), {
-        quantity: calculatedQtyAfter,
-        updated_at: new Date().toISOString()
-      });
-    } else {
-      const newInvId = doc(collection(db, 'inventory')).id;
-      batch.set(doc(db, 'inventory', newInvId), {
-        business_id: businessId,
-        branch_id: branchId,
-        product_id: productId,
-        quantity: calculatedQtyAfter,
-        reorder_level: 5,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
+    if (moveInsertErr) {
+      console.error('[recordStockMovement] Failed to insert stock movement:', moveInsertErr);
+      throw new Error(moveInsertErr.message);
     }
 
-    await batch.commit();
+    // 4. Update or insert inventory stock count directly in Supabase
+    if (invDoc) {
+      const { error: invUpdateErr } = await supabase.from('inventory')
+        .update({
+          quantity: calculatedQtyAfter,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', invDoc.id);
 
-    // 3. Automated Journal Posting based on inventory action type
+      if (invUpdateErr) {
+        console.error('[recordStockMovement] Failed to update inventory level:', invUpdateErr);
+        throw new Error(invUpdateErr.message);
+      }
+    } else {
+      const { error: invInsertErr } = await supabase.from('inventory')
+        .insert({
+          business_id: businessId,
+          branch_id: branchId,
+          product_id: productId,
+          quantity: calculatedQtyAfter,
+          reorder_level: 5,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+
+      if (invInsertErr) {
+        console.error('[recordStockMovement] Failed to insert inventory level:', invInsertErr);
+        throw new Error(invInsertErr.message);
+      }
+    }
+
+    // 5. Automated Journal Posting based on inventory action type
     if (valueImpact > 0) {
       if (type === 'POS_SALE') {
         // Debit: COGS (5000)
