@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Filter, Download, MoreHorizontal, Settings2, ArrowUpDown, Printer, Edit3, Check, RotateCcw, Loader2 } from 'lucide-react';
+import { Search, Plus, Filter, Download, MoreHorizontal, Settings2, ArrowUpDown, Printer, Edit3, Check, RotateCcw, Loader2, Tag } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '../ui/dialog';
+import { PriceLabelsGenerator } from './PriceLabelsGenerator';
 import {
   Table as ShadcnTable,
   TableHeader,
@@ -25,11 +26,17 @@ const getPackSize = (sku: string | undefined): number => {
   return match ? parseInt(match[1], 10) : 1;
 };
 
-export function ProductList() {
+interface ProductListProps {
+  onImportClick?: () => void;
+}
+
+export function ProductList({ onImportClick }: ProductListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [isLabelsOpen, setIsLabelsOpen] = useState(false);
   
   // Branch configuration states
   const [branches, setBranches] = useState<any[]>([]);
@@ -50,6 +57,23 @@ export function ProductList() {
   const [isPack, setIsPack] = useState(false);
   const [packSize, setPackSize] = useState('1');
   const [wholesalePrice, setWholesalePrice] = useState('');
+
+  // Categories list state map
+  const [categories, setCategories] = useState<any[]>([]);
+
+  // Edit Product Dialog Form State
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editSKU, setEditSKU] = useState('');
+  const [editBarcode, setEditBarcode] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editRetailPrice, setEditRetailPrice] = useState('');
+  const [editWholesalePrice, setEditWholesalePrice] = useState('');
+
+  // Adjust Product Stock Dialog Form State
+  const [adjustingProduct, setAdjustingProduct] = useState<any | null>(null);
+  const [adjType, setAdjType] = useState<'add' | 'subtract' | 'set'>('add');
+  const [adjQty, setAdjQty] = useState('1');
 
   const fetchProducts = async () => {
     try {
@@ -90,6 +114,7 @@ export function ProductList() {
       const branchesData = branchesRes?.data || [];
       
       setBranches(branchesData);
+      setCategories(categoriesData);
       if (branchesData.length > 0 && !selectedBranchId) {
         setSelectedBranchId(branchesData[0].id);
       }
@@ -215,6 +240,166 @@ export function ProductList() {
     } catch (err: any) {
        console.error("Firebase insert error", err);
        toast.error(`Error adding product: ${err.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleEditProduct = async () => {
+    if (!editingProduct) return;
+    if (!editName || !editRetailPrice) {
+      toast.error("Please fill in required fields (Name, Price)!");
+      return;
+    }
+
+    try {
+      const retail = parseFloat(editRetailPrice);
+      const wholesale = parseFloat(editWholesalePrice);
+
+      if (isNaN(retail)) {
+        toast.error("Retail price must be a valid number");
+        return;
+      }
+
+      const { error } = await supabase
+        .from('products')
+        .update({
+          name: editName,
+          sku: editSKU || null,
+          barcode: editBarcode || null,
+          retail_price: retail,
+          wholesale_price: isNaN(wholesale) ? (retail * 0.9) : wholesale,
+          category_id: editCategory || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingProduct.id);
+
+      if (error) throw error;
+
+      toast.success(`Product "${editName}" updated successfully!`);
+      setEditingProduct(null);
+      fetchProducts();
+    } catch (err: any) {
+      toast.error(err.message || "Error updating product");
+    }
+  };
+
+  const handleAdjustStock = async () => {
+    if (!adjustingProduct) return;
+    const qtyVal = parseFloat(adjQty);
+    if (isNaN(qtyVal) || qtyVal <= 0) {
+      toast.error("Please specify a valid positive quantity to adjust");
+      return;
+    }
+
+    // Get current inventory record
+    const stockRecord = selectedBranchId 
+      ? adjustingProduct.inventory?.find((i: any) => i.branch_id === selectedBranchId)
+      : adjustingProduct.inventory?.[0];
+    const currentQty = stockRecord ? stockRecord.quantity : 0;
+
+    let targetQty = currentQty;
+    let deltaQty = qtyVal;
+
+    if (adjType === 'add') {
+      targetQty = currentQty + qtyVal;
+      deltaQty = qtyVal;
+    } else if (adjType === 'subtract') {
+      if (currentQty < qtyVal) {
+        toast.error(`Insufficient stock! Cannot hollow out ${qtyVal} units when current level is ${currentQty} units.`);
+        return;
+      }
+      targetQty = currentQty - qtyVal;
+      deltaQty = -qtyVal;
+    } else if (adjType === 'set') {
+      targetQty = qtyVal;
+      deltaQty = qtyVal - currentQty;
+    }
+
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      let businessId = adjustingProduct.business_id;
+
+      if (userData?.user && !businessId) {
+        const { data: bData } = await supabase
+          .from('business_users')
+          .select('business_id')
+          .eq('user_id', userData.user.id)
+          .limit(1)
+          .maybeSingle();
+        if (bData) businessId = bData.business_id;
+      }
+
+      const branchIdToUse = selectedBranchId || (branches.length > 0 ? branches[0].id : null);
+
+      if (!branchIdToUse) {
+        toast.error("No active branch context resolved.");
+        return;
+      }
+
+      // 1. Update/upsert the inventory row
+      if (stockRecord && stockRecord.id) {
+        const { error } = await supabase
+          .from('inventory')
+          .update({
+            quantity: targetQty,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', stockRecord.id);
+
+        if (error) throw error;
+      } else {
+        // Find existing record manually just in case
+        const { data: existing } = await supabase
+          .from('inventory')
+          .select('*')
+          .eq('product_id', adjustingProduct.id)
+          .eq('branch_id', branchIdToUse);
+
+        if (existing && existing.length > 0) {
+          const { error } = await supabase
+            .from('inventory')
+            .update({
+              quantity: targetQty,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existing[0].id);
+
+          if (error) throw error;
+        } else {
+          // Insert
+          const { error } = await supabase
+            .from('inventory')
+            .insert({
+              business_id: businessId,
+              branch_id: branchIdToUse,
+              product_id: adjustingProduct.id,
+              quantity: targetQty,
+              created_at: new Date().toISOString()
+            });
+
+          if (error) throw error;
+        }
+      }
+
+      // 2. Insert into stock_movements for logging audits
+      const { error: mvmtError } = await supabase
+        .from('stock_movements')
+        .insert({
+          product_id: adjustingProduct.id,
+          branch_id: branchIdToUse,
+          quantity: deltaQty,
+          type: deltaQty >= 0 ? 'receiving' : 'sale',
+          created_at: new Date().toISOString()
+        });
+
+      if (mvmtError) {
+        console.error("Audit movement tracking error:", mvmtError);
+      }
+
+      toast.success(`Stock level adjusted for "${adjustingProduct.name}". New quantities: ${targetQty} units.`);
+      setAdjustingProduct(null);
+      fetchProducts();
+    } catch (err: any) {
+      toast.error(err.message || "Error adjusting stock");
     }
   };
 
@@ -382,6 +567,16 @@ export function ProductList() {
     return <Badge className="bg-zinc-100 text-zinc-600 hover:bg-zinc-100 border-0">Out of Stock</Badge>;
   };
 
+  const filteredProducts = products.filter(item => {
+    const sTerm = searchTerm.toLowerCase();
+    return (
+      (item.name || '').toLowerCase().includes(sTerm) ||
+      (item.sku || '').toLowerCase().includes(sTerm) ||
+      (item.barcode || '').toLowerCase().includes(sTerm) ||
+      (item.code || '').toLowerCase().includes(sTerm)
+    );
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -426,7 +621,33 @@ export function ProductList() {
             <Edit3 className="mr-2 h-4 w-4" />
             {isInlineEditMode ? "Exit Quick Edit" : "Quick Edit"}
           </Button>
-          <Button variant="outline" className="bg-white shadow-sm" onClick={() => toast.info('Please use the "Bulk Import" tab to import products.')}>Import</Button>
+          <Button 
+            variant="outline" 
+            className="bg-white shadow-sm border-indigo-200 text-indigo-700 hover:bg-indigo-50/40" 
+            onClick={() => {
+              if (onImportClick) {
+                onImportClick();
+              } else {
+                toast.info('Please use the "Bulk Import" tab to import products.');
+              }
+            }}
+          >
+            Bulk Add / Import
+          </Button>
+          <Button 
+            variant="outline" 
+            className={`shadow-sm bg-white ${selectedProductIds.length > 0 ? 'border-indigo-300 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100/50' : 'text-zinc-600'}`}
+            onClick={() => {
+              if (selectedProductIds.length === 0) {
+                toast.info('Please select at least one product using the checkboxes first.');
+                return;
+              }
+              setIsLabelsOpen(true);
+            }}
+          >
+            <Tag className="mr-2 h-4 w-4 text-indigo-500" />
+            Print Price Labels {selectedProductIds.length > 0 && `(${selectedProductIds.length})`}
+          </Button>
           <Button variant="outline" className="bg-white shadow-sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Print</Button>
           <Button variant="outline" className="bg-white shadow-sm" onClick={exportCSV}><Download className="mr-2 h-4 w-4" /> Export</Button>
           <Button variant="outline" className="bg-white shadow-sm"><Filter className="mr-2 h-4 w-4" /> Filter</Button>
@@ -495,6 +716,26 @@ export function ProductList() {
           <ShadcnTable>
             <TableHeader className="bg-zinc-50/80 border-b border-zinc-200">
               <TableRow>
+                <TableHead className="w-[45px] px-3">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 text-indigo-600 rounded border-zinc-350 bg-white focus:ring-indigo-500 cursor-pointer"
+                    checked={filteredProducts.length > 0 && selectedProductIds.length === filteredProducts.length}
+                    ref={(el) => {
+                      if (el) {
+                        el.indeterminate = selectedProductIds.length > 0 && selectedProductIds.length < filteredProducts.length;
+                      }
+                    }}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedProductIds(filteredProducts.map(p => p.id));
+                      } else {
+                        setSelectedProductIds([]);
+                      }
+                    }}
+                    title="Select all products"
+                  />
+                </TableHead>
                 <TableHead className="w-[80px]">Image</TableHead>
                 <TableHead className="w-[120px]">SKU/Barcode</TableHead>
                 <TableHead>Product</TableHead>
@@ -507,15 +748,7 @@ export function ProductList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.filter(item => {
-                const sTerm = searchTerm.toLowerCase();
-                return (
-                  (item.name || '').toLowerCase().includes(sTerm) ||
-                  (item.sku || '').toLowerCase().includes(sTerm) ||
-                  (item.barcode || '').toLowerCase().includes(sTerm) ||
-                  (item.code || '').toLowerCase().includes(sTerm)
-                );
-              }).map((item) => {
+              {filteredProducts.map((item) => {
                 const stockRecord = selectedBranchId 
                   ? item.inventory?.find((i: any) => i.branch_id === selectedBranchId)
                   : item.inventory?.[0];
@@ -532,8 +765,38 @@ export function ProductList() {
                   parseFloat(rowEdit.wholesale_price) !== item.wholesale_price ||
                   parseInt(rowEdit.stock, 10) !== stock;
 
+                const isChecked = selectedProductIds.includes(item.id);
+
                 return (
-                <TableRow key={item.id} className="hover:bg-zinc-50/50 cursor-pointer group">
+                <TableRow 
+                  key={item.id} 
+                  className={`hover:bg-zinc-50/50 cursor-pointer group ${isChecked ? 'bg-indigo-50/30' : ''}`}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.closest('input') || target.closest('button') || target.closest('[role="menuitem"]')) {
+                      return;
+                    }
+                    if (isChecked) {
+                      setSelectedProductIds(prev => prev.filter(id => id !== item.id));
+                    } else {
+                      setSelectedProductIds(prev => [...prev, item.id]);
+                    }
+                  }}
+                >
+                  <TableCell className="px-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 text-indigo-600 rounded border-zinc-300 focus:ring-indigo-500 cursor-pointer"
+                      checked={isChecked}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedProductIds(prev => [...prev, item.id]);
+                        } else {
+                          setSelectedProductIds(prev => prev.filter(id => id !== item.id));
+                        }
+                      }}
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="h-10 w-10 bg-zinc-100 rounded-md border border-zinc-200 flex items-center justify-center">
                       <span className="text-[10px] text-zinc-400">Img</span>
@@ -677,10 +940,32 @@ export function ProductList() {
                             </Button>
                           } 
                         />
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem>Edit Product</DropdownMenuItem>
-                          <DropdownMenuItem>Adjust Stock</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDelete(item.id)} className="text-red-600">Delete Product</DropdownMenuItem>
+                        <DropdownMenuContent align="end" className="w-48 bg-white">
+                          <DropdownMenuItem 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingProduct(item);
+                              setEditName(item.name || '');
+                              setEditSKU(item.sku || '');
+                              setEditBarcode(item.barcode || '');
+                              setEditCategory(item.category_id || '');
+                              setEditRetailPrice(item.retail_price?.toString() || '0');
+                              setEditWholesalePrice(item.wholesale_price?.toString() || '0');
+                            }}
+                          >
+                            Edit Product
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAdjustingProduct(item);
+                              setAdjType('add');
+                              setAdjQty('1');
+                            }}
+                          >
+                            Adjust Stock
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="text-red-600">Delete Product</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
@@ -692,6 +977,122 @@ export function ProductList() {
           </ShadcnTable>
         </div>
       </Card>
+
+      {isLabelsOpen && (
+        <PriceLabelsGenerator
+          selectedProducts={products.filter((p: any) => selectedProductIds.includes(p.id))}
+          selectedBranchId={selectedBranchId}
+          onClose={() => setIsLabelsOpen(false)}
+        />
+      )}
+
+      {/* Dynamic Edit Product Dialog */}
+      <Dialog open={!!editingProduct} onOpenChange={(open) => !open && setEditingProduct(null)}>
+        <DialogContent className="bg-white border-zinc-250">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-zinc-900 animate-in fade-in">Edit Product Details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-zinc-600">Product Name *</Label>
+              <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="e.g. Mazoe Blackberry 2L" className="bg-white border-zinc-200" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-zinc-600">SKU Code</Label>
+                <Input value={editSKU} onChange={e => setEditSKU(e.target.value)} placeholder="e.g. BV-MZB-2L" className="bg-white border-zinc-200 font-mono text-xs" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-zinc-600">Barcode Identifier</Label>
+                <Input value={editBarcode} onChange={e => setEditBarcode(e.target.value)} placeholder="e.g. 6001234567890" className="bg-white border-zinc-200 font-mono text-xs" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-zinc-600">Inventory Category</Label>
+              <Select value={editCategory} onValueChange={setEditCategory}>
+                <SelectTrigger className="bg-white border-zinc-200">
+                  <SelectValue placeholder="Select Category" />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  <SelectItem value="none_clear">Uncategorized / General Catalog</SelectItem>
+                  {categories.map((c: any) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-zinc-600">Retail Price ($) *</Label>
+                <Input type="number" step="0.01" value={editRetailPrice} onChange={e => setEditRetailPrice(e.target.value)} placeholder="0.00" className="bg-white border-zinc-200 font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-zinc-600">Wholesale Price ($)</Label>
+                <Input type="number" step="0.01" value={editWholesalePrice} onChange={e => setEditWholesalePrice(e.target.value)} placeholder="0.00" className="bg-white border-zinc-200 font-mono" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="mt-6 flex justify-end gap-2">
+            <Button variant="outline" className="bg-white border-zinc-200 text-zinc-600" onClick={() => setEditingProduct(null)}>Cancel</Button>
+            <Button onClick={handleEditProduct} className="bg-zinc-900 text-white hover:bg-zinc-800">Save Product Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjust Inventory Stock Level Dialog */}
+      <Dialog open={!!adjustingProduct} onOpenChange={(open) => !open && setAdjustingProduct(null)}>
+        <DialogContent className="bg-white border-zinc-250 max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-zinc-900">Adjust Stock Level</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-3">
+            <div className="bg-zinc-50 p-3 rounded-lg border border-zinc-200/60 flex flex-col gap-1 text-xs">
+              <div><span className="font-semibold text-zinc-500">Product:</span> <span className="font-bold text-zinc-900">{adjustingProduct?.name}</span></div>
+              <div><span className="font-semibold text-zinc-500">Branch:</span> <span className="font-bold text-zinc-900">{branches.find(b => b.id === selectedBranchId)?.name || 'Default Branch'}</span></div>
+              <div>
+                <span className="font-semibold text-zinc-500">Current Level:</span>{' '}
+                <span className="font-black text-indigo-755 font-mono text-[13px]">
+                  {(() => {
+                    const rec = selectedBranchId 
+                      ? adjustingProduct?.inventory?.find((i: any) => i.branch_id === selectedBranchId)
+                      : adjustingProduct?.inventory?.[0];
+                    return rec ? rec.quantity : 0;
+                  })()}{' '}
+                  units
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-zinc-600 font-bold uppercase text-[10px] tracking-wider">Adjustment Action Type</Label>
+              <Select value={adjType} onValueChange={(val: any) => setAdjType(val)}>
+                <SelectTrigger className="bg-white border-zinc-200">
+                  <SelectValue placeholder="Select Action" />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  <SelectItem value="add">Add Stock Segment (+)</SelectItem>
+                  <SelectItem value="subtract">Deduct / Shrink Stock (-)</SelectItem>
+                  <SelectItem value="set">Overrule / Set Exact Stock (=)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-zinc-650 font-bold uppercase text-[10px] tracking-wider">Adjustment Quantity (units)</Label>
+              <Input type="number" min="1" value={adjQty} onChange={e => setAdjQty(e.target.value)} className="bg-white font-mono text-sm border-zinc-200" />
+            </div>
+          </div>
+          <DialogFooter className="mt-6 flex justify-end gap-2">
+            <Button variant="outline" className="bg-white border-zinc-200" onClick={() => setAdjustingProduct(null)}>Cancel</Button>
+            <Button onClick={handleAdjustStock} className="bg-zinc-900 text-white hover:bg-zinc-800 font-semibold">Apply Adjustment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

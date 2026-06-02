@@ -446,7 +446,14 @@ export default function POS() {
 
     const isOffline = !navigator.onLine;
 
-    const sale = completeSale({ isOffline });
+    let sale = null;
+    try {
+      sale = completeSale({ isOffline });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to complete checkout');
+      return;
+    }
+
     if (sale) {
       setLastSale(sale);
       setShowPayment(false);

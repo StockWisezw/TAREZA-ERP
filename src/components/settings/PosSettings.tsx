@@ -11,6 +11,7 @@ export function PosSettings() {
   const [isSaving, setIsSaving] = useState(false);
   const [offlineMode, setOfflineMode] = useState(false);
   const [initialOfflineMode, setInitialOfflineMode] = useState(false);
+  const [strictInventory, setStrictInventory] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem('tareza_offline_mode');
@@ -19,12 +20,15 @@ export function PosSettings() {
       setOfflineMode(mode);
       setInitialOfflineMode(mode);
     }
+    const strictStored = localStorage.getItem('tareza_strict_inventory');
+    setStrictInventory(strictStored === 'true');
   }, []);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
       localStorage.setItem('tareza_offline_mode', String(offlineMode));
+      localStorage.setItem('tareza_strict_inventory', String(strictInventory));
       
       // Register service worker if offline mode is enabled
       if (offlineMode && 'serviceWorker' in navigator) {
@@ -98,6 +102,16 @@ export function PosSettings() {
                   </span>
                 </div>
                 <Switch defaultChecked />
+              </div>
+
+              <div className="flex items-start justify-between gap-4 p-4 rounded-xl border border-zinc-100 bg-zinc-50/50 md:col-span-2">
+                <div className="flex flex-col space-y-1">
+                  <Label className="font-semibold text-zinc-900">Enforce Strict Stock Levels</Label>
+                  <span className="text-sm text-zinc-500">
+                    Block transactions and output alerts if products in cart exceed available branch warehouse stocks. Keep of of stock selling simple by turning this off.
+                  </span>
+                </div>
+                <Switch checked={strictInventory} onCheckedChange={setStrictInventory} />
               </div>
             </div>
           </CardContent>

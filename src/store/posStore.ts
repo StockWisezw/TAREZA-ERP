@@ -332,15 +332,18 @@ export const usePOSStore = create<POSState>()(
 
         const isOffline = options?.isOffline ?? (!navigator.onLine || localStorage.getItem('tareza_offline_mode') === 'true');
 
-        // Check stock availability before completing the sale
-        for (const item of state.cart) {
-          const itemStock = item.product.stock;
-          if (itemStock !== undefined && itemStock !== null) {
-            const requestedUnits = item.tier === 'wholesale'
-              ? item.quantity * getPackSize(item.product.sku)
-              : item.quantity;
-            if (requestedUnits > itemStock) {
-              throw new Error(`Insufficient stock for "${item.product.name}". (Available: ${itemStock} units, requested: ${requestedUnits} units)`);
+        // Check stock availability before completing the sale if strict inventory checking is enabled
+        const isStrict = typeof window !== 'undefined' ? localStorage.getItem('tareza_strict_inventory') === 'true' : false;
+        if (isStrict) {
+          for (const item of state.cart) {
+            const itemStock = item.product.stock;
+            if (itemStock !== undefined && itemStock !== null) {
+              const requestedUnits = item.tier === 'wholesale'
+                ? item.quantity * getPackSize(item.product.sku)
+                : item.quantity;
+              if (requestedUnits > itemStock) {
+                throw new Error(`Insufficient stock for "${item.product.name}". (Available: ${itemStock} units, requested: ${requestedUnits} units)`);
+              }
             }
           }
         }

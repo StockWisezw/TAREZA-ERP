@@ -43,7 +43,7 @@ export default function Inventory() {
           </TabsContent>
           
           <TabsContent value="products" className="mt-0 outline-none">
-            <ProductList />
+            <ProductList onImportClick={() => setActiveTab('import')} />
           </TabsContent>
           
           <TabsContent value="import" className="mt-0 outline-none">
