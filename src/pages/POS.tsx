@@ -3,6 +3,7 @@ import { Search, Trash2, CreditCard, Receipt, Barcode, ShoppingCart, Package, Ar
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
+import { Switch } from '../components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { Separator } from '../components/ui/separator';
@@ -49,6 +50,7 @@ export default function POS() {
   const [activeSession, setActiveSession] = useState<any | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [openingFloat, setOpeningFloat] = useState('100');
+  const [requireFloat, setRequireFloat] = useState(false);
   const [closingActual, setClosingActual] = useState('');
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [showShiftDetails, setShowShiftDetails] = useState(false);
@@ -201,6 +203,11 @@ export default function POS() {
   useEffect(() => {
     const isVat = localStorage.getItem('tareza_vat_enabled') === 'true';
     setVatEnabled(isVat);
+    const reqFloat = localStorage.getItem('tareza_require_float') === 'true';
+    setRequireFloat(reqFloat);
+    if (!reqFloat) {
+      setOpeningFloat('0');
+    }
   }, []);
 
   const [activeCategory, setActiveCategory] = useState<string>('all');
@@ -649,7 +656,11 @@ export default function POS() {
 
   const handleStartShift = async () => {
     try {
-      const floatVal = parseFloat(openingFloat);
+      const floatVal = parseFloat(openingFloat) || 0;
+      if (requireFloat && (!openingFloat || floatVal <= 0)) {
+        toast.error('Starting cash float is required. Please type an opening amount first.');
+        return;
+      }
       if (isNaN(floatVal) || floatVal < 0) {
         toast.error('Please input a valid opening balance float (non-negative).');
         return;
@@ -739,15 +750,41 @@ export default function POS() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-600">Register Opening Cash Float (USD)</label>
+              <label className="text-xs font-medium text-zinc-650 block">
+                Register Opening Cash Float (USD) {requireFloat ? '*' : '(Optional)'}
+              </label>
               <Input
                 type="number"
-                placeholder="100.00"
+                placeholder={requireFloat ? "100.00" : "0.00 (Optional - Defaults to zero)"}
                 value={openingFloat}
                 onChange={(e) => setOpeningFloat(e.target.value)}
                 className="w-full font-mono text-lg py-5 pl-3"
               />
             </div>
+            
+            <div className="flex items-center justify-between p-3 bg-zinc-50 border border-zinc-200 rounded-xl transition-all">
+              <div className="space-y-0.5">
+                <label htmlFor="pos-req-float-toggle" className="text-xs font-bold text-zinc-805 cursor-pointer block">Require Cash Float to Open</label>
+                <span className="text-[10px] text-zinc-500 max-w-[210px] block leading-normal">
+                  When disabled, cashier shifts start immediately with custom or zero balances.
+                </span>
+              </div>
+              <Switch 
+                id="pos-req-float-toggle" 
+                checked={requireFloat} 
+                onCheckedChange={(val) => {
+                  setRequireFloat(val);
+                  localStorage.setItem('tareza_require_float', String(val));
+                  if (!val) {
+                    setOpeningFloat('0');
+                  } else {
+                    setOpeningFloat('100');
+                  }
+                  toast.success(val ? "Float requirement activated." : "Float requirement disabled.");
+                }} 
+              />
+            </div>
+
             <div className="bg-zinc-50 rounded-lg p-3 border border-zinc-200 text-xs text-zinc-600 flex items-start gap-2">
               <span className="text-zinc-400 mt-0.5">ℹ</span>
               <span>All sales completed under this terminal shift will be balanced automatically to your cashier ID and are fully auditable.</span>

@@ -12,6 +12,7 @@ export function PosSettings() {
   const [offlineMode, setOfflineMode] = useState(false);
   const [initialOfflineMode, setInitialOfflineMode] = useState(false);
   const [strictInventory, setStrictInventory] = useState(false);
+  const [requireFloat, setRequireFloat] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem('tareza_offline_mode');
@@ -22,6 +23,8 @@ export function PosSettings() {
     }
     const strictStored = localStorage.getItem('tareza_strict_inventory');
     setStrictInventory(strictStored === 'true');
+    const floatStored = localStorage.getItem('tareza_require_float');
+    setRequireFloat(floatStored === 'true');
   }, []);
 
   const handleSave = async () => {
@@ -29,6 +32,7 @@ export function PosSettings() {
     try {
       localStorage.setItem('tareza_offline_mode', String(offlineMode));
       localStorage.setItem('tareza_strict_inventory', String(strictInventory));
+      localStorage.setItem('tareza_require_float', String(requireFloat));
       
       // Register service worker if offline mode is enabled
       if (offlineMode && 'serviceWorker' in navigator) {
@@ -132,7 +136,7 @@ export function PosSettings() {
                   Cashiers must declare their opening floating cash before starting a shift.
                 </span>
               </div>
-              <Switch defaultChecked />
+              <Switch checked={requireFloat} onCheckedChange={setRequireFloat} />
             </div>
             
             <div className="flex items-center justify-between pb-4 border-b border-zinc-50">

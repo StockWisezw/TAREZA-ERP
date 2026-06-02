@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
+import { Switch } from '../components/ui/switch';
 import { 
   Lock, Unlock, DollarSign, Calculator, FileText, AlertTriangle, 
   ArrowUpRight, ArrowDownRight, UserMinus, History, Coins, Printer, 
@@ -76,6 +77,7 @@ export default function CashManagement() {
   
   // Starting float user input
   const [startingFloatInput, setStartingFloatInput] = useState('');
+  const [requireFloat, setRequireFloat] = useState(false);
 
   // Active Session Auditing drawer/modal state
   const [selectedAuditSession, setSelectedAuditSession] = useState<RegisterSession | null>(null);
@@ -118,6 +120,8 @@ export default function CashManagement() {
   useEffect(() => {
     fetchProfiles();
     fetchActiveShiftAndAccounting();
+    const floatStored = localStorage.getItem('tareza_require_float');
+    setRequireFloat(floatStored === 'true');
   }, []);
 
   const fetchActiveShiftAndAccounting = async () => {
@@ -309,6 +313,11 @@ export default function CashManagement() {
   const handleOpenRegister = async () => {
     try {
         const floatAmount = parseFloat(startingFloatInput) || 0;
+        
+        if (requireFloat && (!startingFloatInput || floatAmount <= 0)) {
+            toast.error('Starting cash float is required. Please type an opening amount.');
+            return;
+        }
         
         const { data: openedLog, error: logErr } = await supabase.from('cash_drawer_logs').insert([{
             business_id: businessId,
@@ -904,18 +913,38 @@ export default function CashManagement() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="float" className="text-xs font-bold text-zinc-600 uppercase tracking-wider">Starting Shift Float (USD / base)</Label>
+                      <Label htmlFor="float" className="text-xs font-bold text-zinc-650 uppercase tracking-wider">
+                        Starting Shift Float (USD / base) {requireFloat ? '*' : '(Optional)'}
+                      </Label>
                       <div className="relative">
                         <DollarSign className="absolute left-3 top-3 h-5 w-5 text-indigo-600" />
                         <Input 
                           id="float" 
                           type="number" 
-                          placeholder="0.00" 
+                          placeholder={requireFloat ? "0.00" : "0.00 (Optional - Defaults to zero)"} 
                           className="pl-10 text-xl font-mono border-zinc-200 h-11 focus-visible:ring-indigo-500 bg-zinc-50/50"
                           value={startingFloatInput}
                           onChange={(e) => setStartingFloatInput(e.target.value)}
                         />
                       </div>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 bg-zinc-50 border border-zinc-200 rounded-xl transition-all">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="req-float-toggle" className="text-xs font-bold text-zinc-800 cursor-pointer block">Require Cash Float to Open</Label>
+                        <span className="text-[10px] text-zinc-500 max-w-[240px] block leading-normal">
+                          When disabled, registers can start immediately with empty/optional starting cash.
+                        </span>
+                      </div>
+                      <Switch 
+                        id="req-float-toggle" 
+                        checked={requireFloat} 
+                        onCheckedChange={(val) => {
+                          setRequireFloat(val);
+                          localStorage.setItem('tareza_require_float', String(val));
+                          toast.success(val ? "Starting cash float requirement enabled." : "Starting cash float requirement has been disabled.");
+                        }} 
+                      />
                     </div>
                     
                     <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-xs leading-relaxed text-zinc-600">
