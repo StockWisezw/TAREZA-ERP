@@ -567,8 +567,8 @@ export function Stocktake() {
 
       {/* Review Modal */}
       <Dialog open={!!reviewItem} onOpenChange={(open) => !open && setReviewItem(null)}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden gap-0 bg-white border-zinc-200">
-          <div className="p-6 bg-zinc-50 border-b border-zinc-200">
+        <DialogContent className="max-w-[100vw] w-screen h-screen md:h-[95vh] md:max-w-[98vw] p-0 gap-0 bg-white border-zinc-200 md:rounded-xl overflow-hidden flex flex-col">
+          <div className="p-6 bg-zinc-50 border-b border-zinc-200 shrink-0">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold text-zinc-900">Review Count & Approve Adjustments</DialogTitle>
               <DialogDescription className="text-zinc-500">
@@ -577,7 +577,7 @@ export function Stocktake() {
             </DialogHeader>
           </div>
           
-          <div className="p-6 space-y-4">
+          <div className="p-4 sm:p-6 space-y-4 flex-1 flex flex-col overflow-hidden min-h-0 bg-zinc-50/40">
             {reviewItem?.status === 'REVIEW' ? (
               <div className="bg-amber-55/40 border border-amber-200/70 rounded-xl p-4 flex items-start gap-3 text-amber-900 text-sm">
                 <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
@@ -661,7 +661,7 @@ export function Stocktake() {
               );
             })()}
 
-            <div className="border border-zinc-200 rounded-xl max-h-[350px] overflow-auto bg-white shadow-xs">
+            <div className="border border-zinc-200 rounded-xl overflow-y-auto bg-white shadow-xs flex-1 min-h-[220px]">
               <Table>
                 <TableHeader className="bg-zinc-50 sticky top-0 z-10">
                   <TableRow>
@@ -716,7 +716,7 @@ export function Stocktake() {
             </div>
           </div>
 
-          <div className="p-6 bg-zinc-50 border-t border-zinc-200 flex justify-between items-center rounded-b-xl">
+          <div className="p-6 bg-zinc-50 border-t border-zinc-200 flex justify-between items-center rounded-b-xl shrink-0">
             <Button variant="outline" className="bg-white border-zinc-200" onClick={() => setReviewItem(null)}>Cancel</Button>
             {reviewItem?.status === 'REVIEW' && (
               <div className="flex gap-2">
@@ -785,9 +785,9 @@ export function Stocktake() {
           setActiveStocktake(null);
         }
       }}>
-        <DialogContent className="max-w-5xl p-0 gap-0 bg-white border-zinc-250 rounded-xl overflow-hidden w-[95vw] md:w-full">
+        <DialogContent className="max-w-[100vw] w-screen h-screen md:h-[95vh] md:max-w-[98vw] p-0 gap-0 bg-white border-zinc-250 md:rounded-xl overflow-hidden flex flex-col">
           {/* Header Panel */}
-          <div className="px-6 py-4 border-b flex justify-between items-center bg-zinc-900 text-white">
+          <div className="px-6 py-4 border-b flex justify-between items-center bg-zinc-900 text-white shrink-0">
             <div>
               <h3 className="font-bold text-base flex items-center gap-1.5">
                 <Sparkles className="h-4 w-4 text-emerald-400" /> Active Count Sheet Audit ({activeStocktake?.type || 'FULL'})
@@ -815,7 +815,7 @@ export function Stocktake() {
             </div>
           </div>
           
-          <div className="p-6 bg-zinc-50 space-y-4">
+          <div className="p-4 sm:p-6 bg-zinc-50 space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
             {/* Quick Actions & Barcode Input */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-white p-4 rounded-xl border border-zinc-200">
               <div className="md:col-span-6 relative space-y-1.5">
@@ -1046,15 +1046,15 @@ export function Stocktake() {
             </div>
 
             {/* Guided Grid Count List */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center px-1">
+            <div className="space-y-1.5 flex-1 flex flex-col min-h-0">
+              <div className="flex justify-between items-center px-1 shrink-0">
                 <Label className="text-xs font-black uppercase text-zinc-600 tracking-wider">Guided Active Count Sheet Details</Label>
                 <div className="text-[11px] font-mono font-bold text-zinc-500">
                   Showing {filteredCountItems.length} of {countedItems.length} catalog lines
                 </div>
               </div>
               
-              <div className="border border-zinc-200 rounded-xl overflow-hidden bg-white max-h-[300px] overflow-y-auto shadow-xs">
+              <div className="border border-zinc-200 rounded-xl overflow-y-auto bg-white shadow-xs flex-1 min-h-[220px]">
                 <Table>
                   <TableHeader className="bg-zinc-50 sticky top-0 z-10">
                     <TableRow>
@@ -1168,7 +1168,7 @@ export function Stocktake() {
             </div>
           </div>
           
-          <div className="px-6 py-4 bg-zinc-100 border-t border-zinc-200 flex justify-between items-center rounded-b-xl">
+          <div className="px-6 py-4 bg-zinc-100 border-t border-zinc-200 flex justify-between items-center rounded-b-xl shrink-0">
             <Button 
               variant="ghost" 
               className="text-zinc-600 hover:text-red-650"
