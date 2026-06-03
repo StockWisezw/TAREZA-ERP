@@ -228,6 +228,38 @@ export function SyncManager() {
           console.warn('[SyncManager] Register session stats update bypassed:', e);
         }
 
+        // 3.5 Log cash payment in cash_drawer_logs if any cash portion exists
+        try {
+          let totalCashPortion = 0;
+          if (sale.payments && sale.payments.length > 0) {
+            sale.payments.forEach((p: any) => {
+              const m = String(p.method || p.payment_method || '').toLowerCase();
+              if (m === 'cash' || m === 'usd_cash' || m === 'zig_cash' || m === 'zwg_cash') {
+                totalCashPortion += Number(p.amount || 0);
+              }
+            });
+          } else {
+            const pm = String(sale.payment_method || '').toLowerCase();
+            if (pm === 'cash' || pm === 'usd_cash' || pm === 'zig_cash' || pm === 'zwg_cash') {
+              totalCashPortion = Number(sale.total || 0);
+            }
+          }
+
+          if (totalCashPortion > 0) {
+            await supabase.from('cash_drawer_logs').insert([{
+              business_id: businessId,
+              branch_id: branchId || null,
+              amount: totalCashPortion,
+              type: 'cash_in',
+              transaction_type: 'cash_sale',
+              notes: `POS Cash Payment received for Receipt #${sale.receiptNumber} (Offline Sync)`,
+              created_at: new Date(sale.timestamp || Date.now()).toISOString()
+            }]);
+          }
+        } catch (e) {
+          console.warn('[SyncManager] Cash drawer logging bypassed:', e);
+        }
+
         // 4. Update Customer Balance if credit was extended
         try {
           if (isCredit && sale.customerId) {

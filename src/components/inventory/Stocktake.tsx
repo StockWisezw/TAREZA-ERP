@@ -42,27 +42,25 @@ export function Stocktake() {
 
   const fetchProducts = async () => {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select(`
-          id,
-          name,
-          sku,
-          barcode,
-          retail_price,
-          wholesale_price,
-          is_active,
-          inventory (
-            id,
-            branch_id,
-            quantity
-          )
-        `)
-        .eq('is_active', true)
-        .order('name');
-      if (data) {
-        setProducts(data);
-      }
+      const [productsRes, inventoryRes] = await Promise.all([
+        supabase.from('products').select('id, name, sku, barcode, retail_price, wholesale_price, is_active').eq('is_active', true).order('name'),
+        supabase.from('inventory').select('id, product_id, branch_id, quantity')
+      ]);
+
+      if (productsRes.error) throw productsRes.error;
+
+      const productsData = productsRes.data || [];
+      const inventoryData = inventoryRes?.data || [];
+
+      const mapped = productsData.map(p => {
+        const productInventory = inventoryData.filter((i: any) => i.product_id === p.id);
+        return {
+          ...p,
+          inventory: productInventory
+        };
+      });
+
+      setProducts(mapped);
     } catch (err) {
       console.error('Error fetching products inside stocktake component:', err);
     }
@@ -118,9 +116,22 @@ export function Stocktake() {
         return;
       }
 
+      let currentBranchId = activeStocktake?.branch_id || activeStocktake?.branches?.id;
+      if (!currentBranchId) {
+        const { data: stInfo } = await supabase
+          .from('stocktakes_advanced')
+          .select('branch_id')
+          .eq('id', stocktakeId)
+          .maybeSingle();
+        currentBranchId = stInfo?.branch_id;
+      }
+
       // Map rows
       const insertRows = items.map(item => {
-        const sysQty = item.product?.inventory?.[0]?.quantity || 0;
+        const branchInventory = currentBranchId 
+          ? item.product?.inventory?.find((i: any) => i.branch_id === currentBranchId)
+          : null;
+        const sysQty = branchInventory ? branchInventory.quantity : (item.product?.inventory?.[0]?.quantity || 0);
         const cntQty = Number(item.counted_qty || 0);
         return {
           stocktake_id: stocktakeId,
@@ -266,6 +277,87 @@ export function Stocktake() {
       fetchStocktakes();
     } catch (err: any) {
       toast.error(err.message || 'Error occurred during stocktake approval');
+    }
+  };
+
+  const handleDirectApprove = async (stId: string, items: any[]) => {
+    try {
+      setSavingProgress(true);
+      await saveCountedItemsToDB(stId, items);
+      localStorage.setItem(`stocktake_counted_${stId}`, JSON.stringify(items));
+
+      // 1. Update advanced header
+      const { error: errorAdv } = await supabase
+        .from('stocktakes_advanced')
+        .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
+        .eq('id', stId);
+      
+      if (errorAdv) throw errorAdv;
+
+      // 2. Update mirror stocktake status to COMPLETED
+      await supabase
+        .from('stocktakes')
+        .update({ status: 'COMPLETED' })
+        .eq('id', stId);
+
+      // 3. Update active inventory quantities inside actual Inventory model.
+      const branchId = activeStocktake?.branch_id;
+      const businessId = activeStocktake?.business_id;
+
+      if (!branchId) {
+        throw new Error("Could not identify target branch for inventory adjustment.");
+      }
+
+      if (items && items.length > 0) {
+        for (const item of items) {
+          const prodId = item.product?.id;
+          const countVal = Number(item.counted_qty);
+          if (!prodId || isNaN(countVal)) continue;
+
+          // Find if there is an inventory record for this product and branch
+          const { data: existing } = await supabase
+            .from('inventory')
+            .select('*')
+            .eq('product_id', prodId)
+            .eq('branch_id', branchId);
+
+          if (existing && existing.length > 0) {
+            // Update
+            const { error: updateError } = await supabase
+              .from('inventory')
+              .update({
+                quantity: countVal,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existing[0].id);
+
+            if (updateError) console.error("Error updating stock segment:", updateError);
+          } else {
+            // Insert
+            const { error: insertError } = await supabase
+              .from('inventory')
+              .insert({
+                business_id: businessId,
+                branch_id: branchId,
+                product_id: prodId,
+                quantity: countVal,
+                created_at: new Date().toISOString()
+              });
+
+            if (insertError) console.error("Error inserting stock segment:", insertError);
+          }
+        }
+      }
+      
+      toast.success(`Success! Quantities validated, audit finalized and live branch catalog adjusted directly.`);
+      setIsCounting(false);
+      setActiveStocktake(null);
+      setCountedItems([]);
+      fetchStocktakes();
+    } catch (err: any) {
+      toast.error(err.message || 'Error occurred during direct stocktake approval');
+    } finally {
+      setSavingProgress(false);
     }
   };
 
@@ -599,7 +691,10 @@ export function Stocktake() {
             {/* Reconciliation Valuation Basis Selector & Aggregate Summary */}
             {(() => {
               const reviewCalcs = reviewItemsData.reduce((acc, item) => {
-                const systemQty = item.product?.inventory?.[0]?.quantity || 0;
+                const branchInventory = reviewItem?.branch_id 
+                  ? item.product?.inventory?.find((i: any) => i.branch_id === reviewItem.branch_id)
+                  : null;
+                const systemQty = branchInventory ? branchInventory.quantity : (item.product?.inventory?.[0]?.quantity || 0);
                 const countedQty = Number(item.counted_qty || 0);
                 const price = reconciliationValuation === 'cost' 
                   ? Number(item.product?.wholesale_price || 0) 
@@ -682,7 +777,10 @@ export function Stocktake() {
                     </TableRow>
                   ) : (
                     reviewItemsData.map((item: any, idx) => {
-                      const systemQty = item.product?.inventory?.[0]?.quantity || 0;
+                      const branchInventory = reviewItem?.branch_id 
+                        ? item.product?.inventory?.find((i: any) => i.branch_id === reviewItem.branch_id)
+                        : null;
+                      const systemQty = branchInventory ? branchInventory.quantity : (item.product?.inventory?.[0]?.quantity || 0);
                       const countedQty = Number(item.counted_qty || 0);
                       const variance = countedQty - systemQty;
                       const price = reconciliationValuation === 'cost' 
@@ -1168,43 +1266,52 @@ export function Stocktake() {
             </div>
           </div>
           
-          <div className="px-6 py-4 bg-zinc-100 border-t border-zinc-200 flex justify-between items-center rounded-b-xl shrink-0">
+          <div className="px-6 py-4 bg-zinc-100 border-t border-zinc-200 flex flex-wrap gap-4 justify-between items-center rounded-b-xl shrink-0">
             <Button 
               variant="ghost" 
-              className="text-zinc-600 hover:text-red-650"
+              className="text-zinc-600 hover:bg-zinc-200"
               onClick={() => {
                 setIsCounting(false);
                 setActiveStocktake(null);
               }}
             >
-              Close count (Changes pre-saved)
+              Close count (Pre-saved)
             </Button>
-            <Button 
-              onClick={async () => {
-                if (!activeStocktake) return;
-                try {
-                  await saveCountedItemsToDB(activeStocktake.id, countedItems);
-                  localStorage.setItem(`stocktake_counted_${activeStocktake.id}`, JSON.stringify(countedItems));
-                  
-                  const { error } = await supabase
-                    .from('stocktakes_advanced')
-                    .update({ status: 'REVIEW' })
-                    .eq('id', activeStocktake.id);
+            <div className="flex gap-2">
+              <Button 
+                onClick={async () => {
+                  if (!activeStocktake) return;
+                  try {
+                    await saveCountedItemsToDB(activeStocktake.id, countedItems);
+                    localStorage.setItem(`stocktake_counted_${activeStocktake.id}`, JSON.stringify(countedItems));
+                    
+                    const { error } = await supabase
+                      .from('stocktakes_advanced')
+                      .update({ status: 'REVIEW' })
+                      .eq('id', activeStocktake.id);
 
-                  if (error) throw error;
-                  toast.success('Physical level checks submitted successfully! Waiting for leadership variance approval.');
-                  setIsCounting(false);
-                  setActiveStocktake(null);
-                  setCountedItems([]);
-                  fetchStocktakes();
-                } catch (err: any) {
-                  toast.error(err.message || 'Error occurred during audit completion');
-                }
-              }} 
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
-            >
-              Submit Completed Audited Sheet
-            </Button>
+                    if (error) throw error;
+                    toast.success('Physical count submitted for supervisor review successfully!');
+                    setIsCounting(false);
+                    setActiveStocktake(null);
+                    setCountedItems([]);
+                    fetchStocktakes();
+                  } catch (err: any) {
+                    toast.error(err.message || 'Error occurred during audit completion');
+                  }
+                }} 
+                variant="outline"
+                className="bg-white border-zinc-300 text-zinc-700 hover:bg-zinc-50 font-semibold"
+              >
+                Send for Supervisor Review
+              </Button>
+              <Button 
+                onClick={() => handleDirectApprove(activeStocktake.id, countedItems)}
+                className="bg-zinc-900 hover:bg-zinc-800 text-white font-semibold"
+              >
+                Validate & Adjust Stock Live
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
