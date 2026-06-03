@@ -71,6 +71,7 @@ export default function POS() {
   const [selectedCartItemId, setSelectedCartItemId] = useState<string | null>(null);
   const [numpadMode, setNumpadMode] = useState<'qty' | 'disc' | 'price'>('qty');
   const [isNewInput, setIsNewInput] = useState<boolean>(true);
+  const [numpadBuffer, setNumpadBuffer] = useState<string>('');
 
   // Auto-select the last added item or maintain current selection
   useEffect(() => {
@@ -79,9 +80,11 @@ export default function POS() {
       if (!exists) {
         setSelectedCartItemId(cart[cart.length - 1].id);
         setIsNewInput(true);
+        setNumpadBuffer('');
       }
     } else {
       setSelectedCartItemId(null);
+      setNumpadBuffer('');
     }
   }, [cart, selectedCartItemId]);
 
@@ -99,7 +102,7 @@ export default function POS() {
               : item.discount.value;
           }
           const vatAmount = item.product.taxClass === 'standard' 
-            ? Math.max(0, subtotal - itemDiscountValue) * getVatRate() 
+            ? (subtotal - itemDiscountValue) * getVatRate() 
             : 0;
           return { ...item, unitPrice: newPrice, subtotal, vatAmount };
         }
@@ -121,82 +124,120 @@ export default function POS() {
     if (!selectedItem) return;
 
     if (numpadMode === 'qty') {
-      if (key === 'backspace') {
-        const currentStr = selectedItem.quantity.toString();
-        if (currentStr.length <= 1) {
-          updateQuantity(selectedItem.id, 0);
-        } else {
-          updateQuantity(selectedItem.id, parseInt(currentStr.slice(0, -1)) || 0);
-        }
-      } else if (key === '+/-') {
-        updateQuantity(selectedItem.id, -selectedItem.quantity);
-      } else if (key === '.') {
-        // Quantity integer only
-      } else {
-        let newQty = selectedItem.quantity;
-        if (isNewInput) {
-          newQty = parseInt(key);
-          setIsNewInput(false);
-        } else {
-          newQty = parseInt(selectedItem.quantity.toString() + key);
-        }
-        if (!isNaN(newQty)) {
+      let currentBuf = numpadBuffer;
+      if (isNewInput) {
+        if (key === 'backspace') {
+          const s = selectedItem.quantity.toString();
+          currentBuf = s.slice(0, -1);
+        } else if (key === '+/-') {
+          const newQty = -selectedItem.quantity;
           updateQuantity(selectedItem.id, newQty);
+          setNumpadBuffer(newQty.toString());
+          setIsNewInput(false);
+          return;
+        } else if (key === '.') {
+          currentBuf = '0.';
+        } else {
+          currentBuf = key;
+        }
+        setIsNewInput(false);
+      } else {
+        if (key === 'backspace') {
+          currentBuf = currentBuf.slice(0, -1);
+        } else if (key === '+/-') {
+          if (currentBuf.startsWith('-')) {
+            currentBuf = currentBuf.substring(1);
+          } else {
+            currentBuf = '-' + currentBuf;
+          }
+        } else if (key === '.') {
+          if (!currentBuf.includes('.')) {
+            currentBuf = (currentBuf || '0') + '.';
+          }
+        } else {
+          currentBuf = currentBuf + key;
         }
       }
+
+      setNumpadBuffer(currentBuf);
+      const parsed = parseFloat(currentBuf);
+      const finalQty = isNaN(parsed) ? 0 : parsed;
+      updateQuantity(selectedItem.id, finalQty);
     } else if (numpadMode === 'disc') {
       const currentVal = selectedItem.discount?.value || 0;
-      if (key === 'backspace') {
-        const currentStr = currentVal.toString();
-        if (currentStr.length <= 1) {
-          applyItemDiscount(selectedItem.id, { type: 'percentage', value: 0 });
+      let currentBuf = numpadBuffer;
+      if (isNewInput) {
+        if (key === 'backspace') {
+          const s = currentVal.toString();
+          currentBuf = s.slice(0, -1);
+        } else if (key === '+/-') {
+          return;
+        } else if (key === '.') {
+          currentBuf = '0.';
         } else {
-          const discVal = parseFloat(currentStr.slice(0, -1)) || 0;
-          applyItemDiscount(selectedItem.id, { type: 'percentage', value: discVal });
+          currentBuf = key;
         }
-      } else if (key === '+/-') {
-        // No-op for item discount
-      } else if (key === '.') {
         setIsNewInput(false);
       } else {
-        let newVal = 0;
-        if (isNewInput) {
-          newVal = parseFloat(key);
-          setIsNewInput(false);
+        if (key === 'backspace') {
+          currentBuf = currentBuf.slice(0, -1);
+        } else if (key === '+/-') {
+          // No-op for discount
+        } else if (key === '.') {
+          if (!currentBuf.includes('.')) {
+            currentBuf = (currentBuf || '0') + '.';
+          }
         } else {
-          newVal = parseFloat(currentVal.toString() + key);
-        }
-        if (!isNaN(newVal)) {
-          if (newVal > 100) newVal = 100;
-          applyItemDiscount(selectedItem.id, { type: 'percentage', value: newVal });
+          currentBuf = currentBuf + key;
         }
       }
+
+      setNumpadBuffer(currentBuf);
+      const parsed = parseFloat(currentBuf);
+      let finalVal = isNaN(parsed) ? 0 : parsed;
+      if (finalVal > 100) finalVal = 100;
+      applyItemDiscount(selectedItem.id, { type: 'percentage', value: finalVal });
     } else if (numpadMode === 'price') {
       const currentVal = selectedItem.unitPrice;
-      if (key === 'backspace') {
-        const currentStr = currentVal.toString();
-        if (currentStr.length <= 1) {
-          updateItemPriceInStore(selectedItem.id, 0);
+      let currentBuf = numpadBuffer;
+      if (isNewInput) {
+        if (key === 'backspace') {
+          const s = currentVal.toString();
+          currentBuf = s.slice(0, -1);
+        } else if (key === '+/-') {
+          const newPrice = -selectedItem.unitPrice;
+          updateItemPriceInStore(selectedItem.id, newPrice);
+          setNumpadBuffer(newPrice.toString());
+          setIsNewInput(false);
+          return;
+        } else if (key === '.') {
+          currentBuf = '0.';
         } else {
-          const priceVal = parseFloat(currentStr.slice(0, -1)) || 0;
-          updateItemPriceInStore(selectedItem.id, priceVal);
+          currentBuf = key;
         }
-      } else if (key === '+/-') {
-        updateItemPriceInStore(selectedItem.id, -currentVal);
-      } else if (key === '.') {
         setIsNewInput(false);
       } else {
-        let newVal = 0;
-        if (isNewInput) {
-          newVal = parseFloat(key);
-          setIsNewInput(false);
+        if (key === 'backspace') {
+          currentBuf = currentBuf.slice(0, -1);
+        } else if (key === '+/-') {
+          if (currentBuf.startsWith('-')) {
+            currentBuf = currentBuf.substring(1);
+          } else {
+            currentBuf = '-' + currentBuf;
+          }
+        } else if (key === '.') {
+          if (!currentBuf.includes('.')) {
+            currentBuf = (currentBuf || '0') + '.';
+          }
         } else {
-          newVal = parseFloat(currentVal.toString() + key);
-        }
-        if (!isNaN(newVal)) {
-          updateItemPriceInStore(selectedItem.id, newVal);
+          currentBuf = currentBuf + key;
         }
       }
+
+      setNumpadBuffer(currentBuf);
+      const parsed = parseFloat(currentBuf);
+      const finalPrice = isNaN(parsed) ? 0 : parsed;
+      updateItemPriceInStore(selectedItem.id, finalPrice);
     }
   };
 
@@ -586,7 +627,7 @@ export default function POS() {
                   businessId,
                   branchId,
                   item.product.id,
-                  -Math.abs(item.quantity * multiplier), // negative for stock depletion
+                  -(item.quantity * multiplier), // negative for stock depletion, positive for stock replenishment/refund
                   'POS_SALE',
                   userData?.user?.id || 'unknown',
                   sale.receiptNumber,
@@ -1246,10 +1287,11 @@ export default function POS() {
                           <div className="flex items-center gap-1">
                             <input 
                               type="number"
+                              step="any"
                               value={item.quantity === 0 ? '' : item.quantity}
                               onChange={(e) => {
-                                const val = parseInt(e.target.value);
-                                if (!isNaN(val) && val >= 0) {
+                                const val = parseFloat(e.target.value);
+                                if (!isNaN(val)) {
                                   updateQuantity(item.id, val);
                                 } else if (e.target.value === '') {
                                   updateQuantity(item.id, 0);
@@ -1260,7 +1302,6 @@ export default function POS() {
                                 setIsNewInput(true);
                               }}
                               className="w-10 h-6 text-center text-xs font-black font-mono border border-zinc-250 bg-zinc-50 rounded focus:bg-white text-zinc-900 p-0 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                              min="0"
                             />
                             <div className="flex flex-col gap-0.5">
                               <button 
@@ -1271,7 +1312,7 @@ export default function POS() {
                               </button>
                               <button 
                                 className="h-3 w-3 flex items-center justify-center bg-zinc-100 text-zinc-700 text-[8px] hover:bg-zinc-250 rounded border border-zinc-200"
-                                onClick={() => updateQuantity(item.id, Math.max(0, item.quantity - 1))}
+                                onClick={() => updateQuantity(item.id, item.quantity - 1)}
                               >
                                 -
                               </button>

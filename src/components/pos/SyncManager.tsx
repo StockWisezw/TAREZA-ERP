@@ -1,5 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { usePOSStore, getItemPackSize, CartItem } from '../../store/posStore';
+import { supabase } from '../../lib/supabaseClient';
+import { recordStockMovement, postJournalEntry, logAuditEvent } from '../../services/ledgerService';
+import { toast } from 'sonner';
 
 export function SyncManager() {
   const { offlineQueue, removeSaleFromOfflineQueue } = usePOSStore();
@@ -159,8 +162,7 @@ export function SyncManager() {
           if (sale.items && sale.items.length > 0) {
             await Promise.all(
               sale.items.map((item) => {
-                const isWholesale = item.tier === 'wholesale';
-                const multiplier = isWholesale ? getPackSize(item.product.sku) : 1;
+                const multiplier = getItemPackSize(item);
                 return recordStockMovement(
                   businessId,
                   branchId,

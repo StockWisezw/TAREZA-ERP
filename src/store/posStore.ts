@@ -89,7 +89,7 @@ export const getItemPackSize = (item: CartItem): number => {
   }
   if (item.tier && item.tier !== 'retail' && item.product.bundles && item.product.bundles.length > 0) {
     const b = item.product.bundles.find((x: any) => x.name === item.tier);
-    if (b) return Number(b.pack_size || b.packSize || 1);
+    if (b) return Number(b.pack_size || 1);
   }
   return 1;
 };
@@ -100,17 +100,18 @@ interface POSState {
   payments: Payment[];
   offlineQueue: SaleRecord[];
   parkedSales: SaleRecord[];
+  localSales?: SaleRecord[];
   currentCustomer: Customer | null;
   globalDiscount?: Discount;
   
   // Actions
-  addToCart: (product: Product, quantity?: number, forcedTier?: PricingTier) => void;
+  addToCart: (product: Product, quantity?: number, forcedTier?: string) => void;
   removeFromCart: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
   applyItemDiscount: (itemId: string, discount: Discount) => void;
   applyGlobalDiscount: (discount: Discount) => void;
   setPricingTier: (tier: PricingTier) => void;
-  setItemPricingTier: (itemId: string, tier: PricingTier) => void;
+  setItemPricingTier: (itemId: string, tier: string) => void;
   setCurrentCustomer: (customer: Customer | null) => void;
   addPayment: (method: PaymentMethod, amount: number) => void;
   removePayment: (paymentId: string) => void;
@@ -139,6 +140,7 @@ export const usePOSStore = create<POSState>()(
       payments: [],
       offlineQueue: [],
       parkedSales: [],
+      localSales: [],
       currentCustomer: null,
 
       addToCart: (product, quantity = 1, forcedTier = 'retail') => set((state) => {
@@ -188,7 +190,7 @@ export const usePOSStore = create<POSState>()(
       })),
 
       updateQuantity: (itemId, quantity) => set((state) => {
-        if (quantity <= 0) {
+        if (quantity === 0) {
           return { cart: state.cart.filter((item) => item.id !== itemId) };
         }
         return {
@@ -201,7 +203,7 @@ export const usePOSStore = create<POSState>()(
                   ? subtotal * (item.discount.value / 100) 
                   : item.discount.value;
               }
-              const vatAmount = item.product.taxClass === 'standard' ? Math.max(0, subtotal - itemDiscountValue) * getVatRate() : 0;
+              const vatAmount = item.product.taxClass === 'standard' ? (subtotal - itemDiscountValue) * getVatRate() : 0;
               return { ...item, quantity, subtotal, vatAmount };
             }
             return item;
@@ -216,7 +218,7 @@ export const usePOSStore = create<POSState>()(
               let itemDiscountValue = discount.type === 'percentage' 
                 ? item.subtotal * (discount.value / 100) 
                 : discount.value;
-              const vatAmount = item.product.taxClass === 'standard' ? Math.max(0, item.subtotal - itemDiscountValue) * getVatRate() : 0;
+              const vatAmount = item.product.taxClass === 'standard' ? (item.subtotal - itemDiscountValue) * getVatRate() : 0;
               return { ...item, discount, vatAmount };
             }
             return item;
@@ -236,7 +238,7 @@ export const usePOSStore = create<POSState>()(
               ? subtotal * (item.discount.value / 100) 
               : item.discount.value;
           }
-          const vatAmount = item.product.taxClass === 'standard' ? Math.max(0, subtotal - itemDiscountValue) * getVatRate() : 0;
+          const vatAmount = item.product.taxClass === 'standard' ? (subtotal - itemDiscountValue) * getVatRate() : 0;
           return { ...item, tier, unitPrice, subtotal, vatAmount };
         });
         return { pricingTier: tier, cart: updatedCart };
@@ -261,7 +263,7 @@ export const usePOSStore = create<POSState>()(
                 ? subtotal * (item.discount.value / 100) 
                 : item.discount.value;
             }
-            const vatAmount = item.product.taxClass === 'standard' ? Math.max(0, subtotal - itemDiscountValue) * getVatRate() : 0;
+            const vatAmount = item.product.taxClass === 'standard' ? (subtotal - itemDiscountValue) * getVatRate() : 0;
             return { ...item, tier, unitPrice, subtotal, vatAmount };
           }
           return item;
@@ -398,6 +400,7 @@ export const usePOSStore = create<POSState>()(
 
         set((state) => ({
           offlineQueue: isOffline ? [...state.offlineQueue, newSale] : state.offlineQueue,
+          localSales: [newSale, ...(state.localSales || [])].slice(0, 100),
           cart: [],
           payments: [],
           currentCustomer: null,

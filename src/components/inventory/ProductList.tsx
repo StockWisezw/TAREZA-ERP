@@ -58,6 +58,16 @@ export function ProductList({ onImportClick }: ProductListProps) {
   const [packSize, setPackSize] = useState('1');
   const [wholesalePrice, setWholesalePrice] = useState('');
 
+  // Multiple Custom Bundles
+  const [bundles, setBundles] = useState<any[]>([]);
+  const [editBundles, setEditBundles] = useState<any[]>([]);
+  const [newBundleName, setNewBundleName] = useState('');
+  const [newBundleSize, setNewBundleSize] = useState('');
+  const [newBundlePrice, setNewBundlePrice] = useState('');
+  const [editBundleName, setEditBundleName] = useState('');
+  const [editBundleSize, setEditBundleSize] = useState('');
+  const [editBundlePrice, setEditBundlePrice] = useState('');
+
   // Categories list state map
   const [categories, setCategories] = useState<any[]>([]);
 
@@ -170,6 +180,56 @@ export function ProductList({ onImportClick }: ProductListProps) {
     }
   };
 
+  const handleAddBundleToNew = () => {
+    if (!newBundleName.trim() || !newBundleSize || !newBundlePrice) {
+      toast.error("Please fill in Bundle Name, Pack Size, and Price!");
+      return;
+    }
+    const size = parseInt(newBundleSize, 10);
+    const price = parseFloat(newBundlePrice);
+    if (isNaN(size) || size <= 1) {
+      toast.error("Pack size must be a number greater than 1!");
+      return;
+    }
+    if (isNaN(price) || price <= 0) {
+      toast.error("Bundle price must be a valid positive number!");
+      return;
+    }
+    setBundles([...bundles, { name: newBundleName.trim(), pack_size: size, price }]);
+    setNewBundleName('');
+    setNewBundleSize('');
+    setNewBundlePrice('');
+  };
+
+  const handleRemoveBundleFromNew = (index: number) => {
+    setBundles(bundles.filter((_, i) => i !== index));
+  };
+
+  const handleAddBundleToEdit = () => {
+    if (!editBundleName.trim() || !editBundleSize || !editBundlePrice) {
+      toast.error("Please fill in Bundle Name, Pack Size, and Price!");
+      return;
+    }
+    const size = parseInt(editBundleSize, 10);
+    const price = parseFloat(editBundlePrice);
+    if (isNaN(size) || size <= 1) {
+      toast.error("Pack size must be a number greater than 1!");
+      return;
+    }
+    if (isNaN(price) || price <= 0) {
+      toast.error("Bundle price must be a valid positive number!");
+      return;
+    }
+    setEditBundles([...editBundles, { name: editBundleName.trim(), pack_size: size, price }]);
+    setEditBundleName('');
+    setEditBundleSize('');
+    setEditBundlePrice('');
+  };
+
+  const handleRemoveBundleFromEdit = (index: number) => {
+    setEditBundles(editBundles.filter((_, i) => i !== index));
+  };
+
   const handleAddProduct = async () => {
     if (!newProductName || !newProductPrice) {
        toast.error("Please fill required fields (Name, Price)");
@@ -201,13 +261,14 @@ export function ProductList({ onImportClick }: ProductListProps) {
          sku: finalSku,
          retail_price: price,
          wholesale_price: isPack ? parseFloat(wholesalePrice) : (price * 0.9),
+         bundles: bundles,
          is_active: true
        }).select().single();
 
        if (productError) throw productError;
 
        // Set initial stock if required
-       const stock = parseInt(newProductStock, 10);
+       const stock = parseFloat(newProductStock);
        if (stock > 0) {
          const { data: branchData } = await supabase
            .from('branches')
@@ -228,6 +289,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
 
        toast.success("Product added successfully");
        setIsAddOpen(false);
+       setBundles([]);
        setNewProductName('');
        setNewProductPrice('');
        setNewProductSKU('');
@@ -268,6 +330,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
           retail_price: retail,
           wholesale_price: isNaN(wholesale) ? (retail * 0.9) : wholesale,
           category_id: editCategory || null,
+          bundles: editBundles,
           updated_at: new Date().toISOString()
         })
         .eq('id', editingProduct.id);
@@ -410,7 +473,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
     // Parse values
     const newRetail = parseFloat(rowEdit.retail_price);
     const newWholesale = parseFloat(rowEdit.wholesale_price);
-    const newStock = parseInt(rowEdit.stock, 10);
+    const newStock = parseFloat(rowEdit.stock);
 
     if (isNaN(newRetail) || isNaN(newWholesale) || isNaN(newStock)) {
       toast.error("Please enter valid numeric values for prices and stock");
@@ -700,6 +763,83 @@ export function ProductList({ onImportClick }: ProductListProps) {
                   <Input type="number" value={newProductStock} onChange={e => setNewProductStock(e.target.value)} placeholder="0" />
                   {isPack && <p className="text-xs text-zinc-500">Stock is measured in units. If you have 5 packs of 10, enter 50.</p>}
                 </div>
+
+                {/* Custom Bundles section */}
+                <div className="space-y-3 pt-3 border-t border-zinc-100">
+                  <div className="flex items-center justify-between">
+                    <Label className="font-bold text-zinc-900 flex items-center gap-1.5 text-xs uppercase tracking-wider">
+                      <Tag className="h-3.5 w-3.5 text-amber-500" />
+                      Custom Bundles / Tier Prices
+                    </Label>
+                    <span className="text-[10px] text-zinc-400 font-medium font-mono">Multiple allowed</span>
+                  </div>
+                  
+                  {/* Bundles List */}
+                  {bundles.length > 0 && (
+                    <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                      {bundles.map((b, bIdx) => (
+                        <div key={bIdx} className="flex justify-between items-center text-xs p-2 rounded bg-amber-50/55 border border-amber-100">
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-zinc-800">{b.name}</span>
+                            <span className="text-[10px] text-zinc-500">Pack Size: {b.pack_size} units | Price: ${b.price.toFixed(2)}</span>
+                          </div>
+                          <Button 
+                            type="button"
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleRemoveBundleFromNew(bIdx)}
+                            className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                          >
+                            ×
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add New Bundle Mini-Form */}
+                  <div className="p-3 bg-zinc-50 border border-zinc-150 rounded-lg space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-semibold text-zinc-500">Bundle Name</Label>
+                        <Input 
+                          placeholder="e.g. Six-Pack" 
+                          value={newBundleName} 
+                          onChange={e => setNewBundleName(e.target.value)}
+                          className="h-7 text-xs px-2 bg-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-semibold text-zinc-500">Size (Units)</Label>
+                        <Input 
+                          type="number" 
+                          placeholder="e.g. 6" 
+                          value={newBundleSize} 
+                          onChange={e => setNewBundleSize(e.target.value)}
+                          className="h-7 text-xs px-2 bg-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-semibold text-zinc-500">Price ($)</Label>
+                        <Input 
+                          type="number" 
+                          step="0.01" 
+                          placeholder="0.00" 
+                          value={newBundlePrice} 
+                          onChange={e => setNewBundlePrice(e.target.value)}
+                          className="h-7 text-xs px-2 bg-white font-mono"
+                        />
+                      </div>
+                    </div>
+                    <Button 
+                      type="button" 
+                      onClick={handleAddBundleToNew}
+                      className="w-full h-7 text-xs bg-zinc-850 hover:bg-zinc-800 text-white font-medium"
+                    >
+                      + Add Bundle Option
+                    </Button>
+                  </div>
+                </div>
               </div>
               <DialogFooter className="mt-6">
                 <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
@@ -763,7 +903,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
                 const isDirty = 
                   parseFloat(rowEdit.retail_price) !== item.retail_price ||
                   parseFloat(rowEdit.wholesale_price) !== item.wholesale_price ||
-                  parseInt(rowEdit.stock, 10) !== stock;
+                  parseFloat(rowEdit.stock) !== stock;
 
                 const isChecked = selectedProductIds.includes(item.id);
 
@@ -808,7 +948,18 @@ export function ProductList({ onImportClick }: ProductListProps) {
                       <span className="font-mono text-[10px] text-zinc-500">{item.barcode}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="font-semibold text-zinc-900">{item.name}</TableCell>
+                  <TableCell className="font-semibold text-zinc-900">
+                    <div>{item.name}</div>
+                    {item.bundles && item.bundles.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1 font-sans">
+                        {item.bundles.map((b: any, bIdx: number) => (
+                          <span key={bIdx} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                            {b.name} ({b.pack_size || b.packSize}): ${Number(b.price || 0).toFixed(2)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell><Badge variant="secondary" className="font-normal text-xs">{item.categories?.name || 'Uncategorized'}</Badge></TableCell>
                   
                   {/* Stock Column */}
@@ -892,7 +1043,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
                     )}
                   </TableCell>
 
-                  <TableCell>{getStatusBadge(isInlineEditMode ? parseInt(rowEdit.stock, 10) || 0 : stock)}</TableCell>
+                  <TableCell>{getStatusBadge(isInlineEditMode ? parseFloat(rowEdit.stock) || 0 : stock)}</TableCell>
                   
                   {/* Actions Column */}
                   <TableCell className="text-right">
@@ -951,6 +1102,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
                               setEditCategory(item.category_id || '');
                               setEditRetailPrice(item.retail_price?.toString() || '0');
                               setEditWholesalePrice(item.wholesale_price?.toString() || '0');
+                              setEditBundles(item.bundles ? JSON.parse(JSON.stringify(item.bundles)) : []);
                             }}
                           >
                             Edit Product
@@ -1034,6 +1186,83 @@ export function ProductList({ onImportClick }: ProductListProps) {
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-zinc-600">Wholesale Price ($)</Label>
                 <Input type="number" step="0.01" value={editWholesalePrice} onChange={e => setEditWholesalePrice(e.target.value)} placeholder="0.00" className="bg-white border-zinc-200 font-mono" />
+              </div>
+            </div>
+
+            {/* Edit Custom Bundles section */}
+            <div className="space-y-3 pt-3 border-t border-zinc-100">
+              <div className="flex items-center justify-between">
+                <Label className="font-bold text-zinc-900 flex items-center gap-1.5 text-xs uppercase tracking-wider">
+                  <Tag className="h-3.5 w-3.5 text-amber-500" />
+                  Custom Bundles / Tier Prices
+                </Label>
+                <span className="text-[10px] text-zinc-400 font-medium font-mono">Multiple allowed</span>
+              </div>
+              
+              {/* Edit Bundles List */}
+              {editBundles.length > 0 && (
+                <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                  {editBundles.map((b, bIdx) => (
+                    <div key={bIdx} className="flex justify-between items-center text-xs p-2 rounded bg-amber-50/55 border border-amber-100">
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-zinc-800">{b.name}</span>
+                        <span className="text-[10px] text-zinc-500 font-mono">Pack Size: {b.pack_size || b.packSize} units | Price: ${Number(b.price || 0).toFixed(2)}</span>
+                      </div>
+                      <Button 
+                        type="button"
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleRemoveBundleFromEdit(bIdx)}
+                        className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add Bundle to Edit Mini-Form */}
+              <div className="p-3 bg-zinc-50 border border-zinc-150 rounded-lg space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-semibold text-zinc-500">Bundle Name</Label>
+                    <Input 
+                      placeholder="e.g. Six-Pack" 
+                      value={editBundleName} 
+                      onChange={e => setEditBundleName(e.target.value)}
+                      className="h-7 text-xs px-2 bg-white border-zinc-200"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-semibold text-zinc-500">Size (Units)</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="e.g. 6" 
+                      value={editBundleSize} 
+                      onChange={e => setEditBundleSize(e.target.value)}
+                      className="h-7 text-xs px-2 bg-white border-zinc-200"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-semibold text-zinc-500">Price ($)</Label>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="0.00" 
+                      value={editBundlePrice} 
+                      onChange={e => setEditBundlePrice(e.target.value)}
+                      className="h-7 text-xs px-2 bg-white font-mono border-zinc-200"
+                    />
+                  </div>
+                </div>
+                <Button 
+                  type="button" 
+                  onClick={handleAddBundleToEdit}
+                  className="w-full h-7 text-xs bg-zinc-850 hover:bg-zinc-800 text-white font-medium"
+                >
+                  + Add Bundle Option
+                </Button>
               </div>
             </div>
           </div>

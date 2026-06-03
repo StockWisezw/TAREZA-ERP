@@ -223,8 +223,8 @@ export function BulkImport() {
         error = "Wholesale price must be numeric.";
       } else if (costPrice && isNaN(parseFloat(costPrice))) {
         error = "Cost price must be numeric.";
-      } else if (stock && isNaN(parseInt(stock, 10))) {
-        error = "Opening stock must be an integer.";
+      } else if (stock && isNaN(parseFloat(stock))) {
+        error = "Opening stock must be numeric.";
       }
 
       candidates.push({
@@ -299,8 +299,8 @@ export function BulkImport() {
       error = "Wholesale price must be numeric.";
     } else if (cost && isNaN(parseFloat(cost))) {
       error = "Cost price must be numeric.";
-    } else if (stock && isNaN(parseInt(stock, 10))) {
-      error = "Stock must be an integer.";
+    } else if (stock && isNaN(parseFloat(stock))) {
+      error = "Stock must be numeric.";
     }
 
     updated[index].validationError = error || undefined;
@@ -399,7 +399,7 @@ export function BulkImport() {
         productsAddedCount++;
 
         // 3. Insert Stock Inventory & Stock Movement if quantity > 0
-        const stockQty = parseInt(item.stock, 10) || 0;
+        const stockQty = parseFloat(item.stock) || 0;
         if (stockQty > 0) {
           const invId = crypto.randomUUID();
           const { error: invErr } = await supabase.from('inventory').insert({

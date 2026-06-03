@@ -37,19 +37,36 @@ export function PaymentDialog({ open, onOpenChange, onComplete }: PaymentDialogP
   }, [open, currentCustomer]);
 
   const handleAddPayment = () => {
-    const amt = parseFloat(amountInput);
-    if (isNaN(amt) || amt <= 0) return;
+    let amt = parseFloat(amountInput);
+    if (isNaN(amt)) return;
     
-    // For cash, we allow overpayment and calculate change.
-    // For digital/credit, we cap it at the remaining balance.
-    let validAmount = Math.min(amt, remainingBalance);
+    // If we have a negative balance (refund) and they entered a positive number,
+    // automatically treat it as a negative payment representing cash out/refund.
+    if (remainingBalance < 0 && amt > 0) {
+      amt = -amt;
+    }
+
+    if (amt === 0) return;
+    
+    let validAmount = amt;
     let change = 0;
 
-    if (selectedMethod === 'usd_cash' || selectedMethod === 'cash') {
-      if (amt > remainingBalance) {
+    if (remainingBalance < 0) {
+      // Refund scenario
+      if (amt < remainingBalance) {
         change = amt - remainingBalance;
-        setChangeAmount(change);
+        setChangeAmount(Math.abs(change));
         validAmount = remainingBalance;
+      }
+    } else {
+      // Standard sale scenario
+      validAmount = Math.min(amt, remainingBalance);
+      if (selectedMethod === 'usd_cash' || selectedMethod === 'cash') {
+        if (amt > remainingBalance) {
+          change = amt - remainingBalance;
+          setChangeAmount(change);
+          validAmount = remainingBalance;
+        }
       }
     }
 
@@ -58,7 +75,7 @@ export function PaymentDialog({ open, onOpenChange, onComplete }: PaymentDialogP
         alert("Must select a customer for credit sales.");
         return;
       }
-      if (validAmount > currentCustomer.creditLimit - currentCustomer.balance) {
+      if (remainingBalance > 0 && validAmount > currentCustomer.creditLimit - currentCustomer.balance) {
         alert(`Credit limit exceeded! Available credit: $${(currentCustomer.creditLimit - currentCustomer.balance).toFixed(2)}`);
         return;
       }
@@ -80,7 +97,7 @@ export function PaymentDialog({ open, onOpenChange, onComplete }: PaymentDialogP
     onComplete();
   };
 
-  const isFullyPaid = totals.balance <= 0.01;
+  const isFullyPaid = Math.abs(totals.balance) <= 0.01;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -92,8 +109,10 @@ export function PaymentDialog({ open, onOpenChange, onComplete }: PaymentDialogP
         {!isFullyPaid ? (
           <div className="space-y-6 py-4">
             <div className="flex justify-between items-center bg-zinc-50 p-6 rounded-xl border border-zinc-200">
-              <span className="text-zinc-500 text-lg font-medium">To Pay</span>
-              <span className="text-4xl font-bold font-mono text-zinc-900">${remainingBalance.toFixed(2)}</span>
+              <span className="text-zinc-500 text-lg font-medium">{remainingBalance < 0 ? "To Refund" : "To Pay"}</span>
+              <span className={`text-4xl font-bold font-mono ${remainingBalance < 0 ? "text-rose-600" : "text-zinc-900"}`}>
+                ${Math.abs(remainingBalance).toFixed(2)}
+              </span>
             </div>
 
             <div className="grid grid-cols-5 gap-2">
@@ -175,14 +194,22 @@ export function PaymentDialog({ open, onOpenChange, onComplete }: PaymentDialogP
               
               {(selectedMethod === 'usd_cash' || selectedMethod === 'cash') && (
                 <div className="flex gap-2 justify-start overflow-x-auto pb-2">
-                  {[10, 20, 50, 100].map(val => (
-                    <Button key={val} variant="outline" size="sm" onClick={() => setPresetAmount(val)} className="font-mono">
-                      ${val}
+                  {remainingBalance > 0 ? (
+                    <>
+                      {[10, 20, 50, 100].map(val => (
+                        <Button key={val} variant="outline" size="sm" onClick={() => setPresetAmount(val)} className="font-mono">
+                          ${val}
+                        </Button>
+                      ))}
+                      <Button variant="outline" size="sm" onClick={() => setPresetAmount(Math.ceil(remainingBalance))} className="font-mono">
+                        Exact Next (${Math.ceil(remainingBalance)})
+                      </Button>
+                    </>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => setPresetAmount(remainingBalance)} className="font-mono text-rose-600 border-rose-200">
+                      Exact Refund (${Math.abs(remainingBalance).toFixed(2)})
                     </Button>
-                  ))}
-                  <Button variant="outline" size="sm" onClick={() => setPresetAmount(Math.ceil(remainingBalance))} className="font-mono">
-                    Exact Next (${Math.ceil(remainingBalance)})
-                  </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -190,7 +217,7 @@ export function PaymentDialog({ open, onOpenChange, onComplete }: PaymentDialogP
         ) : (
           <div className="py-8 flex flex-col items-center justify-center space-y-4 pt-10 pb-6 rounded-xl bg-emerald-50 border border-emerald-100">
             <CheckCircle2 className="h-20 w-20 text-emerald-500" />
-            <h3 className="text-2xl font-bold text-emerald-600">Fully Paid</h3>
+            <h3 className="text-2xl font-bold text-emerald-600">{remainingBalance <= 0 ? "Refund Paid" : "Fully Paid"}</h3>
             {changeAmount > 0 && (
               <div className="mt-4 p-4 bg-white border border-emerald-200 rounded-xl shadow-sm text-center min-w-[200px]">
                 <p className="text-zinc-500 font-medium mb-1">Change Due</p>
@@ -211,7 +238,9 @@ export function PaymentDialog({ open, onOpenChange, onComplete }: PaymentDialogP
                   <Badge variant="secondary">{p.method.replace('_', ' ')}</Badge>
                 </span>
                 <div className="flex items-center gap-4">
-                  <span className="font-mono font-bold text-base">${p.amount.toFixed(2)}</span>
+                  <span className="font-mono font-bold text-base">
+                    {p.amount < 0 ? '-' : ''}${Math.abs(p.amount).toFixed(2)}
+                  </span>
                   <button onClick={() => { removePayment(p.id); setChangeAmount(0); }} className="text-zinc-400 hover:text-red-500 text-xs transition-colors">✕</button>
                 </div>
               </div>

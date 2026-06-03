@@ -33,6 +33,7 @@ export function Stocktake() {
   const [filterQuery, setFilterQuery] = useState('');
   const [onlyShowVariances, setOnlyShowVariances] = useState(false);
   const [savingProgress, setSavingProgress] = useState(false);
+  const [reconciliationValuation, setReconciliationValuation] = useState<'cost' | 'sales'>('cost');
 
   useEffect(() => {
     fetchStocktakes();
@@ -595,20 +596,87 @@ export function Stocktake() {
               </div>
             )}
 
+            {/* Reconciliation Valuation Basis Selector & Aggregate Summary */}
+            {(() => {
+              const reviewCalcs = reviewItemsData.reduce((acc, item) => {
+                const systemQty = item.product?.inventory?.[0]?.quantity || 0;
+                const countedQty = Number(item.counted_qty || 0);
+                const price = reconciliationValuation === 'cost' 
+                  ? Number(item.product?.wholesale_price || 0) 
+                  : Number(item.product?.retail_price || 0);
+                return {
+                  expected: acc.expected + (systemQty * price),
+                  counted: acc.counted + (countedQty * price),
+                  variance: acc.variance + ((countedQty - systemQty) * price)
+                };
+              }, { expected: 0, counted: 0, variance: 0 });
+
+              return (
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-zinc-50 p-4 rounded-xl border border-zinc-200">
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-black uppercase text-zinc-600 tracking-wider block">Valuation Basis</span>
+                    <div className="flex bg-zinc-200/60 p-0.5 rounded-lg border border-zinc-300 w-fit">
+                      <button
+                        type="button"
+                        onClick={() => setReconciliationValuation('cost')}
+                        className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                          reconciliationValuation === 'cost' 
+                            ? 'bg-white text-zinc-900 shadow-xs' 
+                            : 'text-zinc-600 hover:text-zinc-900'
+                        }`}
+                      >
+                        Cost (Wholesale)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReconciliationValuation('sales')}
+                        className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                          reconciliationValuation === 'sales' 
+                            ? 'bg-white text-zinc-900 shadow-xs' 
+                            : 'text-zinc-600 hover:text-zinc-900'
+                        }`}
+                      >
+                        Sales (Retail)
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-6 w-full md:w-auto md:min-w-[420px] text-right">
+                    <div className="space-y-0.5">
+                      <span className="text-[9px] font-black uppercase text-zinc-500 tracking-wider block">Expected Stock</span>
+                      <p className="text-sm font-bold font-mono text-zinc-700">${reviewCalcs.expected.toFixed(2)}</p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <span className="text-[9px] font-black uppercase text-indigo-600 tracking-wider block">Counted Stock</span>
+                      <p className="text-sm font-bold font-mono text-indigo-700">${reviewCalcs.counted.toFixed(2)}</p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <span className="text-[9px] font-black uppercase text-zinc-500 tracking-wider block">Est. Variance</span>
+                      <p className={`text-sm font-black font-mono ${reviewCalcs.variance < 0 ? 'text-red-500' : reviewCalcs.variance > 0 ? 'text-emerald-700' : 'text-zinc-500'}`}>
+                        {reviewCalcs.variance > 0 ? '+' : ''}${reviewCalcs.variance.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="border border-zinc-200 rounded-xl max-h-[350px] overflow-auto bg-white shadow-xs">
               <Table>
                 <TableHeader className="bg-zinc-50 sticky top-0 z-10">
                   <TableRow>
                     <TableHead>Product Name & SKU</TableHead>
-                    <TableHead className="text-right w-32">Recorded Stock</TableHead>
-                    <TableHead className="text-right w-32">Physical Count</TableHead>
-                    <TableHead className="text-right w-32">Variance Delta</TableHead>
+                    <TableHead className="text-right w-24">Recorded Stock</TableHead>
+                    <TableHead className="text-right w-24">Physical Count</TableHead>
+                    <TableHead className="text-right w-24">Variance Delta</TableHead>
+                    <TableHead className="text-right w-24">Unit Price</TableHead>
+                    <TableHead className="text-right w-28">Valuation Delta</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {reviewItemsData.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center text-zinc-400 py-8 italic text-xs">
+                      <TableCell colSpan={6} className="text-center text-zinc-400 py-8 italic text-xs">
                         No product lines counted during this physical count auditing.
                       </TableCell>
                     </TableRow>
@@ -617,6 +685,11 @@ export function Stocktake() {
                       const systemQty = item.product?.inventory?.[0]?.quantity || 0;
                       const countedQty = Number(item.counted_qty || 0);
                       const variance = countedQty - systemQty;
+                      const price = reconciliationValuation === 'cost' 
+                        ? Number(item.product?.wholesale_price || 0) 
+                        : Number(item.product?.retail_price || 0);
+                      const varValue = variance * price;
+
                       return (
                         <TableRow key={idx} className="hover:bg-zinc-50/40">
                           <TableCell className="py-2.5">
@@ -629,6 +702,10 @@ export function Stocktake() {
                           <TableCell className="text-right font-mono font-bold text-indigo-700 text-sm">{countedQty}</TableCell>
                           <TableCell className={`text-right font-mono text-sm font-semibold ${variance < 0 ? 'text-red-650' : variance > 0 ? 'text-emerald-700' : 'text-zinc-400'}`}>
                             {variance > 0 ? `+${variance}` : variance === 0 ? 'OK' : variance}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs text-zinc-500">${price.toFixed(2)}</TableCell>
+                          <TableCell className={`text-right font-mono text-xs font-bold ${varValue < 0 ? 'text-rose-600' : varValue > 0 ? 'text-emerald-600' : 'text-zinc-400'}`}>
+                            {varValue > 0 ? '+' : ''}${varValue.toFixed(2)}
                           </TableCell>
                         </TableRow>
                       );
@@ -927,7 +1004,7 @@ export function Stocktake() {
                   <RotateCcw className="h-3.5 w-3.5 mr-1 text-zinc-400" /> Reset All to Zero
                 </Button>
               </div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-3">
                 <label className="text-xs text-zinc-650 flex items-center font-bold cursor-pointer select-none">
                   <input 
                     type="checkbox" 
@@ -937,6 +1014,34 @@ export function Stocktake() {
                   />
                   Only show variances (Discrepancy audit)
                 </label>
+                <div className="h-4 w-[1px] bg-zinc-300 hidden sm:block" />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Basis:</span>
+                  <div className="flex bg-zinc-200/60 p-0.5 rounded-md border border-zinc-300/80">
+                    <button
+                      type="button"
+                      onClick={() => setReconciliationValuation('cost')}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                        reconciliationValuation === 'cost' 
+                          ? 'bg-white text-zinc-900 shadow-xs' 
+                          : 'text-zinc-500 hover:text-zinc-805'
+                      }`}
+                    >
+                      Cost
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReconciliationValuation('sales')}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                        reconciliationValuation === 'sales' 
+                          ? 'bg-white text-zinc-900 shadow-xs' 
+                          : 'text-zinc-500 hover:text-zinc-805'
+                      }`}
+                    >
+                      Sales
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -954,16 +1059,17 @@ export function Stocktake() {
                   <TableHeader className="bg-zinc-50 sticky top-0 z-10">
                     <TableRow>
                       <TableHead className="py-2.5">Product Info</TableHead>
-                      <TableHead className="py-2.5 text-right w-28">System Expected</TableHead>
-                      <TableHead className="py-2.5 text-right w-44">Physically Counted Qty</TableHead>
-                      <TableHead className="py-2.5 text-right w-24">Delta</TableHead>
+                      <TableHead className="py-2.5 text-right w-24">System Expected</TableHead>
+                      <TableHead className="py-2.5 text-right w-36 row-qty-header">Physically Counted Qty</TableHead>
+                      <TableHead className="py-2.5 text-right w-20">Delta</TableHead>
+                      <TableHead className="py-2.5 text-right w-28">Valuation Delta</TableHead>
                       <TableHead className="py-2.5 w-14 text-center"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredCountItems.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-10 text-zinc-400 text-xs italic">
+                        <TableCell colSpan={6} className="text-center py-10 text-zinc-400 text-xs italic">
                           {countedItems.length === 0 
                             ? "No products mapped. Tap pre-populate helpers or use gun scanner above." 
                             : "No items match your search term / variance toggle filters."}
@@ -975,6 +1081,10 @@ export function Stocktake() {
                         const systemExpected = branchInventory ? branchInventory.quantity : 0;
                         const countedQty = Number(item.counted_qty || 0);
                         const variance = countedQty - systemExpected;
+                        const price = reconciliationValuation === 'cost' 
+                          ? Number(item.product?.wholesale_price || 0) 
+                          : Number(item.product?.retail_price || 0);
+                        const varVal = variance * price;
                         
                         return (
                           <TableRow key={index} className="hover:bg-zinc-50/50">
@@ -990,18 +1100,35 @@ export function Stocktake() {
                                 type="number" 
                                 min="0"
                                 value={item.counted_qty} 
-                                onChange={async (e) => {
-                                  // Locate item in global index
+                                onChange={(e) => {
+                                  // Locate item in global index and write update to react state for lag-free rendering
                                   const realIdx = countedItems.findIndex(x => x.product.id === item.product.id);
                                   if (realIdx > -1) {
                                     const updated = [...countedItems];
                                     updated[realIdx].counted_qty = Number(e.target.value || 0);
                                     setCountedItems(updated);
-                                    // Debounce or immediate save
-                                    await saveCountedItemsToDB(activeStocktake.id, updated);
                                   }
                                 }}
-                                className="w-24 text-right font-mono font-black text-xs border border-zinc-200 rounded-md px-2 h-7 focus:ring-1 focus:ring-zinc-900 focus:outline-none"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === 'Tab') {
+                                    e.preventDefault();
+                                    const currentInputs = Array.from(document.querySelectorAll('.stocktake-qty-input'));
+                                    const currIdx = currentInputs.indexOf(e.currentTarget);
+                                    if (currIdx > -1) {
+                                      const nextIdx = e.shiftKey ? currIdx - 1 : currIdx + 1;
+                                      const targetInput = currentInputs[nextIdx] as HTMLInputElement | undefined;
+                                      if (targetInput) {
+                                        targetInput.focus();
+                                        targetInput.select();
+                                      }
+                                    }
+                                  }
+                                }}
+                                onBlur={async () => {
+                                  // Sync state to DB on blur (when field is exited)
+                                  await saveCountedItemsToDB(activeStocktake.id, countedItems);
+                                }}
+                                className="stocktake-qty-input w-24 text-right font-mono font-black text-xs border border-zinc-200 rounded-md px-2 h-7 focus:ring-1 focus:ring-zinc-900 focus:outline-none focus:bg-indigo-55/40"
                               />
                             </TableCell>
                             <TableCell className="py-2 text-right">
@@ -1012,6 +1139,9 @@ export function Stocktake() {
                               ) : (
                                 <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-55 border-0 text-[10px] font-mono font-bold">{variance}</Badge>
                               )}
+                            </TableCell>
+                            <TableCell className={`py-2 text-right font-mono text-xs font-bold ${varVal < 0 ? 'text-rose-600' : varVal > 0 ? 'text-emerald-600' : 'text-zinc-400'}`}>
+                              {varVal > 0 ? '+' : ''}${varVal.toFixed(2)}
                             </TableCell>
                             <TableCell className="py-2 text-center">
                               <Button 

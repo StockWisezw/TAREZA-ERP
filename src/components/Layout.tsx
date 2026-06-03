@@ -36,7 +36,7 @@ const navigation = [
   { name: 'Tareza POS', href: '/pos', icon: ShoppingCart },
   { name: 'Cash Management', href: '/cash', icon: DollarSign },
   { name: 'Accounting Ledger', href: '/accounting', icon: BookOpen },
-  { name: 'Tareza Fiscal', href: '/receipts', icon: Receipt },
+  { name: 'Sales History', href: '/receipts', icon: Receipt },
   { name: 'Tareza Inventory', href: '/inventory', icon: Package },
   { name: 'Tareza CRM', href: '/customers', icon: Users },
   { name: 'Tareza Suppliers', href: '/suppliers', icon: Truck },

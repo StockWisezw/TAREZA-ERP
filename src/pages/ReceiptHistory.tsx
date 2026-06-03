@@ -4,7 +4,7 @@ import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
-import { Search, Receipt, RefreshCcw, Download, ChevronRight, ChevronDown, Plus, Trash2, Edit, CreditCard, ShoppingCart, User, X } from 'lucide-react';
+import { Search, Receipt, RefreshCcw, Download, ChevronRight, ChevronDown, Plus, Trash2, Edit, CreditCard, ShoppingCart, User, X, Calendar, Filter } from 'lucide-react';
 import { usePOSStore, SaleRecord } from '../store/posStore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '../components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
@@ -24,6 +24,50 @@ const getPackSize = (sku: string | undefined): number => {
 
 export default function ReceiptHistory() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [datePreset, setDatePreset] = useState('all');
+
+  const handlePresetChange = (preset: string) => {
+    setDatePreset(preset);
+    const today = new Date();
+    const formatter = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    if (preset === 'today') {
+      const dStr = formatter(today);
+      setStartDate(dStr);
+      setEndDate(dStr);
+    } else if (preset === 'yesterday') {
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      const dStr = formatter(yesterday);
+      setStartDate(dStr);
+      setEndDate(dStr);
+    } else if (preset === 'last7') {
+      const past7 = new Date(today);
+      past7.setDate(today.getDate() - 7);
+      setStartDate(formatter(past7));
+      setEndDate(formatter(today));
+    } else if (preset === 'last30') {
+      const past30 = new Date(today);
+      past30.setDate(today.getDate() - 30);
+      setStartDate(formatter(past30));
+      setEndDate(formatter(today));
+    } else if (preset === 'thisMonth') {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      setStartDate(formatter(firstDay));
+      setEndDate(formatter(today));
+    } else {
+      // clear or custom
+      setStartDate('');
+      setEndDate('');
+    }
+  };
   const [selectedSale, setSelectedSale] = useState<any | null>(null);
   const [businessName, setBusinessName] = useState('Tareza Retail');
   const [branchName, setBranchName] = useState('Harare Branch');
@@ -94,7 +138,32 @@ export default function ReceiptHistory() {
         };
       });
         
-      setSalesHistory(normalizedSales);
+      // Merge local sales completed on POS
+      const localSales = usePOSStore.getState().localSales || [];
+      const mergedSales = [...normalizedSales];
+      
+      localSales.forEach((localSale: any) => {
+        const exists = mergedSales.some(s => s.receiptNumber === localSale.receiptNumber || s.id === localSale.id);
+        if (!exists) {
+          mergedSales.push({
+            ...localSale,
+            created_at: localSale.timestamp, // Ensure standard timestamp field
+            customerName: localSale.customerName || 'Walk-In Customer',
+            items: (localSale.items || []).map((item: any) => ({
+              ...item,
+              product: {
+                ...item.product,
+                name: item.product?.name || 'Unnamed Item'
+              }
+            }))
+          });
+        }
+      });
+      
+      // Sort merged sales descending by timestamp/created_at
+      mergedSales.sort((a, b) => new Date(b.created_at || b.timestamp).getTime() - new Date(a.created_at || a.timestamp).getTime());
+        
+      setSalesHistory(mergedSales);
 
       const { data: custData } = await supabase.from('customers').select('*').order('name');
       setCustomers(custData || []);
@@ -697,11 +766,33 @@ export default function ReceiptHistory() {
   const filteredSales = salesHistory.filter(s => {
     const isInvoice = (s.payment_method || '').toLowerCase() === 'invoice' || s.status === 'UNPAID';
     if (isInvoice) return false;
+
+    // Date range filter
+    if (startDate) {
+      const saleDateStr = (s.created_at || s.timestamp || '').split('T')[0];
+      if (saleDateStr < startDate) return false;
+    }
+    if (endDate) {
+      const saleDateStr = (s.created_at || s.timestamp || '').split('T')[0];
+      if (saleDateStr > endDate) return false;
+    }
     
+    // Multi-criteria search (receipt number, customer, payment method, individual items, sku, barcode)
     if (searchTerm) {
-      const matchReceipt = s.receiptNumber?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchCustomer = s.customerName?.toLowerCase().includes(searchTerm.toLowerCase());
-      return !!(matchReceipt || matchCustomer);
+      const term = searchTerm.toLowerCase().trim();
+      const matchReceipt = s.receiptNumber?.toLowerCase().includes(term);
+      const matchCustomer = s.customerName?.toLowerCase().includes(term);
+      const matchMethod = (s.payment_method || '').toLowerCase().includes(term);
+      const matchNotes = (s.notes || '').toLowerCase().includes(term);
+      
+      const matchItem = s.items?.some((item: any) => {
+        const prodName = (item.product?.name || '').toLowerCase();
+        const prodSku = (item.product?.sku || '').toLowerCase();
+        const prodBarcode = (item.product?.barcode || '').toLowerCase();
+        return prodName.includes(term) || prodSku.includes(term) || prodBarcode.includes(term);
+      });
+
+      return !!(matchReceipt || matchCustomer || matchMethod || matchNotes || matchItem);
     }
     return true;
   });
@@ -710,8 +801,8 @@ export default function ReceiptHistory() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Receipt History</h1>
-          <p className="text-sm text-zinc-500 mt-1">Audit, edit, adjust status, and manage physical receipts and business invoices.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Sales History</h1>
+          <p className="text-sm text-zinc-500 mt-1">Audit, edit, adjust status, and manage physical receipts, past transactions, and business invoices.</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" className="bg-white shadow-sm" onClick={() => window.print()}>
@@ -752,22 +843,109 @@ export default function ReceiptHistory() {
         </div>
       </div>
 
-      <Card className="border-zinc-200">
-        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-zinc-50/80 border-b p-4 gap-4">
-          <div>
-            <CardTitle className="text-lg font-semibold text-zinc-900">Past Transactions</CardTitle>
-            <CardDescription className="text-xs">Select any receipt item to issue audits, reprints, refunds, or deletion.</CardDescription>
+      <Card className="border-zinc-200 select-none shadow-sm overflow-hidden">
+        <div className="bg-zinc-50/80 border-b p-4 space-y-4">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-lg font-semibold text-zinc-900">Past Transactions</CardTitle>
+              <CardDescription className="text-xs">Select any receipt item to issue audits, reprints, refunds, or deletion.</CardDescription>
+            </div>
+            
+            {/* Found transaction counters */}
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-lg px-3 py-1 text-xs text-blue-800 font-medium font-sans">
+              <Receipt className="h-3.5 w-3.5 text-blue-600 animate-pulse" />
+              <span>Found <strong>{filteredSales.length}</strong> transactions</span>
+            </div>
           </div>
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500" />
-            <Input 
-              placeholder="Search by receipt #, customer Name" 
-              className="pl-9 bg-white"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 pt-1">
+            {/* Search Box */}
+            <div className="lg:col-span-4 relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500" />
+              <Input 
+                placeholder="Search receipt #, customer, item, barcode..." 
+                className="pl-9 bg-white border-zinc-200 text-xs shadow-sm h-9"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+
+            {/* Date Preset Selector */}
+            <div className="lg:col-span-2 flex items-center gap-1.5">
+              <Select value={datePreset} onValueChange={handlePresetChange}>
+                <SelectTrigger className="bg-white border-zinc-200 text-xs shadow-sm h-9 w-full">
+                  <span className="flex items-center gap-1.5">
+                    <Filter className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                    <SelectValue placeholder="Date Preset" />
+                  </span>
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="yesterday">Yesterday</SelectItem>
+                  <SelectItem value="last7">Last 7 Days</SelectItem>
+                  <SelectItem value="last30">Last 30 Days</SelectItem>
+                  <SelectItem value="thisMonth">This Month</SelectItem>
+                  <SelectItem value="custom" disabled>Custom Range</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Start Date */}
+            <div className="lg:col-span-2 flex items-center gap-1.5">
+              <span className="text-[10px] text-zinc-500 uppercase font-semibold shrink-0">From</span>
+              <div className="relative w-full">
+                <Input 
+                  type="date" 
+                  className="bg-white border-zinc-200 text-xs shadow-sm h-9 px-2 w-full pr-8"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setDatePreset('custom');
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* End Date */}
+            <div className="lg:col-span-2 flex items-center gap-1.5">
+              <span className="text-[10px] text-zinc-500 uppercase font-semibold shrink-0">To</span>
+              <div className="relative w-full">
+                <Input 
+                  type="date" 
+                  className="bg-white border-zinc-200 text-xs shadow-sm h-9 px-2 w-full pr-8"
+                  value={endDate}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setDatePreset('custom');
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Clear Button */}
+            <div className="lg:col-span-2 flex items-center justify-end">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  setSearchTerm('');
+                  setStartDate('');
+                  setEndDate('');
+                  setDatePreset('all');
+                }}
+                disabled={!searchTerm && !startDate && !endDate}
+                className={`w-full text-xs h-9 font-medium px-2.5 flex items-center justify-center gap-1.5 border ${
+                  (searchTerm || startDate || endDate) 
+                    ? "text-rose-600 hover:text-rose-700 bg-rose-50/20 border-rose-200 hover:bg-rose-50"
+                    : "text-zinc-400 bg-zinc-50/50 border-zinc-200 cursor-not-allowed"
+                }`}
+              >
+                <X className="h-3.5 w-3.5" /> Clear Filters
+              </Button>
+            </div>
           </div>
-        </CardHeader>
+        </div>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -793,7 +971,7 @@ export default function ReceiptHistory() {
               ) : filteredSales.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={10} className="text-center py-10 text-zinc-500 text-sm">
-                    No past sales receipts found.
+                    No past sales history found.
                   </TableCell>
                 </TableRow>
               ) : (
