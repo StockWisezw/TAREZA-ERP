@@ -239,7 +239,7 @@ export function SyncManager() {
               }
             });
           } else {
-            const pm = String(sale.payment_method || '').toLowerCase();
+            const pm = String((sale as any).payment_method || '').toLowerCase();
             if (pm === 'cash' || pm === 'usd_cash' || pm === 'zig_cash' || pm === 'zwg_cash') {
               totalCashPortion = Number(sale.total || 0);
             }

@@ -78,7 +78,7 @@ export default function Landing() {
              <div className="absolute top-[10%] left-[5%]"><Store className="w-16 h-16 text-primary" /></div>
              {/* Inventory */}
              <div className="absolute top-[20%] right-[15%]"><Package className="w-20 h-20 text-indigo-500" /></div>
-             {/* AI/Analytics */}
+             {/* Real-time/Analytics */}
              <div className="absolute bottom-[20%] left-[15%]"><Activity className="w-24 h-24 text-emerald-500" /></div>
              {/* Security/Access */}
              <div className="absolute bottom-[30%] right-[5%]"><ShieldCheck className="w-16 h-16 text-amber-500" /></div>
@@ -103,7 +103,7 @@ export default function Landing() {
             </div>
             
             <h1 className="text-5xl md:text-7xl font-bold tracking-tighter leading-[1.1] text-zinc-900 dark:text-zinc-50 drop-shadow-sm">
-              The Intelligent <br className="hidden md:block" />
+              The Integrated <br className="hidden md:block" />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-amber-600 drop-shadow-none">
                 Business OS
               </span>

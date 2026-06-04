@@ -269,7 +269,7 @@ export default function Login() {
         
         <div className="relative z-10 space-y-6 max-w-lg mb-12">
           <h1 className="text-5xl font-semibold leading-[1.1] tracking-tight">
-            The intelligent cloud ERP for fast-growing businesses.
+            The integrated cloud ERP for fast-growing businesses.
           </h1>
           <p className="text-zinc-400 text-lg">
             Manage your inventory, process sales, oversee procurement, and generate compliant financial reports effortlessly.
@@ -282,7 +282,7 @@ export default function Login() {
             </div>
             <div className="flex items-center space-x-2 text-sm font-medium text-white">
               <TrendingUp className="w-5 h-5 text-primary" />
-              <span>AI Forecast & Insights</span>
+              <span>Real-time Reports & Insights</span>
             </div>
           </div>
         </div>

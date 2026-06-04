@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
-import { ShoppingCart, PackageOpen, TrendingDown, Clock, Building, Truck, BrainCircuit, Activity, Loader2 } from 'lucide-react';
+import { ShoppingCart, PackageOpen, TrendingDown, Clock, Building, Truck, Activity, Loader2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { Button } from '../ui/button';
 import { supabase } from '../../lib/supabaseClient';
@@ -222,12 +222,12 @@ export function SupplierDashboard() {
           </CardContent>
         </Card>
 
-        {/* AI & Insights */}
+        {/* Procurement & Insights */}
         <div className="space-y-6">
           <Card className="shadow-sm border-indigo-200 bg-gradient-to-br from-indigo-50 to-white">
             <CardHeader className="pb-3 flex flex-row items-center space-x-2">
-              <BrainCircuit className="w-5 h-5 text-indigo-600" />
-              <CardTitle className="text-indigo-900">Procurement AI Insights</CardTitle>
+              <Activity className="w-5 h-5 text-indigo-600" />
+              <CardTitle className="text-indigo-900">Procurement & Sourcing Insights</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="p-3 bg-white border border-indigo-100 rounded-xl shadow-sm">

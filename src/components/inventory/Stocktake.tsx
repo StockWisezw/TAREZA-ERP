@@ -157,7 +157,7 @@ export function Stocktake() {
     }
   };
 
-  const loadCountedItemsFromDB = async (stocktakeId: string) => {
+  const loadCountedItemsFromDB = async (stocktakeId: string, branchId?: string) => {
     try {
       const { data, error } = await supabase
         .from('stocktake_items')
@@ -186,11 +186,22 @@ export function Stocktake() {
 
       if (data && data.length > 0) {
         const mappedItems = data.map(row => {
-          const rawProd: any = row.products;
+          const rawProd: any = row.products || {};
+          
+          let productInventory = [];
+          if (rawProd.inventory && rawProd.inventory.length > 0) {
+            productInventory = rawProd.inventory;
+          } else {
+            productInventory = [{
+              quantity: Number(row.system_qty || 0),
+              branch_id: branchId || null
+            }];
+          }
+
           // Format product levels properly
           const mappedProd = {
             ...rawProd,
-            inventory: rawProd?.inventory || [{ quantity: Number(row.system_qty) }]
+            inventory: productInventory
           };
           return {
             product: mappedProd,
@@ -275,6 +286,7 @@ export function Stocktake() {
       toast.success(`Success! Quantities approved, mirror logs updated and live branch catalog adjusted.`);
       setReviewItem(null);
       fetchStocktakes();
+      fetchProducts();
     } catch (err: any) {
       toast.error(err.message || 'Error occurred during stocktake approval');
     }
@@ -354,6 +366,7 @@ export function Stocktake() {
       setActiveStocktake(null);
       setCountedItems([]);
       fetchStocktakes();
+      fetchProducts();
     } catch (err: any) {
       toast.error(err.message || 'Error occurred during direct stocktake approval');
     } finally {
@@ -477,7 +490,7 @@ export function Stocktake() {
 
   const openReview = async (stk: any) => {
     setReviewItem(stk);
-    let loaded = await loadCountedItemsFromDB(stk.id);
+    let loaded = await loadCountedItemsFromDB(stk.id, stk.branch_id || stk.branches?.id);
     if (loaded) {
       setReviewItemsData(loaded);
     } else {
@@ -624,7 +637,7 @@ export function Stocktake() {
                         size="sm" 
                         onClick={async () => {
                           setActiveStocktake(stk);
-                          let dbItems = await loadCountedItemsFromDB(stk.id);
+                          let dbItems = await loadCountedItemsFromDB(stk.id, stk.branch_id || stk.branches?.id);
                           if (dbItems) {
                             setCountedItems(dbItems);
                           } else {

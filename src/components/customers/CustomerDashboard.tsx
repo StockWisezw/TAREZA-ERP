@@ -193,13 +193,13 @@ export function CustomerDashboard() {
           </CardContent>
         </Card>
 
-        {/* AI & Insights */}
+        {/* System & Insights */}
         <div className="space-y-6">
           <Card className="shadow-sm border-purple-200 bg-gradient-to-br from-purple-50 to-white">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center text-purple-900">
-                <Sparkles className="w-5 h-5 mr-2 text-purple-600" />
-                Gemini CRM Insights
+                <Activity className="w-5 h-5 mr-2 text-purple-600" />
+                CRM Directory Insights
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
