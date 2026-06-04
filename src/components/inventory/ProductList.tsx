@@ -52,6 +52,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
   const [newProductSKU, setNewProductSKU] = useState('');
   const [newProductPrice, setNewProductPrice] = useState('');
   const [newProductStock, setNewProductStock] = useState('0');
+  const [newReorderLevel, setNewReorderLevel] = useState('10');
   
   // Wholesale Pack Fields
   const [isPack, setIsPack] = useState(false);
@@ -79,6 +80,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
   const [editCategory, setEditCategory] = useState('');
   const [editRetailPrice, setEditRetailPrice] = useState('');
   const [editWholesalePrice, setEditWholesalePrice] = useState('');
+  const [editReorderLevel, setEditReorderLevel] = useState('10');
 
   // Adjust Product Stock Dialog Form State
   const [adjustingProduct, setAdjustingProduct] = useState<any | null>(null);
@@ -267,9 +269,9 @@ export function ProductList({ onImportClick }: ProductListProps) {
 
        if (productError) throw productError;
 
-       // Set initial stock if required
-       const stock = parseFloat(newProductStock);
-       if (stock > 0) {
+       // Always establish inventory record with custom reorder level
+       const stock = parseFloat(newProductStock) || 0;
+       if (true) {
          const { data: branchData } = await supabase
            .from('branches')
            .select('id')
@@ -282,7 +284,10 @@ export function ProductList({ onImportClick }: ProductListProps) {
              business_id: businessData.business_id,
              branch_id: branchData.id,
              product_id: newProduct.id,
-             quantity: stock
+             quantity: stock,
+             reorder_level: parseInt(newReorderLevel, 10) || 10,
+             created_at: new Date().toISOString(),
+             updated_at: new Date().toISOString()
            });
          }
        }
@@ -336,6 +341,53 @@ export function ProductList({ onImportClick }: ProductListProps) {
         .eq('id', editingProduct.id);
 
       if (error) throw error;
+
+      // Update / upsert reorder_level in the branch's inventory
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData?.user) {
+        const { data: businessData } = await supabase
+          .from('business_users')
+          .select('business_id, branch_id')
+          .eq('user_id', userData.user.id)
+          .limit(1)
+          .maybeSingle();
+
+        const branchIdToUse = selectedBranchId || businessData?.branch_id;
+        const businessId = businessData?.business_id;
+
+        if (branchIdToUse && businessId) {
+          const parsedReorder = parseInt(editReorderLevel, 10);
+          if (!isNaN(parsedReorder)) {
+            const { data: existingRecords } = await supabase
+              .from('inventory')
+              .select('*')
+              .eq('product_id', editingProduct.id)
+              .eq('branch_id', branchIdToUse);
+
+            if (existingRecords && existingRecords.length > 0) {
+              await supabase
+                .from('inventory')
+                .update({
+                  reorder_level: parsedReorder,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', existingRecords[0].id);
+            } else {
+              await supabase
+                .from('inventory')
+                .insert({
+                  business_id: businessId,
+                  branch_id: branchIdToUse,
+                  product_id: editingProduct.id,
+                  quantity: 0,
+                  reorder_level: parsedReorder,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                });
+            }
+          }
+        }
+      }
 
       toast.success(`Product "${editName}" updated successfully!`);
       setEditingProduct(null);
@@ -623,11 +675,11 @@ export function ProductList({ onImportClick }: ProductListProps) {
     toast.success(`Inventory report for branch "${branchName}" exported successfully`);
   };
 
-  const getStatusBadge = (stock: number) => {
-    if (stock > 50) return <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-0">In Stock</Badge>;
-    if (stock > 10) return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-0">Low Stock</Badge>;
-    if (stock > 0) return <Badge className="bg-red-100 text-red-800 hover:bg-red-100 border-0">Critical</Badge>;
-    return <Badge className="bg-zinc-100 text-zinc-600 hover:bg-zinc-100 border-0">Out of Stock</Badge>;
+  const getStatusBadge = (stock: number, reorderLevel: number = 10) => {
+    if (stock <= 0) return <Badge className="bg-zinc-100 text-zinc-600 hover:bg-zinc-150 border-0">Out of Stock</Badge>;
+    if (stock <= Math.max(1, Math.floor(reorderLevel / 2))) return <Badge className="bg-red-100 text-red-800 hover:bg-red-150 border-0 animate-pulse">Critical</Badge>;
+    if (stock <= reorderLevel) return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-150 border-0">Low Stock</Badge>;
+    return <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-150 border-0">In Stock</Badge>;
   };
 
   const filteredProducts = products.filter(item => {
@@ -1043,7 +1095,12 @@ export function ProductList({ onImportClick }: ProductListProps) {
                     )}
                   </TableCell>
 
-                  <TableCell>{getStatusBadge(isInlineEditMode ? parseFloat(rowEdit.stock) || 0 : stock)}</TableCell>
+                  <TableCell>
+                    {getStatusBadge(
+                      isInlineEditMode ? parseFloat(rowEdit.stock) || 0 : stock,
+                      stockRecord ? (stockRecord.reorder_level ?? 10) : 10
+                    )}
+                  </TableCell>
                   
                   {/* Actions Column */}
                   <TableCell className="text-right">
@@ -1103,6 +1160,10 @@ export function ProductList({ onImportClick }: ProductListProps) {
                               setEditRetailPrice(item.retail_price?.toString() || '0');
                               setEditWholesalePrice(item.wholesale_price?.toString() || '0');
                               setEditBundles(item.bundles ? JSON.parse(JSON.stringify(item.bundles)) : []);
+                              const stockRec = selectedBranchId 
+                                ? item.inventory?.find((i: any) => i.branch_id === selectedBranchId)
+                                : item.inventory?.[0];
+                              setEditReorderLevel(stockRec ? (stockRec.reorder_level ?? 10).toString() : '10');
                             }}
                           >
                             Edit Product
@@ -1187,6 +1248,11 @@ export function ProductList({ onImportClick }: ProductListProps) {
                 <Label className="text-xs font-semibold text-zinc-600">Wholesale Price ($)</Label>
                 <Input type="number" step="0.01" value={editWholesalePrice} onChange={e => setEditWholesalePrice(e.target.value)} placeholder="0.00" className="bg-white border-zinc-200 font-mono" />
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-zinc-600">Reorder Level (Low Stock Threshold) *</Label>
+              <Input type="number" value={editReorderLevel} onChange={e => setEditReorderLevel(e.target.value)} placeholder="10" className="bg-white border-zinc-200 font-mono" />
             </div>
 
             {/* Edit Custom Bundles section */}

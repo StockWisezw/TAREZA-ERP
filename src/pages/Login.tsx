@@ -319,7 +319,7 @@ export default function Login() {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-zinc-600 dark:bg-zinc-400"></span>
                   </span>
-                  Zimbabwe Superadmin Demo
+                  Global Superadmin Demo
                 </div>
                 <div className="text-xs text-zinc-605 dark:text-zinc-400 space-y-0.5 font-mono">
                   <div><strong className="font-sans font-medium text-zinc-500">User:</strong> demo@tareza.co.zw</div>

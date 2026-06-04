@@ -1,6 +1,6 @@
 {
   "name": "Tareza ERP",
-  "description": "Tareza ERP. AI-Powered POS, inventory, accounting, and business operating system for African enterprises.",
+  "description": "Tareza ERP. Ultimate global cloud POS, dynamic multi-branch inventory management, real-time double-entry ledger bookkeeping, and smart business operating system designed for modern, high-growth retail enterprises scaled globally.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

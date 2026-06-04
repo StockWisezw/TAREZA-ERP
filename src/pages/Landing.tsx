@@ -12,7 +12,7 @@ export default function Landing() {
       <div className="w-full bg-zinc-900 border-b border-zinc-800 hidden md:block">
         <div className="max-w-7xl mx-auto px-6 h-10 flex items-center justify-between text-xs font-medium">
           <div className="text-zinc-400">
-            Welcome to Tareza ERP - Your Trusted Business Partner in Zimbabwe
+            Tareza ERP — Next-Gen Global Point of Sale & Connected Retail Intelligence
           </div>
           <div className="flex items-center space-x-6">
             <a href="mailto:admin@tarezaerp.co.zw" className="flex items-center text-zinc-300 hover:text-white transition-colors group">
@@ -103,30 +103,29 @@ export default function Landing() {
             </div>
             
             <h1 className="text-5xl md:text-7xl font-bold tracking-tighter leading-[1.1] text-zinc-900 dark:text-zinc-50 drop-shadow-sm">
-              The Integrated <br className="hidden md:block" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-amber-600 drop-shadow-none">
-                Business OS
+              The Next-Gen <br className="hidden md:block" />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-emerald-500 drop-shadow-none">
+                Global Retail OS
               </span>
             </h1>
             
             <p className="text-xl text-zinc-600 dark:text-zinc-300 max-w-2xl mx-auto lg:mx-0 leading-relaxed font-medium">
-              Powering African commerce. Point of Sale, multi-branch inventory, 
-              accounting, and expert on-site consulting—all in one enterprise-grade platform.
+              Scale your multi-branch retail, wholesale, or distribution business with real-time cloud inventory tracking, intelligent hybrid offline-first POS terminals, integrated bookkeeping ledger accounting, and premium expert metrics advisory—trusted internationally.
             </p>
             
             <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start space-y-4 sm:space-y-0 sm:space-x-4 pt-4">
               <Link to="/login">
-                <Button size="lg" className="h-14 px-8 text-base font-bold w-full sm:w-auto shadow-lg shadow-primary/25">
-                  Start your 14-day free trial
+                <Button size="lg" className="h-14 px-8 text-base font-bold w-full sm:w-auto shadow-lg shadow-primary/25 bg-primary hover:bg-primary/95 text-primary-foreground">
+                  Start Global Free Trial
                 </Button>
               </Link>
               <a href="mailto:admin@tarezaerp.co.zw?subject=Book a Demo - Tareza ERP">
                 <Button size="lg" variant="outline" className="h-14 px-8 text-base font-bold w-full sm:w-auto bg-background/50 backdrop-blur-md border-border hover:bg-background/80">
-                  Book a Demo
+                  Book Global Demo
                 </Button>
               </a>
             </div>
-            <p className="text-sm text-zinc-500 font-medium">No credit card required. Cancel anytime.</p>
+            <p className="text-sm text-zinc-500 font-medium">14-day free trial. Setup takes under 5 minutes. No credit card required.</p>
           </div>
           
           <div className="lg:w-1/2 mt-16 lg:mt-0 relative z-10">
@@ -260,7 +259,7 @@ export default function Landing() {
                 <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Professional Financial Trend Interpretation</li>
                 <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Up to 3 Branches / Warehouses</li>
                 <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Direct Developer Support Hotline</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> ZIMRA Fiscalisation Ready</li>
+                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Universal Tax Engine (ZIMRA, SARS & Global Ready)</li>
               </ul>
               <Link to="/login" className="mt-auto">
                 <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-bold">Start your 14-day trial</Button>

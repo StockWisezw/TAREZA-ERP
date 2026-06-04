@@ -90,6 +90,34 @@ export default function POS() {
 
   const getVatRate = () => localStorage.getItem('tareza_vat_enabled') === 'true' ? 0.15 : 0;
 
+  const refreshActiveSession = async () => {
+    try {
+      const { supabase: appService } = await import('../lib/supabaseClient');
+      const { data: userContext } = await appService.auth.getUser();
+      if (userContext?.user) {
+        const { data: userBusiness } = await appService.from('business_users').select('business_id').eq('user_id', userContext.user.id).limit(1).maybeSingle();
+        if (userBusiness?.business_id) {
+          const activeRS = await getOpenRegisterSession(userBusiness.business_id, userContext.user.id);
+          if (activeRS) {
+            setActiveSession(activeRS);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to refresh active session metrics:", e);
+    }
+  };
+
+  useEffect(() => {
+    const handleSessionRefresh = () => {
+      refreshActiveSession();
+    };
+    window.addEventListener('tareza-session-updated', handleSessionRefresh);
+    return () => {
+      window.removeEventListener('tareza-session-updated', handleSessionRefresh);
+    };
+  }, []);
+
   const updateItemPriceInStore = (itemId: string, newPrice: number) => {
     usePOSStore.setState((state) => {
       const updatedCart = state.cart.map((item) => {
@@ -907,7 +935,15 @@ export default function POS() {
             <h1 className="text-xl font-bold tracking-tight text-zinc-800">Point of Sale</h1>
             <div className="flex items-center gap-2">
               {activeSession && (
-                <Dialog open={showShiftDetails} onOpenChange={setShowShiftDetails}>
+                <Dialog 
+                  open={showShiftDetails} 
+                  onOpenChange={(open) => {
+                    setShowShiftDetails(open);
+                    if (open) {
+                      refreshActiveSession();
+                    }
+                  }}
+                >
                   <DialogTrigger asChild>
                     <Button variant="outline" size="sm" className="border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70 hover:text-emerald-800">
                       <Coins className="w-4 h-4 mr-2" /> Shift: Active
@@ -1570,7 +1606,16 @@ export default function POS() {
       />
       
       {/* Post Sale Options Dialog */}
-      <Dialog open={showPostSale} onOpenChange={setShowPostSale}>
+      <Dialog 
+        open={showPostSale} 
+        onOpenChange={(open) => {
+          setShowPostSale(open);
+          if (!open) {
+            setLastSale(null);
+            refreshActiveSession();
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Sale Completed</DialogTitle>
@@ -1600,6 +1645,7 @@ export default function POS() {
               onClick={() => {
                 setShowPostSale(false);
                 setLastSale(null);
+                refreshActiveSession();
               }}
             >
               Next Customer
@@ -1609,6 +1655,7 @@ export default function POS() {
               onClick={() => {
                 handlePrint();
                 setShowPostSale(false);
+                refreshActiveSession();
               }}
             >
               <Receipt className="mr-2 h-4 w-4" /> Print Receipt

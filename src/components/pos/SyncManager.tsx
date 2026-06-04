@@ -223,6 +223,11 @@ export function SyncManager() {
                 expected_balance: Number(openSession.expected_balance || 0) + sale.total,
               })
               .eq('id', openSession.id);
+
+            // Notify POS page to reload register session in real-time
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('tareza-session-updated'));
+            }
           }
         } catch (e) {
           console.warn('[SyncManager] Register session stats update bypassed:', e);
