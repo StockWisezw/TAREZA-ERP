@@ -649,18 +649,32 @@ export default function POS() {
                 throw new Error(itemsErr.message || 'Failed to save items for this sale.');
               }
 
+              // 2.1: Record stock movements with error handling
+              const stockErrors: string[] = [];
               for (const item of sale.items) {
-                const multiplier = getItemPackSize(item);
-                await recordStockMovement(
-                  businessId,
-                  branchId,
-                  item.product.id,
-                  -(item.quantity * multiplier), // negative for stock depletion, positive for stock replenishment/refund
-                  'POS_SALE',
-                  userData?.user?.id || 'unknown',
-                  sale.receiptNumber,
-                  item.product.wholesalePrice
-                );
+                try {
+                  const multiplier = getItemPackSize(item);
+                  const result = await recordStockMovement(
+                    businessId,
+                    branchId,
+                    item.product.id,
+                    -(item.quantity * multiplier),
+                    'POS_SALE',
+                    userData?.user?.id || 'unknown',
+                    sale.receiptNumber,
+                    item.product.wholesalePrice
+                  );
+                  
+                  if (!result || result.error) {
+                    stockErrors.push(`${item.product.name}: ${result?.error || 'Unknown error'}`);
+                  }
+                } catch (err: any) {
+                  stockErrors.push(`${item.product.name}: ${err.message}`);
+                }
+              }
+
+              if (stockErrors.length > 0) {
+                console.warn('[POS] Inventory sync warnings:', stockErrors);
               }
             }
 
@@ -714,18 +728,72 @@ export default function POS() {
               }
             }
 
-            // 5. Update Cash Drawer Log (Cash Management)
-            const cashPayment = sale.payments.find(p => p.method === 'cash' || p.method === 'usd_cash');
-            if (cashPayment) {
-              await supabase.from('cash_drawer_logs').insert([{
+            // 4.1: Log ALL payment methods
+            const paymentTypeMap: Record<string, string> = {
+              'cash': 'cash_sale',
+              'usd_cash': 'usd_cash_sale',
+              'card': 'card_sale',
+              'ecocash': 'ecocash_sale',
+              'credit': 'credit_sale'
+            };
+
+            for (const payment of sale.payments) {
+              try {
+                const { error } = await supabase.from('cash_drawer_logs').insert([{
+                  business_id: businessId,
+                  branch_id: branchId,
+                  amount: payment.amount,
+                  type: payment.method === 'credit' ? 'receivable' : 'cash',
+                  transaction_type: paymentTypeMap[payment.method] || 'sale',
+                  payment_method: payment.method,
+                  notes: `Sale ${sale.receiptNumber} - ${payment.method}`,
+                  linked_document_id: saleDoc.id,
+                  linked_document_type: 'sale',
+                  created_at: new Date().toISOString()
+                }]);
+                
+                if (error) {
+                  console.error(`[POS] Cash log error for ${payment.method}:`, error);
+                }
+              } catch (err: any) {
+                console.error(`[POS] Exception logging ${payment.method}:`, err);
+              }
+            }
+
+            // 4.2: Create summary record for complete audit trail
+            try {
+              const cashTotal = sale.payments
+                .filter(p => p.method === 'cash' || p.method === 'usd_cash')
+                .reduce((sum, p) => sum + p.amount, 0);
+              const cardTotal = sale.payments
+                .filter(p => p.method === 'card')
+                .reduce((sum, p) => sum + p.amount, 0);
+              const creditTotal = sale.payments
+                .filter(p => p.method === 'credit')
+                .reduce((sum, p) => sum + p.amount, 0);
+              
+              await supabase.from('transaction_summaries').insert([{
                 business_id: businessId,
                 branch_id: branchId,
-                amount: cashPayment.amount,
-                type: 'sale',
-                transaction_type: 'cash_sale',
-                notes: `Sale ${sale.receiptNumber}`,
-                created_at: new Date().toISOString()
+                transaction_type: 'sale',
+                reference_id: sale.receiptNumber,
+                reference_document_id: saleDoc.id,
+                total_amount: sale.total,
+                cash_amount: cashTotal,
+                card_amount: cardTotal,
+                credit_amount: creditTotal,
+                created_at: new Date().toISOString(),
+                created_by: userData?.user?.id || 'unknown'
               }]);
+            } catch (err: any) {
+              console.warn('[POS] Summary record creation failed:', err.message);
+            }
+
+            // 3.1: Trigger inventory refresh for other components
+            try {
+              window.dispatchEvent(new Event('inventory-update-needed'));
+            } catch (err) {
+              console.error('Failed to dispatch inventory event:', err);
             }
 
             // 6. Log Audit Trail

@@ -152,21 +152,51 @@ export function ProductList({ onImportClick }: ProductListProps) {
   };
 
   useEffect(() => {
-    fetchProducts();
+    let isMounted = true;
+    let subscriptionChannel: any = null;
 
-    // Subscribe to realtime changes on products and inventory
-    const channel = supabase
-      .channel('public:products_inventory')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
-        fetchProducts(); // Refresh list on change
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, (payload) => {
-        fetchProducts(); // Refresh list on change
-      })
-      .subscribe();
+    const setupSubscription = async () => {
+      try {
+        // Initial data load
+        await fetchProducts();
 
+        if (!isMounted) return;
+
+        // Setup realtime subscription
+        subscriptionChannel = supabase
+          .channel(`inventory_${Date.now()}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+            if (isMounted) {
+              setTimeout(() => { if (isMounted) fetchProducts(); }, 500);
+            }
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => {
+            if (isMounted) {
+              console.log('[Inventory] Stock changed - refreshing');
+              setTimeout(() => { if (isMounted) fetchProducts(); }, 300);
+            }
+          })
+          .subscribe();
+      } catch (err) {
+        console.error('[Inventory] Subscription setup failed:', err);
+      }
+    };
+
+    setupSubscription();
+
+    // Handle inventory updates from POS
+    const handleInventoryUpdate = () => {
+      if (isMounted) fetchProducts();
+    };
+    window.addEventListener('inventory-update-needed', handleInventoryUpdate);
+
+    // Cleanup on unmount
     return () => {
-      supabase.removeChannel(channel);
+      isMounted = false;
+      if (subscriptionChannel) {
+        supabase.removeChannel(subscriptionChannel);
+      }
+      window.removeEventListener('inventory-update-needed', handleInventoryUpdate);
     };
   }, []);
 
