@@ -28,6 +28,7 @@ import {
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 import firebaseConfig from '../../firebase-applet-config.json';
+export { firebaseConfig };
 
 // Initialize Firebase App
 export const app = initializeApp(firebaseConfig);

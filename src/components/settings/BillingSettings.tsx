@@ -37,8 +37,10 @@ export function BillingSettings() {
   const expiresAt = businessData?.subscription_end_date ? new Date(businessData.subscription_end_date) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
   const gracePeriodEnd = new Date(expiresAt.getTime() + 7 * 24 * 60 * 60 * 1000);
   const daysLeftInGrace = Math.floor((gracePeriodEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  const planName = subscription?.plan_name === 'free_trial' ? 'Free Trial' : subscription?.plan_name || 'Free Trial';
-  const maxUsers = businessData?.max_users || 2;
+  const planName = subscription?.plan_name === 'free_trial' ? 'Free Trial' : subscription?.plan_name === 'starter' ? 'Starter' : subscription?.plan_name === 'pro' ? 'Consultancy Pro' : subscription?.plan_name === 'enterprise' ? 'Enterprise' : (subscription?.plan_name || 'Free Trial');
+  const planNameRaw = subscription?.plan_name || 'free_trial';
+  const maxUsers = planNameRaw === 'starter' ? 3 : planNameRaw === 'pro' ? 10 : planNameRaw === 'enterprise' ? 100 : (businessData?.max_users || 5);
+  const planCost = planNameRaw === 'starter' ? '$15.00' : planNameRaw === 'pro' ? '$50.00' : planNameRaw === 'enterprise' ? '$99.00' : '$0.00';
   const userPercent = Math.min((userCount / maxUsers) * 100, 100);
 
   
@@ -100,7 +102,7 @@ export function BillingSettings() {
               <div className="p-6 flex flex-col justify-center">
                  <p className="text-sm font-medium text-zinc-500 mb-1">Billing Cycle</p>
                  <div className="flex items-end gap-2">
-                   <h4 className="text-xl font-bold text-zinc-900">{planName === 'Free Trial' ? '$0.00' : '$40.00'} <span className="text-sm font-medium text-zinc-400">/mo</span></h4>
+                   <h4 className="text-xl font-bold text-zinc-900">{planCost} <span className="text-xs font-semibold text-zinc-400">/mo</span></h4>
                  </div>
                  <p className="text-xs text-zinc-500 mt-2 font-medium">Billed on the 1st of every month.</p>
               </div>
@@ -123,7 +125,7 @@ export function BillingSettings() {
             <CardContent className="pt-6 space-y-4 flex-1">
               <ul className="space-y-3 shrink-0 text-sm">
                 <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 font-medium">1 Branch / Warehouse</span></li>
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 font-medium">2 User Accounts</span></li>
+                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 font-medium">3 User Accounts</span></li>
                 <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 font-medium">Core POS & Inventory</span></li>
                 <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 font-medium">Standard Support</span></li>
               </ul>
@@ -138,19 +140,19 @@ export function BillingSettings() {
               Current Plan
             </div>
             <CardHeader className="bg-primary/5 pb-6 border-b border-primary/10">
-              <CardTitle className="text-lg font-bold text-primary">Pro</CardTitle>
+              <CardTitle className="text-lg font-bold text-primary">Consultancy Pro</CardTitle>
               <div className="mt-4 flex items-baseline text-4xl font-extrabold text-zinc-900 tracking-tight">
-                $40
+                $50
                 <span className="ml-1 text-base font-medium text-zinc-500">/mo</span>
               </div>
-              <CardDescription className="pt-3 text-zinc-600 leading-relaxed font-medium">Built for growing multi-location retailers.</CardDescription>
+              <CardDescription className="pt-3 text-zinc-600 leading-relaxed font-medium">Physical stocktake support plus total Cloud ERP access.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6 space-y-4 flex-1">
               <ul className="space-y-3 shrink-0 text-sm">
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-primary shrink-0" /> <span className="text-zinc-800 font-medium">Up to 3 Branches</span></li>
+                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-primary shrink-0" /> <span className="text-zinc-800 font-medium">1 Monthly On-Site Visit (Stocktake)</span></li>
+                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-primary shrink-0" /> <span className="text-zinc-800 font-medium">Up to 3 Branches / Warehouses</span></li>
                 <li className="flex items-center gap-3"><Check className="h-4 w-4 text-primary shrink-0" /> <span className="text-zinc-800 font-medium">Up to 10 User Accounts</span></li>
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-primary shrink-0" /> <span className="text-zinc-800 font-medium">Advanced Reporting</span></li>
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-primary shrink-0" /> <span className="text-zinc-800 font-medium">ZIMRA Fiscalisation</span></li>
+                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-primary shrink-0" /> <span className="text-zinc-800 font-medium">ZIMRA & universal tax readiness</span></li>
               </ul>
             </CardContent>
             <CardFooter className="pt-6 border-t border-primary/10">

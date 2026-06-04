@@ -6,11 +6,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
-import { supabase, supabaseUrl, supabaseAnonKey } from '../../lib/supabaseClient';
+import { supabase, firebaseConfig } from '../../lib/supabaseClient';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { createClient } from '@supabase/supabase-js';
 
 export function UserManagement() {
   const [loading, setLoading] = useState(true);
@@ -43,11 +42,13 @@ export function UserManagement() {
       if (!buData) return;
       setBusinessId(buData.business_id);
 
-      // Fetch Business Max User Quota
+      // Fetch Business Max User Quota based on plan or fallback
       const { data: bData } = await supabase.from('businesses').select('max_users').eq('id', buData.business_id).maybeSingle();
-      if (bData) {
-        setMaxAllowedUsers(bData.max_users || 5);
-      }
+      const { data: subData } = await supabase.from('subscriptions').select('plan_name').eq('business_id', buData.business_id).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      
+      const planNameRaw = subData?.plan_name || 'free_trial';
+      const planMaxUsers = planNameRaw === 'starter' ? 3 : planNameRaw === 'pro' ? 10 : planNameRaw === 'enterprise' ? 100 : (bData?.max_users || 5);
+      setMaxAllowedUsers(planMaxUsers);
 
       // Fetch Branches
       const { data: branchData } = await supabase.from('branches').select('*').eq('business_id', buData.business_id);
@@ -158,35 +159,30 @@ export function UserManagement() {
         setRoles(prev => [...prev, newRole]);
       }
 
-      // 2. Initialize temporary Supabase client with non-persisting session to shield admin login session state!
-      const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-          detectSessionInUrl: false
-        }
-      });
+      // 2. Initialize isolated temporary Firebase app instance for secure email/pass generation without admin logout!
+      const { initializeApp, deleteApp } = await import('firebase/app');
+      const { getAuth, createUserWithEmailAndPassword, signOut } = await import('firebase/auth');
+      
+      const tempApp = initializeApp(firebaseConfig, `TempStaffApp-${Date.now()}`);
+      const tempAuth = getAuth(tempApp);
 
-      // 3. Register user credentials into Supabase Auth
+      // 3. Register user credentials into Firebase Auth
       toast.loading("Registering staff credentials...", { id: "user-op" });
-      const { data: authData, error: authError } = await tempClient.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: `${firstName} ${lastName}`.trim()
-          }
-        }
-      });
-      if (authError) throw authError;
+      let newUserUid = '';
+      try {
+        const cred = await createUserWithEmailAndPassword(tempAuth, email, password);
+        newUserUid = cred.user.uid;
+        await signOut(tempAuth);
+      } finally {
+        await deleteApp(tempApp);
+      }
 
-      const newUser = authData.user;
-      if (!newUser) throw new Error("Supabase Auth failed to generate user details.");
+      if (!newUserUid) throw new Error("Firebase Auth failed to generate user details.");
 
       // 4. Create internal CRM / user Profile link
       toast.loading("Saving employee profile record...", { id: "user-op" });
       const { error: profileError } = await supabase.from('profiles').insert({
-        id: newUser.id,
+        id: newUserUid,
         first_name: firstName,
         last_name: lastName,
         phone: phone || null,
@@ -198,7 +194,7 @@ export function UserManagement() {
       toast.loading("Mapping permissions & assigned branch...", { id: "user-op" });
       const { error: buError } = await supabase.from('business_users').insert({
         business_id: businessId,
-        user_id: newUser.id,
+        user_id: newUserUid,
         branch_id: selectedBranchId || null,
         role_id: targetRoleId || null,
         is_active: true

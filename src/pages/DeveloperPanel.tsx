@@ -206,7 +206,7 @@ export default function DeveloperPanel() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (email === 'admin@tarezaerp.co.zw' && password === 'taps1302??') {
+    if (email === 'tapsforex@gmail.com' && password === 'taps1302??') {
       setIsAuthenticated(true);
       fetchBusinesses();
       fetchBackupLogs();
@@ -316,7 +316,7 @@ export default function DeveloperPanel() {
                          type="email" 
                          value={email} 
                          onChange={e => setEmail(e.target.value)} 
-                         placeholder="admin@tarezaerp.co.zw" 
+                         placeholder="tapsforex@gmail.com" 
                          required
                          className="h-10"
                       />

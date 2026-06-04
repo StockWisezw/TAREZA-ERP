@@ -48,7 +48,7 @@ function SubscriptionBanner() {
   const { user } = useAuth();
   
   // Superadmin account has no expiration and unlimited functions
-  const isSuperadmin = user?.email === 'demo@tareza.co.zw';
+  const isSuperadmin = user?.email === 'tapsforex@gmail.com';
   const subscriptionStatus: string = isSuperadmin ? 'ACTIVE' : 'GRACE_PERIOD';
   
   const expiresAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // Expired 2 days ago
