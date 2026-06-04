@@ -1,0 +1,193 @@
+{
+  "entities": {
+    "Business": {
+      "title": "Business",
+      "description": "Represents an enterprise organization using Tareza ERP",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "tax_number": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "currency": { "type": "string" },
+        "subscription_plan": { "type": "string" },
+        "subscription_status": { "type": "string" },
+        "max_users": { "type": "number" },
+        "max_branches": { "type": "number" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Branch": {
+      "title": "Branch",
+      "description": "A physical retail store or warehouse belonging to a business",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "business_id": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "type": { "type": "string" },
+        "is_active": { "type": "boolean" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "business_id", "name"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "User profile with personal identity details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "first_name": { "type": "string" },
+        "last_name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "email"]
+    },
+    "BusinessUser": {
+      "title": "BusinessUser",
+      "description": "Relational link mapping a user's role and branch inside a business",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "business_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "branch_id": { "type": "string" },
+        "role_id": { "type": "string" },
+        "is_active": { "type": "boolean" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "business_id", "user_id"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product categories configured within a business",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "business_id": { "type": "string" },
+        "name": { "type": "string" },
+        "parent_id": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "business_id", "name"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "A single retail catalog item/product",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "business_id": { "type": "string" },
+        "category_id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "sku": { "type": "string" },
+        "barcode": { "type": "string" },
+        "retail_price": { "type": "number" },
+        "wholesale_price": { "type": "number" },
+        "cost_price": { "type": "number" },
+        "tax_class": { "type": "string" },
+        "is_active": { "type": "boolean" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "business_id", "name", "retail_price"]
+    },
+    "Inventory": {
+      "title": "Inventory",
+      "description": "Tracks stock levels of products at specific branches",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "business_id": { "type": "string" },
+        "branch_id": { "type": "string" },
+        "product_id": { "type": "string" },
+        "quantity": { "type": "number" },
+        "reorder_level": { "type": "number" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "business_id", "branch_id", "product_id", "quantity"]
+    },
+    "Sale": {
+      "title": "Sale",
+      "description": "A customer transaction / sale record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "business_id": { "type": "string" },
+        "branch_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "customer_id": { "type": "string" },
+        "receiptNumber": { "type": "string" },
+        "subtotal": { "type": "number" },
+        "vat_total": { "type": "number" },
+        "discount_total": { "type": "number" },
+        "total": { "type": "number" },
+        "payment_method": { "type": "string" },
+        "status": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "business_id", "branch_id", "total"]
+    },
+    "CashDrawerLog": {
+      "title": "CashDrawerLog",
+      "description": "Audit trails for cash flow adjustments and till additions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "business_id": { "type": "string" },
+        "branch_id": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string" },
+        "transaction_type": { "type": "string" },
+        "notes": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "business_id", "branch_id", "amount", "type"]
+    }
+  },
+  "firestore": {
+    "/businesses/{businessId}": {
+      "schema": "Business",
+      "description": "Businesses registered in Tareza ERP"
+    },
+    "/branches/{branchId}": {
+      "schema": "Branch",
+      "description": "Retail branches"
+    },
+    "/profiles/{userId}": {
+      "schema": "Profile",
+      "description": "User login profiles"
+    },
+    "/business_users/{bUserId}": {
+      "schema": "BusinessUser",
+      "description": "Roles and branches assignment logs"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Product categories"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Master products database"
+    },
+    "/inventory/{inventoryId}": {
+      "schema": "Inventory",
+      "description": "Current stock levels per branch"
+    },
+    "/sales/{saleId}": {
+      "schema": "Sale",
+      "description": "Sale transactions"
+    },
+    "/cash_drawer_logs/{logId}": {
+      "schema": "CashDrawerLog",
+      "description": "Cash movement logs"
+    }
+  }
+}
