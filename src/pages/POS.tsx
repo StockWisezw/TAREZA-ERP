@@ -1173,7 +1173,22 @@ export default function POS() {
         {/* Product Grid Area */}
         <ScrollArea className="flex-1 bg-zinc-50/50 p-2">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-2 pb-16">
-            {filteredProducts.map((product) => {
+            {isLoading && filteredProducts.length === 0 ? (
+              Array.from({ length: 12 }).map((_, idx) => (
+                <div 
+                  key={`skeleton-${idx}`}
+                  className="bg-white border border-zinc-200/65 rounded-xl overflow-hidden flex flex-col h-[178px] animate-pulse shadow-sm"
+                >
+                  <div className="h-11 bg-zinc-100" />
+                  <div className="p-2 flex flex-col flex-1 gap-2">
+                    <div className="h-3 bg-zinc-100 rounded w-3/4" />
+                    <div className="h-2 bg-zinc-100 rounded w-1/2" />
+                    <div className="h-2 bg-zinc-50 rounded w-1/3 mt-1" />
+                    <div className="mt-auto h-6 bg-zinc-100 rounded-lg w-full" />
+                  </div>
+                </div>
+              ))
+            ) : filteredProducts.map((product) => {
               const bgColors = ['bg-rose-100 text-rose-600', 'bg-blue-100 text-blue-600', 'bg-emerald-100 text-emerald-600', 'bg-amber-100 text-amber-600', 'bg-purple-100 text-purple-600', 'bg-indigo-100 text-indigo-600', 'bg-cyan-100 text-cyan-600'];
               const colorClass = bgColors[product.name.charCodeAt(0) % bgColors.length];
               const pSize = getPackSize(product.sku);
