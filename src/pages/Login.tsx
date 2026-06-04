@@ -318,31 +318,6 @@ export default function Login() {
                 ? 'Enter your email address and we\'ll send you a link to reset your password.' 
                 : (isSignUp ? 'Enter your details to get started' : 'Enter your email and password to access your account')}
             </CardDescription>
-            {!isForgotPassword && (
-              <div 
-                className="mt-4 p-3.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex flex-col gap-1 cursor-pointer hover:bg-zinc-150 dark:hover:bg-zinc-800/80 transition-all select-none border-dashed"
-                onClick={() => {
-                  setEmail('tapsforex@gmail.com');
-                  setPassword('taps1302??');
-                  setIsSignUp(false);
-                }}
-              >
-                <div className="flex items-center gap-1.5 text-zinc-800 dark:text-zinc-200 font-bold text-[10px] uppercase tracking-wider">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                  </span>
-                  Developer Portal Access
-                </div>
-                <div className="text-xs text-zinc-650 dark:text-zinc-400 space-y-0.5 font-mono">
-                  <div><strong className="font-sans font-medium text-zinc-500 font-mono">User:</strong> tapsforex@gmail.com</div>
-                  <div><strong className="font-sans font-medium text-zinc-500 font-mono">Pass:</strong> taps1302??</div>
-                </div>
-                <div className="text-[10px] text-zinc-500 font-semibold mt-1 underline">
-                  Click to pre-fill developer account details
-                </div>
-              </div>
-            )}
           </CardHeader>
           <form onSubmit={isForgotPassword ? handleForgotPassword : handleAuth}>
             <CardContent className="space-y-5 p-8">
@@ -422,20 +397,9 @@ export default function Login() {
                             id="registrationNumber" 
                             placeholder="e.g. 12345/2026" 
                             value={registrationNumber}
-                            onChange={(e) => {
-                              setRegistrationNumber(e.target.value);
-                              if (touchedReg) {
-                                setRegError(validateRegistration(e.target.value));
-                              }
-                            }}
-                            onBlur={() => {
-                              setTouchedReg(true);
-                              setRegError(validateRegistration(registrationNumber));
-                            }}
+                            readOnly
                             required={isSignUp}
-                            className={`h-11 bg-zinc-50 focus-visible:ring-primary focus-visible:bg-white border-zinc-200 ${
-                              regError ? 'border-red-500 focus-visible:ring-red-500' : ''
-                            }`}
+                            className={`h-11 bg-zinc-100 cursor-not-allowed border-zinc-200 select-all font-mono font-medium`}
                           />
                           <p className="text-[10px] text-zinc-400">An automatic local registration ID has been generated for your business workspace.</p>
                           {regError && (

@@ -204,14 +204,14 @@ export function BillingSettings() {
                   <TableRow className="group hover:bg-zinc-50/50">
                      <TableCell className="font-medium text-zinc-900">Oct 1, 2024</TableCell>
                      <TableCell className="text-zinc-500 font-mono text-sm">INV-2024-0042</TableCell>
-                     <TableCell className="text-zinc-800 font-medium">$40.00</TableCell>
+                     <TableCell className="text-zinc-800 font-medium">$50.00</TableCell>
                      <TableCell><Badge variant="outline" className="bg-emerald-50 border-emerald-200 text-emerald-700">Paid</Badge></TableCell>
                      <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Download className="w-4 h-4" /></Button></TableCell>
                   </TableRow>
                   <TableRow className="group hover:bg-zinc-50/50">
                      <TableCell className="font-medium text-zinc-900">Sep 1, 2024</TableCell>
                      <TableCell className="text-zinc-500 font-mono text-sm">INV-2024-0038</TableCell>
-                     <TableCell className="text-zinc-800 font-medium">$40.00</TableCell>
+                     <TableCell className="text-zinc-800 font-medium">$50.00</TableCell>
                      <TableCell><Badge variant="outline" className="bg-emerald-50 border-emerald-200 text-emerald-700">Paid</Badge></TableCell>
                      <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Download className="w-4 h-4" /></Button></TableCell>
                   </TableRow>

@@ -256,6 +256,7 @@ export default function Landing() {
               
               <ul className="space-y-4 mb-8 flex-1">
                 <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> 1 Monthly On-Site Visit (Stocktake or Consultancy)</li>
+                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Up to 10 User Accounts</li>
                 <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Professional Financial Trend Interpretation</li>
                 <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Up to 3 Branches / Warehouses</li>
                 <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Direct Developer Support Hotline</li>
