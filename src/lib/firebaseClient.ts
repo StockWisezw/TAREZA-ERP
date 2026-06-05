@@ -11,7 +11,7 @@ import {
   GoogleAuthProvider
 } from 'firebase/auth';
 import { 
-  getFirestore, 
+  initializeFirestore, 
   doc as fireDoc, 
   collection as fireCollection, 
   getDoc as fireGetDoc, 
@@ -47,7 +47,9 @@ export const firebaseConfig = resolvedConfig;
 
 // Initialize Firebase App
 export const app = initializeApp(resolvedConfig);
-export const db = getFirestore(app, resolvedConfig.firestoreDatabaseId);
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+}, resolvedConfig.firestoreDatabaseId);
 export const fireAuth = getAuth(app);
 
 // Immediate validation of Firestore connection
@@ -175,6 +177,7 @@ const ALLOWED_KEYS: Record<string, string[]> = {
 };
 
 function normalizeInput(item: any, table: string): any {
+  if (!item || typeof item !== 'object') return item;
   const allowed = ALLOWED_KEYS[table];
   if (!allowed) return item;
 
@@ -467,13 +470,19 @@ class SupabaseQueryBuilder {
 
     const constraints: any[] = [];
     for (const filter of this.eqFilters) {
-      constraints.push(fireWhere(filter.col, '==', filter.val));
+      if (filter.val !== undefined) {
+        constraints.push(fireWhere(filter.col, '==', filter.val));
+      }
     }
     for (const filter of this.gteFilters) {
-      constraints.push(fireWhere(filter.col, '>=', filter.val));
+      if (filter.val !== undefined) {
+        constraints.push(fireWhere(filter.col, '>=', filter.val));
+      }
     }
     for (const filter of this.lteFilters) {
-      constraints.push(fireWhere(filter.col, '<=', filter.val));
+      if (filter.val !== undefined) {
+        constraints.push(fireWhere(filter.col, '<=', filter.val));
+      }
     }
     if (this.orderCol) {
       constraints.push(fireOrderBy(this.orderCol, this.orderAscending ? 'asc' : 'desc'));

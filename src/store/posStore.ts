@@ -143,7 +143,7 @@ export const usePOSStore = create<POSState>()(
       localSales: [],
       currentCustomer: null,
 
-      addToCart: (product, quantity = 1, forcedTier = 'retail') => set((state) => {
+      addToCart: (product, quantity = 0, forcedTier = 'retail') => set((state) => {
         const activeTier = forcedTier;
         const existingItem = state.cart.find((item) => item.product.id === product.id && item.tier === activeTier);
         
@@ -190,9 +190,6 @@ export const usePOSStore = create<POSState>()(
       })),
 
       updateQuantity: (itemId, quantity) => set((state) => {
-        if (quantity === 0) {
-          return { cart: state.cart.filter((item) => item.id !== itemId) };
-        }
         return {
           cart: state.cart.map((item) => {
             if (item.id === itemId) {

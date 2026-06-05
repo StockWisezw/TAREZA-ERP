@@ -30,6 +30,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { SyncManager } from './pos/SyncManager';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
 import { TarezaLogo } from './ui/Logo';
+import { AIAssistant } from './AIAssistant';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -86,6 +87,20 @@ export default function Layout() {
   const [isLocked, setIsLocked] = React.useState(false);
   const [unlockPin, setUnlockPin] = React.useState('');
   const [pinError, setPinError] = React.useState(false);
+  const [isOnline, setIsOnline] = React.useState(typeof window !== 'undefined' ? navigator.onLine : true);
+
+  React.useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   React.useEffect(() => {
     let timeoutId: NodeJS.Timeout;
@@ -250,6 +265,18 @@ export default function Layout() {
             </div>
 
             <div className="flex items-center space-x-2 sm:space-x-3">
+              {isOnline ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Online
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20 animate-bounce">
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping" />
+                  Offline
+                </span>
+              )}
+              <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block mx-1" />
               <SyncStatusIndicator />
               <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block mx-1" />
               <ThemeToggle />
@@ -297,6 +324,7 @@ export default function Layout() {
           </main>
         </div>
       </div>
+      <AIAssistant />
     </div>
   );
 }

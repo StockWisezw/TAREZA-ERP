@@ -508,7 +508,7 @@ export default function POS() {
   });
 
   const handleProductClick = (product: Product) => {
-    addToCart(product, 1);
+    addToCart(product, 0);
     setSearchTerm('');
     setIsSearching(false);
     searchInputRef.current?.focus();
@@ -1197,7 +1197,7 @@ export default function POS() {
               return (
               <div 
                 key={product.id}
-                onClick={() => addToCart(product, 1, 'retail')}
+                onClick={() => addToCart(product, 0, 'retail')}
                 className="group relative bg-white border border-zinc-200 rounded-xl overflow-hidden hover:shadow-sm transition-all flex flex-col cursor-pointer hover:border-primary/50"
               >
                 <div className={`h-11 relative overflow-hidden flex items-center justify-center shrink-0 ${colorClass}`}>
@@ -1233,7 +1233,7 @@ export default function POS() {
                         size="sm" 
                         variant="outline"
                         className="w-full text-[10px] h-6 flex justify-between px-1.5 text-zinc-700 border-zinc-200 hover:bg-zinc-50 hover:text-primary transition-all rounded-md"
-                        onClick={() => addToCart(product, 1, 'retail')}
+                        onClick={() => addToCart(product, 0, 'retail')}
                       >
                         <span>+1 Unit</span>
                         <span className="font-mono font-bold">${product.retailPrice.toFixed(2)}</span>
@@ -1242,7 +1242,7 @@ export default function POS() {
                         <Button 
                           size="sm" 
                           className="w-full text-[10px] h-6 flex justify-between px-1.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-all rounded-md"
-                          onClick={() => addToCart(product, 1, 'wholesale')}
+                          onClick={() => addToCart(product, 0, 'wholesale')}
                         >
                           <span>+Pack ({pSize})</span>
                           <span className="font-mono font-bold">${product.wholesalePrice.toFixed(2)}</span>
@@ -1253,7 +1253,7 @@ export default function POS() {
                           key={index}
                           size="sm" 
                           className="w-full text-[10px] h-6 flex justify-between px-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold transition-all rounded-md"
-                          onClick={() => addToCart(product, 1, b.name)}
+                          onClick={() => addToCart(product, 0, b.name)}
                         >
                           <span>+{b.name} ({b.pack_size || b.packSize})</span>
                           <span className="font-mono font-bold">${Number(b.price || 0).toFixed(2)}</span>
@@ -1268,7 +1268,7 @@ export default function POS() {
                       <Button 
                         size="icon" 
                         className="h-5 w-5 rounded-full bg-primary hover:bg-primary/90 text-white"
-                        onClick={() => addToCart(product, 1, 'retail')}
+                        onClick={() => addToCart(product, 0, 'retail')}
                       >
                         <span className="text-xs leading-none">+</span>
                       </Button>
