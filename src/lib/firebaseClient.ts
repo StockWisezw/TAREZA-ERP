@@ -27,12 +27,27 @@ import {
   getDocFromServer
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
-import firebaseConfig from '../../firebase-applet-config.json';
-export { firebaseConfig };
+import firebaseConfigPlaceholder from '../../firebase-applet-config.json';
+
+// Use environment variables if present (especially useful for deploying and linking with Vercel),
+// otherwise fall back seamlessly to the local firebase-applet-config.json
+const resolvedConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigPlaceholder.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigPlaceholder.authDomain,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || (firebaseConfigPlaceholder as any).databaseURL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfigPlaceholder.projectId,
+  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || firebaseConfigPlaceholder.firestoreDatabaseId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigPlaceholder.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigPlaceholder.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigPlaceholder.appId,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || firebaseConfigPlaceholder.measurementId,
+};
+
+export const firebaseConfig = resolvedConfig;
 
 // Initialize Firebase App
-export const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const app = initializeApp(resolvedConfig);
+export const db = getFirestore(app, resolvedConfig.firestoreDatabaseId);
 export const fireAuth = getAuth(app);
 
 // Immediate validation of Firestore connection
@@ -627,9 +642,10 @@ export const supabase = {
         return { error };
       }
     },
-    onAuthStateChange: (cb: (user: any) => void) => {
+    onAuthStateChange: (cb: (event: string, session: any) => void) => {
       const unsubscribe = onAuthStateChanged(fireAuth, (user) => {
-        cb(user ? { user: { id: user.uid, email: user.email } } : null);
+        const session = user ? { user: { id: user.uid, email: user.email } } : null;
+        cb(user ? 'SIGNED_IN' : 'SIGNED_OUT', session);
       });
       return { data: { subscription: { unsubscribe } } };
     }

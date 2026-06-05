@@ -29,7 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, firebaseConfig } from '../lib/supabaseClient';
 import { toast } from 'sonner';
 
 const supabaseConfig = { storageBucket: 'tareza-backups' };
@@ -47,7 +47,7 @@ export default function DeveloperPanel() {
   const [backupLoading, setBackupLoading] = useState(false);
   const [triggeringBackup, setTriggeringBackup] = useState(false);
 
-  // Supabase Diagnostics state
+  // Firebase Diagnostics state
   const [diagLogs, setDiagLogs] = useState<{ timestamp: string; type: 'info' | 'success' | 'warn' | 'error'; message: string }[]>([]);
   const [diagRunning, setDiagRunning] = useState(false);
   const [diagStatus, setDiagStatus] = useState<'idle' | 'running' | 'success' | 'warning' | 'error'>('idle');
@@ -76,7 +76,7 @@ export default function DeveloperPanel() {
     };
 
     pushLog('info', '================================================');
-    pushLog('info', '🚀 Starting Supabase Network Connection Diagnostics...');
+    pushLog('info', '🚀 Starting Firebase/Firestore Active Diagnostics...');
     pushLog('info', `Current local time: ${new Date().toISOString()}`);
     pushLog('info', `Local Network Online Status (navigator.onLine): ${navigator.onLine ? 'ONLINE' : 'OFFLINE'}`);
     pushLog('info', '================================================');
@@ -87,109 +87,84 @@ export default function DeveloperPanel() {
       pushLog('success', '✅ Wi-Fi / Local Network is active and reporting online status.');
     }
 
-    pushLog('info', '🔍 Step 1: Loading Supabase configuration keys from environment...');
-    const currentUrl = import.meta.env.VITE_SUPABASE_URL || '';
-    const currentKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+    pushLog('info', '🔍 Step 1: Auditing Firebase configuration bundle loaded...');
+    const currentProjId = firebaseConfig.projectId || '';
+    const currentDbId = firebaseConfig.firestoreDatabaseId || '';
+    const currentApiKey = firebaseConfig.apiKey || '';
 
-    pushLog('info', `VITE_SUPABASE_URL: "${currentUrl || 'NOT DEFINED'}"`);
-    pushLog('info', `VITE_SUPABASE_ANON_KEY: "${currentKey ? (currentKey.substring(0, 8) + '...' + currentKey.substring(currentKey.length - 8)) : 'NOT DEFINED'}"`);
+    pushLog('info', `Firebase Project ID: "${currentProjId || 'NOT DEFINED'}"`);
+    pushLog('info', `Firestore Database ID: "${currentDbId || '(default)'}"`);
+    pushLog('info', `Web API Key (masked): "${currentApiKey ? (currentApiKey.substring(0, 8) + '...' + currentApiKey.substring(currentApiKey.length - 8)) : 'NOT DEFINED'}"`);
 
     let isValid = true;
-    if (!currentUrl || currentUrl.includes('your-supabase-project') || currentUrl.includes('your-supabase-url')) {
-      pushLog('error', '❌ Supabase URL matches the default placeholder or is empty. Please set a valid your-project.supabase.co domain.');
-      isValid = false;
-    } else if (!currentUrl.startsWith('https://')) {
-      pushLog('warn', '⚠️ VITE_SUPABASE_URL should enter with secure "https://" protocol prefix.');
+    if (!currentProjId || currentProjId.includes('your-') || currentProjId.includes('placeholder')) {
+      pushLog('error', '❌ Firebase Project ID is empty or matches default placeholder value. Please check firebase-applet-config.json.');
       isValid = false;
     } else {
-      pushLog('success', '✅ Connection URL prefix syntax is valid.');
-    }
-
-    if (!currentKey || currentKey === 'your-anon-key' || currentKey === 'your-anon-key-here') {
-      pushLog('error', '❌ Supabase Anon Key is empty or matches default placeholder value.');
-      isValid = false;
-    } else if (currentKey.length < 30) {
-      pushLog('warn', '⚠️ Supabase Anon Key appears shorter than typical JWT key configurations.');
-      isValid = false;
-    } else {
-      pushLog('success', '✅ Anonymous API payload key was detected.');
+      pushLog('success', '✅ Firebase Project ID syntax is validated.');
     }
 
     if (!isValid) {
-      pushLog('error', '❌ Pre-flight checks failed. Aborting API queries due to configuration mismatch.');
+      pushLog('error', '❌ Context validations failed. Aborting database queries due to missing project credentials.');
       setDiagStatus('warning');
       setDiagRunning(false);
       return;
     }
 
-    pushLog('info', '📡 Step 2: Testing host routing / raw IP ping with timed-out trigger...');
+    pushLog('info', '📡 Step 2: Testing direct Google APIs network availability with timeout...');
     const abortController = new AbortController();
     const timeout = setTimeout(() => abortController.abort(), 6000);
-    const apiPingUrl = `${currentUrl}/rest/v1/?apikey=${currentKey}`;
+    const apiPingUrl = `https://firestore.googleapis.com/v1/projects/${currentProjId}/databases/${currentDbId || '(default)'}/documents`;
     const startTime = performance.now();
 
     try {
-      pushLog('info', `Sending HTTP GET request to remote target: ${currentUrl}/rest/v1/`);
+      pushLog('info', `Sending API ping request to Google Cloud: ${apiPingUrl}`);
       const response = await fetch(apiPingUrl, {
         method: 'GET',
-        signal: abortController.signal,
-        headers: {
-          'Accept': 'application/json'
-        }
+        signal: abortController.signal
       });
       clearTimeout(timeout);
       const delay = Math.round(performance.now() - startTime);
-      pushLog('info', `HTTP Response status: ${response.status} ${response.statusText}`);
-      pushLog('info', `Direct API ping completed within ${delay}ms.`);
+      pushLog('info', `HTTP response received. Status: ${response.status} ${response.statusText}`);
+      pushLog('info', `Direct Google API handshake completed in ${delay}ms.`);
 
-      if (response.status === 200 || response.status === 204 || response.status === 401) {
-        pushLog('success', `✅ Direct REST entrypoint is reachable. Connection delay: ${delay}ms.`);
-        if (response.status === 401) {
-          pushLog('warn', '⚠️ HTTP 401 Unauthorized: Target is reachable, but token payload is rejected. Verify VITE_SUPABASE_ANON_KEY.');
-        }
+      if (response.status === 200 || response.status === 400 || response.status === 403 || response.status === 404) {
+        pushLog('success', `✅ Direct Firestore endpoint is fully reachable over HTTPS. Latency: ${delay}ms.`);
       } else {
-        pushLog('warn', `⚠️ Target responded with unexpected HTTP ${response.status}.`);
+        pushLog('warn', `⚠️ Firestore responded with unexpected status code: ${response.status}`);
       }
     } catch (err: any) {
       clearTimeout(timeout);
       const delay = Math.round(performance.now() - startTime);
 
       if (err.name === 'AbortError') {
-        pushLog('error', `❌ TIMEOUT ERROR (net::ERR_CONNECTION_TIMED_OUT) occurred after ${delay}ms!`);
-        pushLog('error', '👉 CAUSE A: Your Supabase DB Project is Paused or Stopped. Visit the Supabase Dashboard to unpause it.');
-        pushLog('error', '👉 CAUSE B: Corporate firewalls or internet service provider restrictions are blocking port 443 routes.');
-        pushLog('error', '👉 CAUSE C: Severe typo in VITE_SUPABASE_URL causing a routing blackhole.');
+        pushLog('error', `❌ TIMEOUT ERROR occurred after ${delay}ms!`);
+        pushLog('error', '👉 Firebase REST endpoint could not resolve/reach within 6s. Check firewall policies.');
       } else {
-        pushLog('error', `❌ Connection failure: ${err.message || String(err)}`);
-        pushLog('error', '👉 CAUSE A: CORS limitation. Browser blocked the preflight request.');
-        pushLog('error', '👉 CORS Fix: Open the Supabase Dashboard -> Settings -> API, find "Allowed Web Origins", and add:');
-        pushLog('error', `   • ${window.location.origin}`);
-        pushLog('error', '👉 CAUSE B: Bad SSL/TLS handshake or DNS lookup refusal.');
+        pushLog('error', `❌ Network handshake failure: ${err.message || String(err)}`);
+        pushLog('error', '👉 Make sure your browser allows connections to firestore.googleapis.com.');
       }
     }
 
-    pushLog('info', '🛰️ Step 3: Verifying relational query parsing through Client wrapper...');
+    pushLog('info', '🛰️ Step 3: Triggering Firestore query execution through client context...');
     const dbQueryStart = performance.now();
     try {
       const { data, error } = await supabase.from('businesses').select('*').limit(1);
       const dbQueryDelay = Math.round(performance.now() - dbQueryStart);
 
       if (error) {
-        pushLog('error', `❌ Client select query failed after ${dbQueryDelay}ms: ${error.message} (Code: ${error.code || 'None'})`);
-        if (error.message?.includes('fetch') || error.message?.includes('Failed to fetch')) {
-          pushLog('error', '👉 The error is "Failed to fetch". This points directly to either CORS Blocking or DNS failures inside your browser.');
-        }
+        pushLog('error', `❌ Database query failed after ${dbQueryDelay}ms: ${error.message || String(error)}`);
       } else {
-        pushLog('success', `✅ Database query successful! Selected 1 row from "businesses" table in ${dbQueryDelay}ms.`);
-        pushLog('info', `Rows fetched payload context: ${data ? JSON.stringify(data.length) : '0'}`);
+        pushLog('success', `✅ Firebase Query execution succeeded! Fetched businesses list in ${dbQueryDelay}ms.`);
+        pushLog('info', `Payload context check: ${data ? `${data.length} instances processed` : '0 instances returned'}`);
       }
     } catch (err: any) {
       const dbQueryDelay = Math.round(performance.now() - dbQueryStart);
-      pushLog('error', `❌ Exception thrown during client query run after ${dbQueryDelay}ms: ${err.message || String(err)}`);
+      pushLog('error', `❌ Exception thrown during database query execution in ${dbQueryDelay}ms: ${err.message || String(err)}`);
     }
 
     pushLog('info', '================================================');
-    pushLog('info', '🏆 Connection Diagnostics completed.');
+    pushLog('info', '🏆 Firebase Connection Diagnostics completed.');
     pushLog('info', '================================================');
 
     const hasErrors = logsList.some(l => l.type === 'error');
@@ -351,10 +326,10 @@ export default function DeveloperPanel() {
                     <div className="space-y-1">
                       <CardTitle className="text-base font-bold flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
                         <Activity className="w-4 h-4 text-emerald-500" />
-                        Supabase Technical Connection Diagnostics
+                        Firebase Connection Diagnostics
                       </CardTitle>
                       <CardDescription className="text-xs text-zinc-500 dark:text-zinc-450">
-                        Resolve DNS timeouts, ERR_CONNECTION_TIMED_OUT errors, and preflight browser limitations.
+                        Verify Google API routing, resolve network timeouts, and test Firestore read operations.
                       </CardDescription>
                     </div>
                     <Badge 
@@ -372,23 +347,23 @@ export default function DeveloperPanel() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   
-                  {/* Grid showing ENV variables current resolution */}
-                  <div className="grid sm:grid-cols-2 gap-3 text-xs bg-zinc-100/55 dark:bg-zinc-900/55 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800/80">
+                  {/* Grid showing Configured variables current resolution */}
+                  <div className="grid sm:grid-cols-2 gap-3 text-xs bg-zinc-100/55 dark:bg-zinc-905 p-3 rounded-xl border border-zinc-205 dark:border-zinc-800/85">
                     <div className="space-y-1">
                       <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
-                        <Globe className="w-3 h-3" /> Configured URL
+                        <Globe className="w-3 h-3" /> Project ID
                       </span>
-                      <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg">
-                        <span className="font-mono text-[11px] truncate flex-1 block" title={import.meta.env.VITE_SUPABASE_URL}>
-                          {import.meta.env.VITE_SUPABASE_URL || 'Not specified'}
+                      <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg font-mono">
+                        <span className="text-[11px] truncate flex-1 block" title={firebaseConfig.projectId}>
+                          {firebaseConfig.projectId || 'Not specified'}
                         </span>
-                        {import.meta.env.VITE_SUPABASE_URL && (
+                        {firebaseConfig.projectId && (
                           <button
                             type="button"
-                            onClick={() => handleCopy(import.meta.env.VITE_SUPABASE_URL || '', 'URL')}
+                            onClick={() => handleCopy(firebaseConfig.projectId || '', 'Project ID')}
                             className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded transition-transform text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
                           >
-                            {copiedText === 'URL' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                            {copiedText === 'Project ID' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                           </button>
                         )}
                       </div>
@@ -396,33 +371,21 @@ export default function DeveloperPanel() {
 
                     <div className="space-y-1">
                       <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
-                        <Key className="w-3 h-3" /> Configured ANON KEY
+                        <Key className="w-3 h-3" /> Firestore Database ID
                       </span>
-                      <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg">
-                        <span className="font-mono text-[11px] truncate flex-1 block">
-                          {revealKey 
-                            ? (import.meta.env.VITE_SUPABASE_ANON_KEY || 'Not specified') 
-                            : '••••••••••••••••••••••••••••••••'
-                          }
+                      <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg font-mono">
+                        <span className="text-[11px] truncate flex-1 block">
+                          {firebaseConfig.firestoreDatabaseId || '(default)'}
                         </span>
-                        <div className="flex items-center gap-1">
+                        {firebaseConfig.firestoreDatabaseId && (
                           <button
                             type="button"
-                            onClick={() => setRevealKey(!revealKey)}
+                            onClick={() => handleCopy(firebaseConfig.firestoreDatabaseId || '', 'Database ID')}
                             className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
                           >
-                            {revealKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            {copiedText === 'Database ID' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                           </button>
-                          {import.meta.env.VITE_SUPABASE_ANON_KEY && (
-                            <button
-                              type="button"
-                              onClick={() => handleCopy(import.meta.env.VITE_SUPABASE_ANON_KEY || '', 'Anon Key')}
-                              className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                            >
-                              {copiedText === 'Anon Key' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                            </button>
-                          )}
-                        </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -817,16 +780,16 @@ Deno.serve(async (req) => {
             </CardContent>
           </Card>
 
-          <Card className="md:col-span-2">
+          <Card className="md:col-span-2 shadow-lg border-zinc-200 dark:border-zinc-800">
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <CardTitle className="text-base font-bold flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
                     <Activity className="w-4 h-4 text-emerald-500" />
-                    Supabase Technical Connection Diagnostics
+                    Firebase Connection Diagnostics
                   </CardTitle>
                   <CardDescription className="text-xs text-zinc-550 dark:text-zinc-450">
-                    Resolve DNS timeouts, ERR_CONNECTION_TIMED_OUT errors, and preflight browser limitations.
+                    Verify Google API routing, resolve network timeouts, and test Firestore read operations.
                   </CardDescription>
                 </div>
                 <Badge 
@@ -844,23 +807,23 @@ Deno.serve(async (req) => {
             </CardHeader>
             <CardContent className="space-y-4">
               
-              {/* Grid showing ENV variables current resolution */}
-              <div className="grid sm:grid-cols-2 gap-3 text-xs bg-zinc-100/55 dark:bg-zinc-900/55 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800/80">
+              {/* Grid showing Configured variables current resolution */}
+              <div className="grid sm:grid-cols-2 gap-3 text-xs bg-zinc-100/55 dark:bg-zinc-905 p-3 rounded-xl border border-zinc-205 dark:border-zinc-800/85">
                 <div className="space-y-1">
                   <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
-                    <Globe className="w-3 h-3" /> Configured URL
+                    <Globe className="w-3 h-3" /> Project ID
                   </span>
-                  <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg">
-                    <span className="font-mono text-[11px] truncate flex-1 block" title={import.meta.env.VITE_SUPABASE_URL}>
-                      {import.meta.env.VITE_SUPABASE_URL || 'Not specified'}
+                  <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg font-mono">
+                    <span className="text-[11px] truncate flex-1 block" title={firebaseConfig.projectId}>
+                      {firebaseConfig.projectId || 'Not specified'}
                     </span>
-                    {import.meta.env.VITE_SUPABASE_URL && (
+                    {firebaseConfig.projectId && (
                       <button
                         type="button"
-                        onClick={() => handleCopy(import.meta.env.VITE_SUPABASE_URL || '', 'URL')}
+                        onClick={() => handleCopy(firebaseConfig.projectId || '', 'Project ID')}
                         className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded transition-transform text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
                       >
-                        {copiedText === 'URL' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                        {copiedText === 'Project ID' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                       </button>
                     )}
                   </div>
@@ -868,33 +831,21 @@ Deno.serve(async (req) => {
 
                 <div className="space-y-1">
                   <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
-                    <Key className="w-3 h-3" /> Configured ANON KEY
+                    <Key className="w-3 h-3" /> Firestore Database ID
                   </span>
-                  <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg">
-                    <span className="font-mono text-[11px] truncate flex-1 block">
-                      {revealKey 
-                        ? (import.meta.env.VITE_SUPABASE_ANON_KEY || 'Not specified') 
-                        : '••••••••••••••••••••••••••••••••'
-                      }
+                  <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg font-mono">
+                    <span className="text-[11px] truncate flex-1 block">
+                      {firebaseConfig.firestoreDatabaseId || '(default)'}
                     </span>
-                    <div className="flex items-center gap-1">
+                    {firebaseConfig.firestoreDatabaseId && (
                       <button
                         type="button"
-                        onClick={() => setRevealKey(!revealKey)}
+                        onClick={() => handleCopy(firebaseConfig.firestoreDatabaseId || '', 'Database ID')}
                         className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
                       >
-                        {revealKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                        {copiedText === 'Database ID' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                       </button>
-                      {import.meta.env.VITE_SUPABASE_ANON_KEY && (
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(import.meta.env.VITE_SUPABASE_ANON_KEY || '', 'Anon Key')}
-                          className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                        >
-                          {copiedText === 'Anon Key' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                        </button>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -908,7 +859,7 @@ Deno.serve(async (req) => {
                   className="flex-1 bg-zinc-900 hover:bg-zinc-805 dark:bg-zinc-100 dark:text-zinc-905 dark:hover:bg-zinc-200 font-semibold"
                 >
                   <Activity className={`w-4 h-4 mr-2 ${diagRunning ? 'animate-spin' : ''}`} />
-                  {diagRunning ? 'Testing connections & latency...' : 'Run Comprehensive Connection Ping & Health Check'}
+                  {diagRunning ? 'Running active audit...' : 'Run Firebase Database Handshake & Query Diagnostics'}
                 </Button>
                 {diagLogs.length > 0 && (
                   <Button
@@ -917,7 +868,7 @@ Deno.serve(async (req) => {
                     onClick={() => { setDiagLogs([]); setDiagStatus('idle'); }}
                     className="font-medium text-xs border-zinc-200"
                   >
-                    Clear console
+                    Clear log
                   </Button>
                 )}
               </div>

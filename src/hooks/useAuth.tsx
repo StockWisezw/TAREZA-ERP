@@ -20,34 +20,49 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    rawSupabase.auth.getSession().then(({ data: { session } }) => {
+    console.log('[Auth] Initializing AuthProvider...');
+    let isMounted = true;
+
+    // Use onAuthStateChange which wraps Firebase's onAuthStateChanged
+    const { data: { subscription } } = rawSupabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) return;
+      
+      console.log(`[Auth] onAuthStateChange event received: ${event}`, session?.user ? `User: ${session.user.email}` : 'No session user');
+      
       if (session?.user) {
         setUser({
           $id: session.user.id,
           email: session.user.email || '',
         });
+        console.log('[Auth] User state set:', session.user.email);
       } else {
         setUser(null);
+        console.log('[Auth] User state cleared (set to null)');
       }
+      
       setLoading(false);
-    }).catch(() => {
-      setUser(null);
-      setLoading(false);
+      console.log('[Auth] Loading state set to false');
     });
 
-    const { data: { subscription } } = rawSupabase.auth.onAuthStateChange((_event, session) => {
+    // We can also check initial session if already loaded synchronously in firebase cache
+    rawSupabase.auth.getSession().then(({ data: { session } }) => {
+      if (!isMounted) return;
+      console.log('[Auth] Initial getSession response:', session?.user ? `User logged in: ${session.user.email}` : 'No active user in initial getSession');
       if (session?.user) {
         setUser({
           $id: session.user.id,
           email: session.user.email || '',
         });
-      } else {
-        setUser(null);
+        setLoading(false);
+        console.log('[Auth] Synchronous session recovered from cache, loading set to false');
       }
-      setLoading(false);
+    }).catch((err) => {
+      console.error('[Auth] Error getting initial session:', err);
     });
 
     return () => {
+      console.log('[Auth] Cleaning up AuthProvider subscription.');
+      isMounted = false;
       subscription.unsubscribe();
     };
   }, []);
