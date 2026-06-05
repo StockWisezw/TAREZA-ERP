@@ -1,0 +1,658 @@
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut as fireSignOut, 
+  signInAnonymously as fireSignInAnonymously,
+  sendPasswordResetEmail,
+  onAuthStateChanged,
+  signInWithPopup,
+  GoogleAuthProvider
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  doc as fireDoc, 
+  collection as fireCollection, 
+  getDoc as fireGetDoc, 
+  updateDoc as fireUpdateDoc, 
+  setDoc as fireSetDoc, 
+  getDocs as fireGetDocs, 
+  deleteDoc as fireDeleteDoc, 
+  writeBatch as fireWriteBatch, 
+  query as fireQuery, 
+  where as fireWhere, 
+  limit as fireLimit, 
+  orderBy as fireOrderBy,
+  getDocFromServer
+} from 'firebase/firestore';
+import { v4 as uuidv4 } from 'uuid';
+import firebaseConfig from '../../firebase-applet-config.json';
+export { firebaseConfig };
+
+// Initialize Firebase App
+export const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const fireAuth = getAuth(app);
+
+// Immediate validation of Firestore connection
+async function testConnection() {
+  try {
+    await getDocFromServer(fireDoc(db, 'test_connection', 'ping'));
+    console.log('[Firebase] Connection validated successfully.');
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('[Firebase] Client is offline. Check internet/configuration.');
+    }
+  }
+}
+testConnection();
+
+// Dynamic user caching for seamless synchronous access to user context
+let firebaseCurrentUser: any = null;
+
+onAuthStateChanged(fireAuth, (user) => {
+  firebaseCurrentUser = user;
+});
+
+export const auth = {
+  get currentUser() {
+    if (!firebaseCurrentUser) return null;
+    return {
+      id: firebaseCurrentUser.uid,
+      uid: firebaseCurrentUser.uid,
+      email: firebaseCurrentUser.email,
+      displayName: firebaseCurrentUser.displayName || firebaseCurrentUser.email?.split('@')[0] || '',
+      emailVerified: firebaseCurrentUser.emailVerified,
+      isAnonymous: firebaseCurrentUser.isAnonymous,
+      providerData: firebaseCurrentUser.providerData || [],
+      metadata: {
+        creationTime: firebaseCurrentUser.metadata.creationTime || '',
+        lastSignInTime: firebaseCurrentUser.metadata.lastSignInTime || ''
+      }
+    };
+  },
+  onAuthStateChanged(callback: (user: any) => void) {
+    return onAuthStateChanged(fireAuth, (user) => {
+      if (user) {
+        callback({
+          id: user.uid,
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || user.email?.split('@')[0] || '',
+          emailVerified: user.emailVerified,
+          isAnonymous: user.isAnonymous,
+          providerData: user.providerData || [],
+          metadata: {
+            creationTime: user.metadata.creationTime || '',
+            lastSignInTime: user.metadata.lastSignInTime || ''
+          }
+        });
+      } else {
+        callback(null);
+      }
+    });
+  }
+};
+
+// Standard OperationType enums for compatibility
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+  }
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+    },
+    operationType,
+    path
+  };
+  console.error('Database Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+// Map database column types for integrity
+const ALLOWED_KEYS: Record<string, string[]> = {
+  businesses: ['id', 'name', 'tax_number', 'email', 'phone', 'currency', 'subscription_plan', 'subscription_status', 'subscription_end_date', 'max_users', 'max_branches', 'created_at', 'updated_at'],
+  branches: ['id', 'business_id', 'name', 'address', 'phone', 'type', 'is_active', 'created_at', 'updated_at'],
+  profiles: ['id', 'first_name', 'last_name', 'phone', 'email', 'created_at', 'updated_at'],
+  roles: ['id', 'business_id', 'name', 'description', 'created_at', 'updated_at'],
+  role_permissions: ['id', 'role_id', 'permissions', 'created_at'],
+  business_users: ['id', 'business_id', 'user_id', 'branch_id', 'role_id', 'is_active', 'created_at', 'updated_at'],
+  categories: ['id', 'business_id', 'name', 'parent_id', 'created_at'],
+  products: ['id', 'business_id', 'category_id', 'name', 'description', 'sku', 'barcode', 'retail_price', 'wholesale_price', 'cost_price', 'price', 'tax_class', 'tax_rate_id', 'is_active', 'created_at'],
+  inventory: ['id', 'business_id', 'branch_id', 'product_id', 'quantity', 'reorder_level', 'created_at', 'updated_at'],
+  customers: ['id', 'business_id', 'name', 'email', 'phone', 'address', 'vat_number', 'customer_type', 'balance', 'credit_limit', 'created_at'],
+  suppliers: ['id', 'business_id', 'name', 'contact_person', 'email', 'phone', 'address', 'created_at'],
+  sales: ['id', 'business_id', 'branch_id', 'user_id', 'customer_id', 'customerId', 'customerName', 'receiptNumber', 'items', 'payments', 'subtotal', 'vat_total', 'vatTotal', 'discount_total', 'discountTotal', 'total', 'total_amount', 'total_tax_amount', 'payment_method', 'status', 'timestamp', 'created_at'],
+  sale_items: ['id', 'sale_id', 'product_id', 'quantity', 'price', 'unit_price', 'line_total', 'vat_amount'],
+  expense_categories: ['id', 'business_id', 'name', 'description', 'created_at'],
+  cash_drawer_logs: ['id', 'business_id', 'branch_id', 'amount', 'type', 'transaction_type', 'notes', 'created_at'],
+  tax_rates: ['id', 'business_id', 'name', 'rate', 'is_active'],
+  purchase_orders: ['id', 'business_id', 'supplier_id', 'status', 'total_amount', 'po_number', 'order_date', 'expected_delivery_date', 'items', 'created_at'],
+  stocktakes_advanced: ['id', 'business_id', 'branch_id', 'status', 'created_at'],
+  inventory_transfers: ['id', 'business_id', 'from_branch_id', 'to_branch_id', 'status', 'created_at'],
+  stock_movements: ['id', 'product_id', 'branch_id', 'quantity', 'type', 'created_at'],
+  subscriptions: ['id', 'business_id', 'plan_name', 'status', 'start_date', 'end_date', 'created_at'],
+  accounts: ['id', 'business_id', 'code', 'name', 'type', 'balance', 'is_system', 'created_at'],
+  journal_entries: ['id', 'business_id', 'branch_id', 'date', 'reference', 'description', 'created_at', 'user_id'],
+  journal_lines: ['id', 'journal_entry_id', 'account_id', 'debit', 'credit', 'description'],
+  register_sessions: ['id', 'business_id', 'branch_id', 'user_id', 'opening_balance', 'closing_balance', 'expected_balance', 'variance', 'status', 'opened_at', 'closed_at', 'sales_count', 'sales_total', 'refunds_total', 'payouts_total', 'created_at'],
+  audit_logs: ['id', 'business_id', 'user_id', 'user_email', 'action', 'module', 'old_value', 'new_value', 'created_at']
+};
+
+function normalizeInput(item: any, table: string): any {
+  const allowed = ALLOWED_KEYS[table];
+  if (!allowed) return item;
+
+  const copy: any = {};
+  for (const key of allowed) {
+    if (key === 'id') continue;
+    let val = item[key];
+    if (val === undefined || val === null) {
+      continue;
+    }
+
+    if ((key === 'items' || key === 'payments' || key === 'permissions') && typeof val !== 'string') {
+      try {
+        val = JSON.stringify(val);
+      } catch (e) {
+        val = '';
+      }
+    }
+    copy[key] = val;
+  }
+  return copy;
+}
+
+function normalizeOutput(id: string, data: any, table: string): any {
+  if (!data) return null;
+  const copy = { ...data, id, $id: id };
+
+  if (table === 'sales') {
+    if (typeof copy.items === 'string') {
+      try { copy.items = JSON.parse(copy.items); } catch (e) {}
+    }
+    if (typeof copy.payments === 'string') {
+      try { copy.payments = JSON.parse(copy.payments); } catch (e) {}
+    }
+  } else if (table === 'role_permissions') {
+    if (typeof copy.permissions === 'string') {
+      try { copy.permissions = JSON.parse(copy.permissions); } catch (e) {}
+    }
+  }
+  return copy;
+}
+
+// Map relational calls to native Firestore references
+export function doc(...args: any[]): any {
+  if (args.length === 1) {
+    return fireDoc(args[0]);
+  } else if (args.length === 2) {
+    if (typeof args[0] === 'string') {
+      return fireDoc(db, args[0]);
+    }
+    return fireDoc(args[0], args[1]);
+  } else if (args.length >= 3) {
+    return fireDoc(db, args[1], args[2]);
+  }
+  return fireDoc(db, 'unknown', uuidv4());
+}
+
+export function collection(...args: any[]): any {
+  if (args.length === 1) {
+    if (typeof args[0] === 'string') {
+      return fireCollection(db, args[0]);
+    }
+    return args[0];
+  } else if (args.length >= 2) {
+    return fireCollection(db, args[1]);
+  }
+  return fireCollection(db, 'unknown');
+}
+
+export async function getDoc(docRef: any): Promise<any> {
+  try {
+    const snap = await fireGetDoc(docRef);
+    return {
+      exists: () => snap.exists(),
+      data: () => snap.data() as any,
+      id: snap.id
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, docRef.path);
+    throw error;
+  }
+}
+
+export async function updateDoc(docRef: any, data: any) {
+  try {
+    const table = docRef.path ? docRef.path.split('/')[0] : '';
+    await fireUpdateDoc(docRef, normalizeInput(data, table));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, docRef.path);
+    throw error;
+  }
+}
+
+export function writeBatch(_db: any) {
+  const batch = fireWriteBatch(db);
+  return {
+    set: (docRef: any, data: any) => {
+      const table = docRef.path ? docRef.path.split('/')[0] : '';
+      batch.set(docRef, normalizeInput(data, table));
+    },
+    update: (docRef: any, data: any) => {
+      const table = docRef.path ? docRef.path.split('/')[0] : '';
+      batch.update(docRef, normalizeInput(data, table));
+    },
+    delete: (docRef: any) => {
+      batch.delete(docRef);
+    },
+    commit: async () => {
+      try {
+        await batch.commit();
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, 'batch_commit');
+        throw error;
+      }
+    }
+  };
+}
+
+export function query(collectionRef: any, ...constraints: any[]) {
+  return fireQuery(collectionRef, ...constraints);
+}
+
+export function where(col: string, op: string, val: any) {
+  return fireWhere(col, op as any, val);
+}
+
+export async function getDocs(queryObj: any) {
+  try {
+    const snap = await fireGetDocs(queryObj);
+    const docs = snap.docs.map(snapDoc => ({
+      id: snapDoc.id,
+      data: () => snapDoc.data()
+    }));
+    return {
+      docs,
+      forEach: (callback: (doc: any) => void) => {
+        docs.forEach(callback);
+      }
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, null);
+    throw error;
+  }
+}
+
+// Low-level query emulator on top of Firestore collections
+class SupabaseQueryBuilder {
+  table: string;
+  isInsert = false;
+  isUpdate = false;
+  isDelete = false;
+  payload: any = null;
+  targetId?: string;
+  orderCol?: string;
+  orderAscending = true;
+  limitNum?: number;
+  eqFilters: { col: string; val: any }[] = [];
+  gteFilters: { col: string; val: any }[] = [];
+  lteFilters: { col: string; val: any }[] = [];
+
+  constructor(table: string) {
+    this.table = table;
+  }
+
+  select(_fields?: string | any, _options?: any) {
+    return this;
+  }
+
+  eq(col: string, val: any) {
+    if (col === 'id' || col === '$id') {
+      this.targetId = val;
+    } else {
+      this.eqFilters.push({ col, val });
+    }
+    return this;
+  }
+
+  gte(col: string, val: any) {
+    this.gteFilters.push({ col, val });
+    return this;
+  }
+
+  lte(col: string, val: any) {
+    this.lteFilters.push({ col, val });
+    return this;
+  }
+
+  order(col: string, opts?: { ascending?: boolean }) {
+    this.orderCol = col;
+    this.orderAscending = opts?.ascending !== false;
+    return this;
+  }
+
+  limit(n: number) {
+    this.limitNum = n;
+    return this;
+  }
+
+  insert(data: any | any[]) {
+    this.isInsert = true;
+    this.payload = Array.isArray(data) ? data : [data];
+    return this;
+  }
+
+  upsert(data: any | any[]) {
+    this.isInsert = true;
+    this.payload = Array.isArray(data) ? data : [data];
+    return this;
+  }
+
+  update(data: any) {
+    this.isUpdate = true;
+    this.payload = data;
+    return this;
+  }
+
+  delete() {
+    this.isDelete = true;
+    return this;
+  }
+
+  async execute() {
+    try {
+      if (this.isInsert) {
+        const itemsToInsert = this.payload.map((item: any) => {
+          const docId = item.id || item.$id || uuidv4();
+          const cleanItem = normalizeInput(item, this.table);
+          return { id: docId, ...cleanItem };
+        });
+
+        const insertedItems: any[] = [];
+        for (const item of itemsToInsert) {
+          const docRef = fireDoc(db, this.table, item.id);
+          await fireSetDoc(docRef, item);
+          insertedItems.push(item);
+        }
+
+        return { data: insertedItems.map(d => normalizeOutput(d.id, d, this.table)), count: insertedItems.length, error: null };
+      } 
+      
+      if (this.isUpdate) {
+        if (this.targetId) {
+          const docRef = fireDoc(db, this.table, this.targetId);
+          const cleanItem = normalizeInput(this.payload, this.table);
+          await fireUpdateDoc(docRef, cleanItem);
+          const updatedDoc = { id: this.targetId, ...cleanItem };
+          return { data: [normalizeOutput(this.targetId, updatedDoc, this.table)], count: 1, error: null };
+        } else {
+          const results = await this.getFilteredDocs();
+          const cleanItem = normalizeInput(this.payload, this.table);
+          for (const docSnap of results) {
+            const docRef = fireDoc(db, this.table, docSnap.id);
+            await fireUpdateDoc(docRef, cleanItem);
+          }
+          return { data: [], count: results.length, error: null };
+        }
+      }
+
+      if (this.isDelete) {
+        if (this.targetId) {
+          const docRef = fireDoc(db, this.table, this.targetId);
+          await fireDeleteDoc(docRef);
+        } else {
+          const results = await this.getFilteredDocs();
+          for (const docSnap of results) {
+            const docRef = fireDoc(db, this.table, docSnap.id);
+            await fireDeleteDoc(docRef);
+          }
+        }
+        return { data: null, count: 0, error: null };
+      }
+
+      // SELECT
+      const results = await this.getFilteredDocs();
+      const mappedData = results.map(docSnap => normalizeOutput(docSnap.id, docSnap.data(), this.table));
+      return { 
+        data: mappedData, 
+        count: mappedData.length, 
+        error: null 
+      };
+    } catch (error) {
+      console.error(`Firebase query failed on ${this.table}:`, error);
+      return { data: null, count: null, error };
+    }
+  }
+
+  async getFilteredDocs() {
+    const colRef = fireCollection(db, this.table);
+    let q: any = colRef;
+
+    const constraints: any[] = [];
+    for (const filter of this.eqFilters) {
+      constraints.push(fireWhere(filter.col, '==', filter.val));
+    }
+    for (const filter of this.gteFilters) {
+      constraints.push(fireWhere(filter.col, '>=', filter.val));
+    }
+    for (const filter of this.lteFilters) {
+      constraints.push(fireWhere(filter.col, '<=', filter.val));
+    }
+    if (this.orderCol) {
+      constraints.push(fireOrderBy(this.orderCol, this.orderAscending ? 'asc' : 'desc'));
+    }
+    if (this.limitNum !== undefined) {
+      constraints.push(fireLimit(this.limitNum));
+    }
+
+    if (constraints.length > 0) {
+      q = fireQuery(colRef, ...constraints);
+    }
+
+    const querySnap = await fireGetDocs(q);
+    return querySnap.docs;
+  }
+
+  async maybeSingle() {
+    const result = await this.execute();
+    return { data: result.data?.[0] || null, error: result.error };
+  }
+
+  async single() {
+    const result = await this.execute();
+    if (result.error) {
+      return { data: null, error: result.error };
+    }
+    if (!result.data || !result.data[0]) {
+      return { data: null, error: new Error('Document not found') };
+    }
+    return { data: result.data[0], error: null };
+  }
+
+  then(
+    onfulfilled?: ((value: { data: any[] | null; count: number | null; error: any }) => any) | null,
+    onrejected?: ((reason: any) => any) | null
+  ): Promise<any> {
+    return this.execute().then(onfulfilled, onrejected);
+  }
+}
+
+export const account = {
+  get: (): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        unsubscribe();
+        if (user) {
+          resolve({
+            $id: user.uid,
+            email: user.email,
+            name: user.displayName || '',
+            created_at: '',
+            updated_at: ''
+          });
+        } else {
+          reject(new Error('No authenticated session found'));
+        }
+      });
+    });
+  },
+  deleteSession: async (sessionId: string) => {
+    try {
+      await fireSignOut(fireAuth);
+      firebaseCurrentUser = null;
+    } catch (err) {
+      console.error('[Firebase Client] Exception in deleteSession:', err);
+      throw err;
+    }
+  }
+};
+
+export const client = {
+  setEndpoint: () => client,
+  setProject: () => client
+};
+
+export const databases = {};
+
+
+export namespace Models {
+  export interface User<T = any> {
+    $id: string;
+    email: string;
+    name?: string;
+    created_at?: string;
+    updated_at?: string;
+  }
+  export type Preferences = any;
+}
+// Add these exports for easy access
+export const firebaseAuth = fireAuth;
+export const firestore = db;
+
+// Keep supabase object but make it clear it's a Firebase wrapper
+export const supabaseUrl = '';
+export const supabaseAnonKey = '';
+export const DATABASE_ID = 'default';
+export const BUCKET_ID = 'tareza-uploads';
+
+export const supabase = {
+  auth: {
+    getUser: async () => {
+      const user = fireAuth.currentUser;
+      if (!user) return { data: { user: null }, error: null };
+      return { data: { user: { id: user.uid, email: user.email } }, error: null };
+    },
+    getSession: async () => {
+      const user = fireAuth.currentUser;
+      return { data: { session: user ? { user: { id: user.uid, email: user.email } } : null }, error: null };
+    },
+    signUp: async ({ email, password }: any) => {
+      try {
+        const cred = await createUserWithEmailAndPassword(fireAuth, email, password);
+        return { data: { user: { id: cred.user.uid, email: cred.user.email } }, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
+    },
+    signInWithPassword: async ({ email, password }: any) => {
+      try {
+        const cred = await signInWithEmailAndPassword(fireAuth, email, password);
+        return { data: { user: { id: cred.user.uid, email: cred.user.email }, session: {} }, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
+    },
+    signInWithOAuth: async ({ provider }: any) => {
+      try {
+        if (provider === 'google') {
+          const providerInstance = new GoogleAuthProvider();
+          await signInWithPopup(fireAuth, providerInstance);
+        }
+        return { error: null };
+      } catch (error) {
+        return { error };
+      }
+    },
+    signInAnonymously: async () => {
+      try {
+        const cred = await fireSignInAnonymously(fireAuth);
+        return { data: { session: { user: { id: cred.user.uid, email: 'anonymous@tareza.co.zw', isAnonymous: true } } }, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
+    },
+    sendMagicLink: async (email: string) => {
+      try {
+        return { data: true, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
+    },
+    sendPasswordReset: async (email: string) => {
+      try {
+        await sendPasswordResetEmail(fireAuth, email);
+        return { data: true, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
+    },
+    signOut: async () => {
+      try {
+        await fireSignOut(fireAuth);
+        firebaseCurrentUser = null;
+        return { error: null };
+      } catch (error) {
+        return { error };
+      }
+    },
+    onAuthStateChange: (cb: (user: any) => void) => {
+      const unsubscribe = onAuthStateChanged(fireAuth, (user) => {
+        cb(user ? { user: { id: user.uid, email: user.email } } : null);
+      });
+      return { data: { subscription: { unsubscribe } } };
+    }
+  } as any,
+  from: (table: string) => new SupabaseQueryBuilder(table),
+  storage: {
+    uploadFile: async (file: File) => {
+      return { data: { $id: uuidv4() }, error: null };
+    },
+    getFileView: (fileId: string) => '',
+    getFileDownload: (fileId: string) => '',
+    deleteFile: async (fileId: string) => ({ error: null }),
+    listFiles: async () => ({ data: [], error: null })
+  },
+  channel: (name: string) => {
+    const obj = {
+      on: (event: string, filter: any, callback: any) => obj,
+      subscribe: () => {}
+    };
+    return obj;
+  },
+  removeChannel: (channel: any) => {}
+};
+
+export const rawSupabase = supabase;
+export type SupabaseQueryBuilderType = SupabaseQueryBuilder;

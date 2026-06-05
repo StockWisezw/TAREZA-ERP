@@ -19,8 +19,7 @@ export default defineConfig(({mode}) => {
           manualChunks: {
             'react-vendor': ['react', 'react-dom', 'react-router-dom'],
             'ui-vendor': ['lucide-react', 'motion', 'framer-motion', 'recharts'],
-            'utils-vendor': ['date-fns', 'zod', 'zustand', 'uuid', 'react-hook-form'],
-            'supabase': ['@supabase/supabase-js']
+            'utils-vendor': ['date-fns', 'zod', 'zustand', 'uuid', 'react-hook-form']
           }
         }
       }

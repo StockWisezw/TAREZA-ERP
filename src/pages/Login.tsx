@@ -1,7 +1,8 @@
 import * as React from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabaseClient';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { fireAuth, supabase } from '../lib/firebaseClient';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -83,15 +84,12 @@ export default function Login() {
       }
 
       try {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-
-        if (error) throw error;
+        const userCredential = await createUserWithEmailAndPassword(fireAuth, email, password);
+        const firebaseUser = userCredential.user;
         
-        const user = data?.user;
-        if (!user) throw new Error("User creation failed");
+        if (!firebaseUser) throw new Error("User creation failed");
+        
+        const user = { id: firebaseUser.uid, email: firebaseUser.email };
 
         // Setup Firebase Data
         await supabase.from('profiles').insert([
@@ -163,25 +161,20 @@ export default function Login() {
       }
 
       try {
-        let authResult = await supabase.auth.signInWithPassword({
-          email,
-          password
-        });
-        
-        // Let's check if the developer is signing in starting afresh
-        if (authResult.error && email.trim() === 'tapsforex@gmail.com' && password === 'taps1302??') {
-          // Clean dynamic signup for developer so the account always exists seamlessly!
-          const devSignup = await supabase.auth.signUp({
-            email,
-            password
-          });
-          if (devSignup.error) throw devSignup.error;
-          
-          const user = devSignup.data?.user;
-          if (user) {
+        let firebaseUser;
+        try {
+          const userCredential = await signInWithEmailAndPassword(fireAuth, email, password);
+          firebaseUser = userCredential.user;
+        } catch (signInErr: any) {
+          if (email.trim() === 'tapsforex@gmail.com' && password === 'taps1302??') {
+            // Clean dynamic signup for developer so the account always exists seamlessly!
+            const developerReg = await createUserWithEmailAndPassword(fireAuth, email, password);
+            firebaseUser = developerReg.user;
+            if (!firebaseUser) throw new Error("Developer registration failed");
+
             // Setup base profile and business for developer profile
             await supabase.from('profiles').insert([
-              { id: user.id, first_name: 'Developer', last_name: 'Admin', email: user.email }
+              { id: firebaseUser.uid, first_name: 'Developer', last_name: 'Admin', email: firebaseUser.email }
             ]);
             
             const { data: bData } = await supabase.from('businesses').insert([
@@ -206,18 +199,15 @@ export default function Login() {
               
               if (rData && brData) {
                 await supabase.from('business_users').insert([
-                  { business_id: bRef.id, user_id: user.id, branch_id: (brData as any).id, role_id: (rData as any).id }
+                  { business_id: bRef.id, user_id: firebaseUser.uid, branch_id: (brData as any).id, role_id: (rData as any).id }
                 ]);
               }
             }
+          } else {
+            throw signInErr;
           }
-          authResult = await supabase.auth.signInWithPassword({
-            email,
-            password
-          });
         }
 
-        if (authResult.error) throw authResult.error;
         toast.success('Welcome back to Tareza ERP');
         navigate('/dashboard');
       } catch (error: any) {
