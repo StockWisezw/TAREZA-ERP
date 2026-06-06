@@ -18,7 +18,9 @@ import {
   FileText,
   Lock,
   BookOpen,
-  MessageSquare
+  MessageSquare,
+  Trash2,
+  Check
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from './ui/button';
@@ -26,6 +28,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
 import { Input } from './ui/input';
+import { toast } from 'sonner';
 
 import { ThemeToggle } from './ThemeToggle';
 import { SyncManager } from './pos/SyncManager';
@@ -83,6 +86,16 @@ function SubscriptionBanner() {
   );
 }
 
+interface NotificationItem {
+  id: string;
+  title: string;
+  description: string;
+  time: string;
+  read: boolean;
+  type: 'sale' | 'message' | 'stock' | 'billing';
+  link?: string;
+}
+
 export default function Layout() {
   const { signOut, user } = useAuth();
   const location = useLocation();
@@ -90,6 +103,83 @@ export default function Layout() {
   const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw';
   const [isLocked, setIsLocked] = React.useState(false);
   const [unlockPin, setUnlockPin] = React.useState('');
+  
+  const [notifications, setNotifications] = React.useState<NotificationItem[]>(() => {
+    const cached = localStorage.getItem('erp_notifications');
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        // ignore
+      }
+    }
+    return [
+      {
+        id: 'notif-1',
+        title: 'Check Daily POS Sales',
+        description: 'Reconcile today\'s cash drawer & review sales performance. Synced: $1,420.00 USD.',
+        time: '5 mins ago',
+        read: false,
+        type: 'sale',
+        link: '/reports'
+      },
+      {
+        id: 'notif-2',
+        title: 'New Messenger Chat',
+        description: 'Tapiwa: "Please verify the Harare Branch cash re-deposit before 5 PM."',
+        time: '32 mins ago',
+        read: false,
+        type: 'message',
+        link: '/messenger'
+      },
+      {
+        id: 'notif-3',
+        title: 'Low Stock Warning',
+        description: '3 products under safety stock threshold in main warehouse. Click to restock.',
+        time: '2 hours ago',
+        read: false,
+        type: 'stock',
+        link: '/inventory'
+      },
+      {
+        id: 'notif-4',
+        title: 'Paynow Subscription Reminder',
+        description: 'Complete your license payment soon using EcoCash or credit card to avoid lock.',
+        time: '1 day ago',
+        read: false,
+        type: 'billing',
+        link: '/settings'
+      }
+    ];
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('erp_notifications', JSON.stringify(notifications));
+  }, [notifications]);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const markAsRead = (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  };
+
+  const markAllAsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    toast.success('All notifications marked as read');
+  };
+
+  const deleteNotification = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNotifications(prev => prev.filter(n => n.id !== id));
+    toast.success('Notification cleared');
+  };
+
+  const handleNotificationClick = (item: NotificationItem) => {
+    markAsRead(item.id);
+    if (item.link) {
+      navigate(item.link);
+    }
+  };
   const [pinError, setPinError] = React.useState(false);
   const [isOnline, setIsOnline] = React.useState(typeof window !== 'undefined' ? navigator.onLine : true);
 
@@ -294,10 +384,116 @@ export default function Layout() {
               <SyncStatusIndicator />
               <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block mx-1" />
               <ThemeToggle />
-              <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800">
-                <Bell className="h-[18px] w-[18px] text-zinc-600 dark:text-zinc-400" />
-                <span className="absolute top-2 right-2.5 h-1.5 w-1.5 rounded-full bg-red-500" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger render={
+                  <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800">
+                    <Bell className="h-[18px] w-[18px] text-zinc-600 dark:text-zinc-400" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white shadow-sm ring-2 ring-white dark:ring-zinc-950">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </Button>
+                } />
+                <DropdownMenuContent className="w-80 sm:w-96 p-0 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xl rounded-2xl overflow-hidden mt-2 z-50 origin-top-right" align="end" forceMount>
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-805 bg-zinc-50/50 dark:bg-zinc-900/50">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Notifications</span>
+                      {unreadCount > 0 && (
+                        <span className="bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          {unreadCount} new
+                        </span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button 
+                        onClick={markAllAsRead} 
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1 transition-all"
+                      >
+                        <Check className="w-3.5 h-3.5" /> Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-96 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {notifications.length === 0 ? (
+                      <div className="py-10 px-4 text-center space-y-2">
+                        <div className="bg-zinc-100 dark:bg-zinc-800/50 w-10 h-10 rounded-full flex items-center justify-center mx-auto text-zinc-400">
+                          <Bell className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-zinc-850 dark:text-zinc-200">All caught up!</p>
+                          <p className="text-[11px] text-zinc-400 mt-0.5">There are no pending alerts or notifications at this moment.</p>
+                        </div>
+                      </div>
+                    ) : (
+                      notifications.map((item) => {
+                        let IconComponent = Bell;
+                        let iconBg = 'bg-zinc-100 text-zinc-650 dark:bg-zinc-800 dark:text-zinc-300';
+                        if (item.type === 'sale') {
+                          IconComponent = Receipt;
+                          iconBg = 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20 dark:text-emerald-400';
+                        } else if (item.type === 'message') {
+                          IconComponent = MessageSquare;
+                          iconBg = 'bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400';
+                        } else if (item.type === 'stock') {
+                          IconComponent = Package;
+                          iconBg = 'bg-amber-50 text-amber-600 dark:bg-amber-950/20 dark:text-amber-400';
+                        } else if (item.type === 'billing') {
+                          IconComponent = AlertTriangle;
+                          iconBg = 'bg-rose-50 text-rose-650 dark:bg-rose-950/20 dark:text-rose-400';
+                        }
+
+                        return (
+                          <div 
+                            key={item.id}
+                            onClick={() => handleNotificationClick(item)}
+                            className={`group relative flex items-start gap-3 p-4 cursor-pointer hover:bg-zinc-50/70 dark:hover:bg-zinc-850 transition-all ${
+                              !item.read ? 'bg-zinc-50/50 dark:bg-zinc-800/20' : ''
+                            }`}
+                          >
+                            <div className={`p-2 rounded-xl shrink-0 ${iconBg}`}>
+                              <IconComponent className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0 pr-4">
+                              <div className="flex items-center justify-between mb-0.5">
+                                <h4 className={`text-xs font-bold truncate leading-snug ${
+                                  !item.read ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-700 dark:text-zinc-350'
+                                }`}>
+                                  {item.title}
+                                </h4>
+                                {!item.read && (
+                                  <span className="h-1.5 w-1.5 rounded-full bg-blue-600 shrink-0 ml-1.5" />
+                                )}
+                              </div>
+                              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-normal font-sans line-clamp-2">
+                                {item.description}
+                              </p>
+                              <span className="text-[10px] text-zinc-400 dark:text-zinc-400 mt-1.5 block font-medium">
+                                {item.time}
+                              </span>
+                            </div>
+                            <button 
+                              onClick={(e) => deleteNotification(item.id, e)}
+                              className="absolute top-4 right-4 text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  
+                  {notifications.length > 0 && (
+                    <div className="px-4 py-2 bg-zinc-50/50 dark:bg-zinc-900/50 border-t border-zinc-100 dark:border-zinc-800/80 text-center">
+                      <p className="text-[10px] text-zinc-400 font-medium leading-relaxed">
+                        Tip: Click a notification to view its page or take actions immediately.
+                      </p>
+                    </div>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
               
               <DropdownMenu>
                 <DropdownMenuTrigger render={<Button variant="ghost" className="relative h-8 w-8 rounded-full ml-1" />}>

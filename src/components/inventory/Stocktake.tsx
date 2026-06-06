@@ -83,6 +83,105 @@ export function Stocktake() {
     }
   };
 
+  const handleQuickOpenSession = async (customFloat = 0) => {
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user) {
+        throw new Error("You must be logged in to open a shift session.");
+      }
+
+      let bId = userBusinessId;
+      let brId = userBranchId;
+
+      if (!bId || !brId) {
+        const { data: businessUserData } = await supabase
+          .from('business_users')
+          .select('business_id, branch_id')
+          .eq('user_id', userData.user.id)
+          .limit(1)
+          .maybeSingle();
+        if (businessUserData) {
+          bId = businessUserData.business_id;
+          brId = businessUserData.branch_id;
+        }
+      }
+
+      if (!bId || !brId) {
+        throw new Error("Could not automatically locate your branch/business context. Please check Settings.");
+      }
+
+      // 1. Log drawer
+      await supabase.from('cash_drawer_logs').insert([{
+        business_id: bId,
+        branch_id: brId,
+        amount: customFloat,
+        type: 'opening',
+        transaction_type: 'opening_float',
+        notes: 'Register dynamically opened via Stocktake session recovery',
+        created_at: new Date().toISOString()
+      }]);
+
+      const sessionId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+      const sessionItem = {
+        id: sessionId,
+        business_id: bId,
+        branch_id: brId,
+        user_id: userData.user.id,
+        opening_balance: customFloat,
+        closing_balance: 0,
+        expected_balance: customFloat,
+        variance: 0,
+        status: 'OPEN' as const,
+        opened_at: new Date().toISOString(),
+        closed_at: null,
+        sales_count: 0,
+        sales_total: 0,
+        refunds_total: 0,
+        payouts_total: 0,
+        created_at: new Date().toISOString()
+      };
+
+      const { error: insErr } = await supabase.from('register_sessions').insert(sessionItem);
+      if (insErr) throw insErr;
+
+      toast.success(`Success! New active register session #${sessionId.substring(0, 8)} opened.`);
+
+      // Refresh open register sessions
+      const { data: sessions } = await supabase
+        .from('register_sessions')
+        .eq('business_id', bId)
+        .eq('branch_id', brId)
+        .eq('status', 'OPEN');
+      
+      if (sessions) {
+        setOpenSessionsList(sessions);
+        setSelectedSessionId(sessionId);
+        
+        // Update live count panel if currently counting
+        if (activeStocktake) {
+          const updatedStocktake = { ...activeStocktake, pos_session_id: sessionId };
+          setActiveStocktake(updatedStocktake);
+          await supabase
+            .from('stocktakes_advanced')
+            .update({ pos_session_id: sessionId })
+            .eq('id', activeStocktake.id);
+        }
+        
+        // Update review overlay if currently active
+        if (reviewItem) {
+          setReviewItem((prev: any) => prev ? { ...prev, pos_session_id: sessionId } : null);
+          await supabase
+            .from('stocktakes_advanced')
+            .update({ pos_session_id: sessionId })
+            .eq('id', reviewItem.id);
+        }
+      }
+      return sessionId;
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to open register session dynamically.');
+    }
+  };
+
   const calculateAuditDiscrepancies = (items: any[], branchId?: string) => {
     let shortageAmount = 0;
     let overageAmount = 0;
@@ -832,7 +931,7 @@ export function Stocktake() {
             {reviewItem?.status === 'REVIEW' ? (
               <div className="bg-amber-55/40 border border-amber-200/70 rounded-xl p-4 flex items-start gap-3 text-amber-900 text-sm">
                 <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
-                <div>
+                <div className="flex-1">
                   <p className="font-bold mb-0.5">Physical Level Adjustment Sync</p>
                   <p className="text-zinc-650 text-xs">Approving these figures will write the counted levels dynamically into active inventory and create historical balance logs.</p>
                 </div>
@@ -840,12 +939,99 @@ export function Stocktake() {
             ) : (
               <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 flex items-start gap-2.5 text-zinc-700 text-sm">
                 <CheckCircle2 className="h-5 w-5 shrink-0 text-zinc-500 mt-0.5" />
-                <div>
+                <div className="flex-1">
                   <p className="font-bold mb-0.5">Historical Snapshot Records</p>
                   <p className="text-zinc-505 text-xs">This audit session is completed. Displaying matched counts compared to initial expected stock levels.</p>
                 </div>
               </div>
             )}
+
+            {(() => {
+              const reviewSessId = reviewItem?.pos_session_id;
+              const isReviewSessionOpen = reviewSessId ? openSessionsList.some(s => s.id === reviewSessId) : false;
+              
+              if (reviewItem?.status === 'REVIEW' && (!reviewSessId || !isReviewSessionOpen)) {
+                return (
+                  <div className="bg-red-500/10 p-4 rounded-xl border border-red-500/25 text-xs flex flex-col gap-3 animate-in fade-in duration-300">
+                    <div className="flex items-start gap-3">
+                      <span className="p-2 bg-red-500/10 rounded-xl text-red-600 mt-0.5 shrink-0">
+                        <AlertTriangle className="h-5 w-5" />
+                      </span>
+                      <div>
+                        <span className="font-extrabold text-red-700 text-sm block">Action Required: Linked POS Session is CLOSED or Missing</span>
+                        <p className="text-zinc-655 mt-1 leading-normal text-xs font-medium">
+                          This stocktake was linked to {reviewSessId ? `a closed registers shift (#${reviewSessId.substring(0,8)})` : "no shift session"}. Corrective variance adjustments must be committed while linked to an active, OPEN cashier shift session.
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-red-500/15 mt-1">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="text-zinc-650 font-bold text-[11px] uppercase tracking-wider whitespace-nowrap">Link Active Session:</span>
+                        <select
+                          value={reviewItem?.pos_session_id || ''}
+                          onChange={async (e) => {
+                            const val = e.target.value;
+                            const valOrNull = val === '' ? null : val;
+                            setReviewItem((prev: any) => prev ? { ...prev, pos_session_id: valOrNull } : null);
+                            const { error } = await supabase
+                              .from('stocktakes_advanced')
+                              .update({ pos_session_id: valOrNull })
+                              .eq('id', reviewItem.id);
+                            if (error) {
+                              toast.error("Failed to update stocktake session link.");
+                            } else {
+                              toast.success("Successfully changed stocktake to point to selected POS register session.");
+                              fetchStocktakes();
+                            }
+                          }}
+                          className="bg-white text-zinc-800 text-xs rounded-lg border border-zinc-300 p-2 px-3 font-bold cursor-pointer hover:border-zinc-400 focus:outline-none max-w-xs flex-1"
+                        >
+                          <option value="">-- No POS Session Linked --</option>
+                          {openSessionsList.map(sess => (
+                            <option key={sess.id} value={sess.id}>
+                              Shift #{sess.id?.substring(0, 8)} - Owner Cashier (Float: ${Number(sess.opening_balance).toFixed(2)})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex gap-2 shrink-0">
+                        {openSessionsList.length > 0 ? (
+                          <Button 
+                            type="button"
+                            size="sm"
+                            onClick={async () => {
+                              const nextId = openSessionsList[0].id;
+                              setReviewItem((prev: any) => prev ? { ...prev, pos_session_id: nextId } : null);
+                              await supabase
+                                .from('stocktakes_advanced')
+                                .update({ pos_session_id: nextId })
+                                .eq('id', reviewItem.id);
+                              toast.success(`Success! Auto-linked to active open shift #${nextId.substring(0,8)}`);
+                              fetchStocktakes();
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] h-9"
+                          >
+                            Auto-Link to Available Shift
+                          </Button>
+                        ) : (
+                          <Button 
+                            type="button"
+                            size="sm"
+                            onClick={() => handleQuickOpenSession(0)}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] h-9"
+                          >
+                            + Quick-Start Shift Now
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
 
             {/* Reconciliation Valuation Basis Selector & Aggregate Summary */}
             {(() => {
@@ -1159,8 +1345,17 @@ export function Stocktake() {
                   </SelectContent>
                 </Select>
               ) : (
-                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-800 text-[11px] leading-normal">
-                  <strong>Warning:</strong> No active register shift session found for this cashier or branch. Please start a cashier shift session first under Cash/POS Terminal to link stocktake reconciliations properly.
+                <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-[11px] leading-normal flex flex-col gap-2">
+                  <p>
+                    <strong>Warning:</strong> No active registers or cashier shift sessions were found on this branch. Since stock discrepancy reconciliations require linking to an open shift window to avoid stock leakage, please click below to spin up a quick-session right now:
+                  </p>
+                  <Button
+                    type="button"
+                    onClick={() => handleQuickOpenSession(0)}
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] h-7.5 w-full shadow-sm rounded-lg"
+                  >
+                    + Open a Dynamic Shift Session Now ($0 Float)
+                  </Button>
                 </div>
               )}
             </div>
@@ -1212,43 +1407,97 @@ export function Stocktake() {
           
           <div className="p-4 sm:p-6 bg-zinc-50 space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
             {/* Session verification warning bar */}
-            <div className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between bg-amber-500/10 p-3 rounded-lg border border-amber-500/20 text-xs shrink-0">
-              <div className="flex items-center gap-2">
-                <Landmark className="h-4 w-4 text-amber-600 shrink-0" />
-                <div>
-                  <span className="font-bold text-zinc-900 block sm:inline">Verification & Link POS Session: </span>
-                  <span className="text-zinc-650">Ensure this stocktake is charged to the correct active POS shift session.</span>
+            <div className="flex flex-col gap-3 shrink-0">
+              <div className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between bg-amber-500/10 p-3 rounded-lg border border-amber-500/20 text-xs">
+                <div className="flex items-center gap-2">
+                  <Landmark className="h-4 w-4 text-amber-600 shrink-0" />
+                  <div>
+                    <span className="font-bold text-zinc-900 block sm:inline">Verification & Link POS Session: </span>
+                    <span className="text-zinc-650">Ensure this stocktake is charged to the correct active POS shift session.</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-zinc-655 font-bold text-[11px] uppercase tracking-wide">Linked Session:</span>
+                  <select
+                    value={activeStocktake?.pos_session_id || ''}
+                    onChange={async (e) => {
+                      const val = e.target.value;
+                      const valOrNull = val === '' ? null : val;
+                      const updatedStocktake = { ...activeStocktake, pos_session_id: valOrNull };
+                      setActiveStocktake(updatedStocktake);
+                      const { error } = await supabase
+                        .from('stocktakes_advanced')
+                        .update({ pos_session_id: valOrNull })
+                        .eq('id', activeStocktake.id);
+                      if (error) {
+                        toast.error("Failed to persist linked session structure to server database.");
+                      } else {
+                        toast.success("Linked POS shift session changed successfully!");
+                      }
+                    }}
+                    className="bg-white text-zinc-800 text-xs rounded border border-zinc-250 p-1 px-2 font-bold cursor-pointer hover:border-zinc-400 focus:outline-none"
+                  >
+                    <option value="">-- No POS Session Linked --</option>
+                    {openSessionsList.map(sess => (
+                      <option key={sess.id} value={sess.id}>
+                        Shift #{sess.id?.substring(0, 8)} - Owner Cashier (Float: ${Number(sess.opening_balance).toFixed(2)})
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    onClick={() => handleQuickOpenSession(0)}
+                    size="sm"
+                    className="bg-zinc-900 hover:bg-zinc-800 text-white font-bold h-7 inline-flex items-center text-[10px] px-2.5 rounded-lg"
+                  >
+                    + Quick-Open Shift
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-zinc-600 font-semibold text-[11px] uppercase tracking-wide">Linked Session:</span>
-                <select
-                  value={activeStocktake?.pos_session_id || ''}
-                  onChange={async (e) => {
-                    const val = e.target.value;
-                    const valOrNull = val === '' ? null : val;
-                    const updatedStocktake = { ...activeStocktake, pos_session_id: valOrNull };
-                    setActiveStocktake(updatedStocktake);
-                    const { error } = await supabase
-                      .from('stocktakes_advanced')
-                      .update({ pos_session_id: valOrNull })
-                      .eq('id', activeStocktake.id);
-                    if (error) {
-                      toast.error("Failed to persist linked session structure to server database.");
-                    } else {
-                      toast.success("Linked POS shift session changed successfully!");
-                    }
-                  }}
-                  className="bg-white text-zinc-800 text-xs rounded border border-zinc-300 p-1 px-2 font-bold cursor-pointer hover:border-zinc-400 focus:outline-none"
-                >
-                  <option value="">-- No POS Session Linked --</option>
-                  {openSessionsList.map(sess => (
-                    <option key={sess.id} value={sess.id}>
-                      Shift #{sess.id?.substring(0, 8)} - Owner Cashier (Float: ${Number(sess.opening_balance).toFixed(2)})
-                    </option>
-                  ))}
-                </select>
-              </div>
+
+              {activeStocktake?.pos_session_id && !openSessionsList.some(s => s.id === activeStocktake.pos_session_id) && (
+                <div className="bg-rose-500/10 p-3.5 rounded-xl border border-rose-500/20 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 animate-in fade-in duration-300">
+                  <div className="flex items-start gap-2.5">
+                    <span className="p-1.5 bg-rose-500/15 rounded-lg text-rose-600 mt-0.5 shrink-0">
+                      <AlertTriangle className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <span className="font-extrabold text-red-700 block text-xs">⚠️ The Linked POS Session (Shift #{activeStocktake.pos_session_id.substring(0, 8)}) is CLOSED/UNAVAILABLE</span>
+                      <p className="text-zinc-600 mt-0.5 max-w-2xl leading-normal text-[11px]">
+                        Please choose a different active open session from the selector above, or click the button on the right to start a fresh shift session instantly. Without an active system register session, variances cannot be submitted or validated.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 items-center w-full sm:w-auto shrink-0 pt-1 sm:pt-0">
+                    {openSessionsList.length > 0 ? (
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          const nextId = openSessionsList[0].id;
+                          const updatedStocktake = { ...activeStocktake, pos_session_id: nextId };
+                          setActiveStocktake(updatedStocktake);
+                          await supabase
+                            .from('stocktakes_advanced')
+                            .update({ pos_session_id: nextId })
+                            .eq('id', activeStocktake.id);
+                          toast.success(`Automatically switched to active OPEN POS Shift Session #${nextId.substring(0, 8)}`);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-8 text-[11px] w-full sm:w-auto shadow-sm tracking-tight"
+                      >
+                        Auto-Link to Available Open Shift #{openSessionsList[0].id.substring(0, 8)}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => handleQuickOpenSession(0)}
+                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-8 text-[11px] w-full sm:w-auto shadow-sm"
+                      >
+                        + Create & Link New Shift Session
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Quick Actions & Barcode Input */}

@@ -7,7 +7,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '../components/ui/card';
-import { Store, TrendingUp, ShieldCheck, Mail, Key, Fingerprint, Github, Sparkles } from 'lucide-react';
+import { Store, TrendingUp, ShieldCheck, Mail, Key, Fingerprint, Github, Sparkles, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { TarezaLogo } from '../components/ui/Logo';
 
@@ -25,6 +25,106 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const handleDemoLogin = async (role: 'developer' | 'client') => {
+    setLoading(true);
+    const demoEmail = role === 'developer' ? 'developer@tarezaerp.co.zw' : 'client@tarezaerp.co.zw';
+    const demoPassword = 'Password123!';
+    const demoFirstName = role === 'developer' ? 'Alex' : 'Sarah';
+    const demoLastName = role === 'developer' ? 'SystemDev' : 'BranchClient';
+    const demoBusinessName = role === 'developer' ? 'Antigravity Micro-Labs' : 'Global Retail Network';
+
+    try {
+      // First attempt standard Firebase Auth login with dev/client credentials
+      await signInWithEmailAndPassword(fireAuth, demoEmail, demoPassword);
+      toast.success(`Successfully logged in as ${role === 'developer' ? 'System Developer' : 'Business Client'}!`);
+      navigate('/dashboard');
+    } catch (err: any) {
+      // If the email is not found or has wrong credentials, dynamically register the brand-new workspace
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+        try {
+          toast.info(`Initializing secure sandbox session for demo ${role}...`);
+          const userCredential = await createUserWithEmailAndPassword(fireAuth, demoEmail, demoPassword);
+          const firebaseUser = userCredential.user;
+          if (!firebaseUser) throw new Error("Authentication flow failed.");
+
+          const user = { id: firebaseUser.uid, email: firebaseUser.email };
+
+          // Build Firestore Profile
+          await supabase.from('profiles').insert([
+            { id: user.id, first_name: demoFirstName, last_name: demoLastName, email: user.email }
+          ]);
+
+          // Build Business
+          const regNo = role === 'developer' ? 'TZ-999999/DEV' : 'TZ-888888/CLIENT';
+          const { data: bData } = await supabase.from('businesses').insert([
+            { 
+              name: demoBusinessName, 
+              tax_number: regNo,
+              created_at: new Date().toISOString() 
+            }
+          ]).select().single();
+
+          const bRef = bData as any;
+
+          if (bRef) {
+            const endDate = new Date();
+            endDate.setDate(endDate.getDate() + 90); // 90 days access for demo testing
+
+            await supabase.from('subscriptions').insert([{
+               business_id: bRef.id,
+               plan_name: 'pro',
+               status: 'active',
+               start_date: new Date().toISOString(),
+               end_date: endDate.toISOString()
+            }]);
+
+            const { data: rData } = await supabase.from('roles').insert([
+              { business_id: bRef.id, name: role === 'developer' ? 'Developer' : 'Admin', description: 'System Administrator Access' }
+            ]).select().single();
+
+            const rRef = rData as any;
+
+            const { data: brData } = await supabase.from('branches').insert([
+              { business_id: bRef.id, name: role === 'developer' ? 'Testing Lab Alpha' : 'Downtown Branch Store', type: 'retail' }
+            ]).select().single();
+            
+            const brRef = brData as any;
+
+            if (rRef && brRef) {
+              await supabase.from('business_users').insert([
+                { business_id: bRef.id, user_id: user.id, branch_id: brRef.id, role_id: rRef.id }
+              ]);
+            }
+
+            await supabase.from('categories').insert([
+              { business_id: bRef.id, name: 'General' },
+              { business_id: bRef.id, name: 'Electronics' },
+              { business_id: bRef.id, name: 'Beverages' },
+              { business_id: bRef.id, name: 'Office Supplies' }
+            ]);
+          }
+
+          toast.success(`Demo workspace initialized! Logged in as ${role === 'developer' ? 'System Developer' : 'Business Client'}.`);
+          navigate('/dashboard');
+        } catch (setupErr: any) {
+          // If signup fails because user exists under a different setup/invalid state, attempt forced sign-in secondary bypass
+          try {
+            await signInWithEmailAndPassword(fireAuth, demoEmail, demoPassword);
+            toast.success(`Logged in as ${role === 'developer' ? 'System Developer' : 'Business Client'}!`);
+            navigate('/dashboard');
+          } catch (secondaryErr: any) {
+            console.error(secondaryErr);
+            toast.error(`Demo initialization failed: ${setupErr.message || setupErr}`);
+          }
+        }
+      } else {
+        toast.error(`Demo login error: ${err.message || err}`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Client-side validation states
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -249,6 +349,17 @@ export default function Login() {
 
       {/* Right Pane - Login Form */}
       <div className="flex-1 flex items-center justify-center p-8 bg-card relative">
+        <div className="absolute top-8 left-8">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2 text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-150 font-semibold rounded-xl text-xs sm:flex hidden"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Home
+          </Button>
+        </div>
         <div className="absolute top-8 right-8 flex items-center lg:hidden font-sans">
           <TarezaLogo size="sm" showSubtitle={false} />
         </div>
@@ -265,6 +376,49 @@ export default function Login() {
                 : (isSignUp ? 'Enter your details to get started' : 'Enter your email and password to access your account')}
             </CardDescription>
           </CardHeader>
+
+          {/* Quick Demo Portals Switcher */}
+          {!isForgotPassword && (
+            <div className="px-8 pt-6 pb-2">
+              <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">
+                    <Sparkles className="h-4 w-4 text-emerald-600 animate-pulse shrink-0" />
+                    <span>Quick Demo Login Portal</span>
+                  </div>
+                  <span className="text-[9px] bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                    Sandbox Mode
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-500 leading-normal">
+                  Bypass standard manual registration. Instantly log in or auto-seed a fully configured sandbox workspace:
+                </p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleDemoLogin('developer')}
+                    disabled={loading}
+                    className="h-10 text-[11px] font-bold flex items-center justify-center gap-2 border border-zinc-200 hover:border-zinc-350 dark:border-zinc-800 dark:hover:border-zinc-700 bg-white dark:bg-zinc-950 shadow-xs cursor-pointer select-none rounded-xl"
+                  >
+                    <Fingerprint className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span>As Developer</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleDemoLogin('client')}
+                    disabled={loading}
+                    className="h-10 text-[11px] font-bold flex items-center justify-center gap-2 border border-zinc-200 hover:border-zinc-350 dark:border-zinc-800 dark:hover:border-zinc-700 bg-white dark:bg-zinc-950 shadow-xs cursor-pointer select-none rounded-xl"
+                  >
+                    <Store className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>As Business / Client</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={isForgotPassword ? handleForgotPassword : handleAuth}>
             <CardContent className="space-y-5 p-8">
               {isForgotPassword ? (
@@ -508,6 +662,16 @@ export default function Login() {
                       className="text-primary hover:underline font-semibold"
                     >
                       {isSignUp ? 'Sign In' : 'Sign Up'}
+                    </button>
+                  </div>
+
+                  <div className="text-center pt-3 border-t border-zinc-100 dark:border-zinc-800/80 w-full mt-2">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/')}
+                      className="text-xs font-semibold text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors inline-flex items-center gap-1.5"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" /> Return to Welcome Landing Page
                     </button>
                   </div>
                 </>
