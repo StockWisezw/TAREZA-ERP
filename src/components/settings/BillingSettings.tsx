@@ -596,7 +596,7 @@ export function BillingSettings() {
       {/* Paynow Zimbabwe Payment Gateway Dialog Modal */}
       {isPaynowOpen && (
         <Dialog open={isPaynowOpen} onOpenChange={(open) => !open && setIsPaynowOpen(false)}>
-          <DialogContent className="max-w-md w-[94vw] bg-zinc-940 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 p-6 shadow-2xl rounded-2xl overflow-hidden font-sans">
+          <DialogContent className="max-w-md w-[94vw] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 p-6 shadow-2xl rounded-2xl overflow-hidden font-sans">
             <DialogHeader className="mb-4">
               <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 mb-1">
                 <Smartphone className="w-5 h-5 animate-pulse" />
