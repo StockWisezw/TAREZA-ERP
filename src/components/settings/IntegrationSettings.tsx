@@ -31,7 +31,7 @@ export function IntegrationSettings() {
   };
 
   const integrations = [
-    { id: '1', name: 'Paynow', type: 'Payment Gateway', status: 'connected', icon: <CreditCard className="w-5 h-5 text-blue-500" />, desc: 'Process mobile money and card payments.' },
+    { id: '1', name: 'InnBucks Merchant', type: 'Payment Gateway', status: 'connected', icon: <CreditCard className="w-5 h-5 text-indigo-500" />, desc: 'Process InnBucks mobile wallet payments in POS.' },
     { id: '2', name: 'EcoCash Biller', type: 'Payment Gateway', status: 'available', icon: <CreditCard className="w-5 h-5 text-emerald-500" />, desc: 'Direct EcoCash merchant integration.' },
     { id: '3', name: 'WooCommerce', type: 'E-commerce', status: 'available', icon: <ShoppingBag className="w-5 h-5 text-purple-500" />, desc: 'Sync inventory and sales with your web store.' },
     { id: '4', name: 'Xero', type: 'Accounting', status: 'available', icon: <FileSpreadsheet className="w-5 h-5 text-blue-400" />, desc: 'Push daily journals and reconciliations to Xero.' },

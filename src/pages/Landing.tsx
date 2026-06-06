@@ -65,14 +65,14 @@ export default function Landing() {
               WhatsApp Us
             </a>
             <div className="w-px h-4 bg-zinc-800" />
-            <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="flex items-center text-zinc-300 hover:text-white transition-colors group" title="Follow us on Facebook">
+            <a href="https://www.facebook.com/TarezaERP" target="_blank" rel="noopener noreferrer" className="flex items-center text-zinc-300 hover:text-white transition-colors group" title="Follow us on Facebook">
               <span className="flex items-center justify-center w-6 h-6 rounded-full bg-zinc-800 group-hover:bg-[#1877F2]/20 text-zinc-400 group-hover:text-[#1877F2] mr-2 transition-colors">
                 <Facebook className="w-3 h-3" />
               </span>
               Facebook
             </a>
             <div className="w-px h-4 bg-zinc-800" />
-            <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="flex items-center text-zinc-300 hover:text-white transition-colors group" title="Subscribe to our YouTube Channel">
+            <a href="https://www.youtube.com/@tarezaerp" target="_blank" rel="noopener noreferrer" className="flex items-center text-zinc-300 hover:text-white transition-colors group" title="Subscribe to our YouTube Channel">
               <span className="flex items-center justify-center w-6 h-6 rounded-full bg-zinc-800 group-hover:bg-[#FF0000]/20 text-zinc-400 group-hover:text-[#FF0000] mr-2 transition-colors">
                 <Youtube className="w-3 h-3" />
               </span>
@@ -278,7 +278,7 @@ export default function Landing() {
               <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest text-center md:text-left">Connect With Us Online</span>
               <div className="flex items-center gap-3 justify-center md:justify-start">
                 <a 
-                  href="https://facebook.com" 
+                  href="https://www.facebook.com/TarezaERP" 
                   target="_blank" 
                   rel="noopener noreferrer" 
                   className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-50 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-border shadow-sm text-[#1877F2] text-xs font-semibold transition-all hover:scale-105"
@@ -287,7 +287,7 @@ export default function Landing() {
                   <Facebook className="w-4 h-4" /> Facebook Page
                 </a>
                 <a 
-                  href="https://youtube.com" 
+                  href="https://www.youtube.com/@tarezaerp" 
                   target="_blank" 
                   rel="noopener noreferrer" 
                   className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-50 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-border shadow-sm text-[#FF0000] text-xs font-semibold transition-all hover:scale-105"
@@ -516,10 +516,10 @@ export default function Landing() {
              <a href="mailto:support@tarezaerp.co.zw" className="hover:text-primary transition-colors">Support: support@tarezaerp.co.zw</a>
              <a href="mailto:admin@tarezaerp.co.zw" className="hover:text-primary transition-colors">Billing: admin@tarezaerp.co.zw</a>
              <div className="flex items-center gap-3">
-               <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#1877F2] transition-colors flex items-center">
+               <a href="https://www.facebook.com/TarezaERP" target="_blank" rel="noopener noreferrer" className="hover:text-[#1877F2] transition-colors flex items-center">
                  <Facebook className="w-4 h-4 mr-1" /> Facebook
                </a>
-               <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#FF0000] transition-colors flex items-center">
+               <a href="https://www.youtube.com/@tarezaerp" target="_blank" rel="noopener noreferrer" className="hover:text-[#FF0000] transition-colors flex items-center">
                  <Youtube className="w-4 h-4 mr-1" /> YouTube
                </a>
              </div>

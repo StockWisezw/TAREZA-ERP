@@ -34,6 +34,7 @@ import { Badge } from '../components/ui/badge';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { supabase, firebaseConfig } from '../lib/supabaseClient';
 import { toast } from 'sonner';
+import { MarketingAssets } from '../components/settings/MarketingAssets';
 
 const supabaseConfig = { storageBucket: 'tareza-backups' };
 
@@ -759,6 +760,11 @@ Deno.serve(async (req) => {
 
             </CardContent>
           </Card>
+
+          {/* Promotional & Marketing Assets Hub */}
+          <div className="md:col-span-2 p-6 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200/80 dark:border-zinc-800 shadow-sm">
+            <MarketingAssets />
+          </div>
         </div>
       </div>
     </div>
