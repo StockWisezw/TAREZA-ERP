@@ -150,6 +150,27 @@
         "created_at": { "type": "string" }
       },
       "required": ["id", "business_id", "branch_id", "amount", "type"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Represents user raised technical or billing support inquiries",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "user_email": { "type": "string" },
+        "business_id": { "type": "string" },
+        "business_name": { "type": "string" },
+        "subject": { "type": "string" },
+        "category": { "type": "string" },
+        "priority": { "type": "string" },
+        "status": { "type": "string" },
+        "description": { "type": "string" },
+        "response": { "type": "string" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id", "user_id", "subject", "description"]
     }
   },
   "firestore": {
@@ -188,6 +209,10 @@
     "/cash_drawer_logs/{logId}": {
       "schema": "CashDrawerLog",
       "description": "Cash movement logs"
+    },
+    "/support_tickets/{ticketId}": {
+      "schema": "SupportTicket",
+      "description": "Log of client help desk tickets"
     }
   }
 }

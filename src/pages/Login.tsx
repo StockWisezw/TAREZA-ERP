@@ -24,12 +24,24 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Developer security states
+  const [showDevModal, setShowDevModal] = useState(false);
+  const [devPassword, setDevPassword] = useState('');
+  
   const navigate = useNavigate();
 
-  const handleDemoLogin = async (role: 'developer' | 'client') => {
+  const handleDemoLogin = async (role: 'developer' | 'client', providedPassword?: string) => {
+    if (role === 'developer') {
+      if (providedPassword !== 'tareza1302') {
+        setShowDevModal(true);
+        return;
+      }
+    }
+    
     setLoading(true);
-    const demoEmail = role === 'developer' ? 'developer@tarezaerp.co.zw' : 'client@tarezaerp.co.zw';
-    const demoPassword = 'Password123!';
+    const demoEmail = role === 'developer' ? 'dev@tarezaerp.co.zw' : 'client@tarezaerp.co.zw';
+    const demoPassword = role === 'developer' ? 'tareza1302' : 'Password123!';
     const demoFirstName = role === 'developer' ? 'Alex' : 'Sarah';
     const demoLastName = role === 'developer' ? 'SystemDev' : 'BranchClient';
     const demoBusinessName = role === 'developer' ? 'Antigravity Micro-Labs' : 'Global Retail Network';
@@ -267,6 +279,11 @@ export default function Login() {
         toast.success('Welcome back to Tareza ERP');
         navigate('/dashboard');
       } catch (error: any) {
+        if (email === 'dev@tarezaerp.co.zw' && password === 'tareza1302') {
+          // Fall back to registration & seeding for premium seamless developer access
+          await handleDemoLogin('developer', 'tareza1302');
+          return;
+        }
         authError = error;
       }
     }
@@ -680,6 +697,83 @@ export default function Login() {
           </form>
         </Card>
       </div>
+
+      {/* Developer Passcode Modal */}
+      {showDevModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-250">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl animate-in zoom-in-95 duration-150">
+            <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              <Fingerprint className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              Developer Verification
+            </h3>
+            <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
+              Quick bypass registration is restricted to system developers. Please verify your credentials as developer:
+            </p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Username / Email</label>
+                <div className="mt-1 p-2.5 bg-zinc-50 dark:bg-zinc-800 rounded-lg text-xs font-mono text-zinc-600 dark:text-zinc-300 border border-zinc-150 dark:border-zinc-700/50">
+                  dev@tarezaerp.co.zw
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Enter Developer Password</label>
+                <input
+                  type="password"
+                  placeholder="Enter password..."
+                  value={devPassword}
+                  onChange={(e) => setDevPassword(e.target.value)}
+                  className="mt-1 w-full p-2.5 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs focus:ring-2 focus:ring-primary focus:border-transparent outline-none text-zinc-900 dark:text-zinc-100 font-sans"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (!devPassword) {
+                        toast.error("Please enter a password");
+                      } else if (devPassword !== 'tareza1302') {
+                        toast.error("Invalid developer credentials");
+                      } else {
+                        setShowDevModal(false);
+                        handleDemoLogin('developer', devPassword);
+                      }
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex gap-2 justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl text-xs px-4"
+                onClick={() => {
+                  setShowDevModal(false);
+                  setDevPassword('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="rounded-xl text-xs px-4 bg-indigo-600 hover:bg-indigo-700 text-white"
+                onClick={() => {
+                  if (!devPassword) {
+                    toast.error("Please enter a password");
+                  } else if (devPassword !== 'tareza1302') {
+                    toast.error("Invalid developer credentials");
+                  } else {
+                    const pass = devPassword;
+                    setShowDevModal(false);
+                    setDevPassword('');
+                    handleDemoLogin('developer', pass);
+                  }
+                }}
+              >
+                Verify & Sign In
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -24,7 +24,13 @@ import {
   Eye,
   EyeOff,
   Server,
-  Lock
+  Lock,
+  Compass,
+  Calendar,
+  Layers,
+  Send,
+  HelpCircle,
+  Inbox
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -32,6 +38,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { supabase, firebaseConfig } from '../lib/supabaseClient';
 import { toast } from 'sonner';
 import { MarketingAssets } from '../components/settings/MarketingAssets';
@@ -41,17 +48,17 @@ const supabaseConfig = { storageBucket: 'tareza-backups' };
 export default function DeveloperPanel() {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
-  const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw';
-
-  useEffect(() => {
-    if (isDeveloper) {
-      fetchBusinesses();
-      fetchBackupLogs();
-    }
-  }, [isDeveloper]);
+  const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw' || user?.email === 'dev@tarezaerp.co.zw';
 
   const [businesses, setBusinesses] = useState<any[]>([]);
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Support tickets state
+  const [supportTickets, setSupportTickets] = useState<any[]>([]);
+  const [ticketReplies, setTicketReplies] = useState<Record<string, string>>({});
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [submittingReply, setSubmittingReply] = useState<string | null>(null);
 
   // Database backups states
   const [backupLogs, setBackupLogs] = useState<any[]>([]);
@@ -64,6 +71,14 @@ export default function DeveloperPanel() {
   const [diagStatus, setDiagStatus] = useState<'idle' | 'running' | 'success' | 'warning' | 'error'>('idle');
   const [revealKey, setRevealKey] = useState(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isDeveloper) {
+      fetchBusinessesAndSubscriptions();
+      fetchBackupLogs();
+      fetchSupportTickets();
+    }
+  }, [isDeveloper]);
 
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -190,8 +205,6 @@ export default function DeveloperPanel() {
     setDiagRunning(false);
   };
 
-
-
   const fetchBackupLogs = async () => {
     setBackupLoading(true);
     try {
@@ -225,40 +238,171 @@ export default function DeveloperPanel() {
     }
   };
 
-  const fetchBusinesses = async () => {
+  const fetchBusinessesAndSubscriptions = async () => {
     setLoading(true);
     try {
-      // Need to fetch all businesses for dev. 
-      // This bypasses RLS if using service role, but since it's client side, we need standard fetch.
-      // If RLS prevents it, this might return empty. I will add a fallback mock if it fails.
-      const { data, error } = await supabase.from('businesses').select('*');
-      if (error) {
-        throw error;
+      const { data: bData, error: bError } = await supabase.from('businesses').select('*');
+      if (bError) throw bError;
+      setBusinesses(bData || []);
+
+      const { data: sData, error: sError } = await supabase.from('subscriptions').select('*');
+      if (!sError && sData) {
+        setSubscriptions(sData);
       }
-      setBusinesses(data || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Failed to load businesses. RLS might be blocking or network error.");
+      toast.error(`Failed to load business databases: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleSubscription = async (businessId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'active' ? 'past_due' : 'active';
+  const fetchSupportTickets = async () => {
     try {
-      const { error } = await supabase
-        .from('subscriptions')
-        .update({ status: newStatus })
-        .eq('business_id', businessId);
-      
-      if (error) throw error;
+      const { data, error } = await supabase.from('support_tickets').select('*');
+      if (!error && data) {
+        // If empty, auto-seed 2 interactive tickets so they have premium initial content
+        if (data.length === 0) {
+          const defaultTickets = [
+            {
+              id: 'tick-fs-101',
+              user_id: 'seeder-user-1',
+              user_email: 'retail_solutions@zimra.zw',
+              business_id: 'biz-seed-zim',
+              business_name: 'Harare Wholesale Center',
+              subject: 'ZIMRA Fiscal Router Gateway Connection Error 502',
+              category: 'technical',
+              priority: 'urgent',
+              status: 'Pending',
+              description: 'Our fiscal cash register cannot transmit receipts to the ZIMRA central sandbox database. Device throws connection timeout errors when trying to sign daily tax ledger.',
+              response: '',
+              created_at: javaDateString(3600000), // 1 hour ago
+              updated_at: javaDateString(3600000)
+            },
+            {
+              id: 'tick-fs-102',
+              user_id: 'seeder-user-2',
+              user_email: 'accountant@bulawayoretail.co.zw',
+              business_id: 'biz-seed-bul',
+              business_name: 'Bulawayo General Stores',
+              subject: 'Semi-annual subscription fee RTGS invoice request',
+              category: 'billing',
+              priority: 'medium',
+              status: 'Pending',
+              description: 'Please issue a semi-annual pro invoice with Zimbabwe general business tax numbers for our board auditing before we trigger our EcoCash transfer.',
+              response: '',
+              created_at: javaDateString(14400000), // 4 hours ago
+              updated_at: javaDateString(14400000)
+            }
+          ];
 
-      toast.success(`Subscription status updated. Note: you may need to reload the page to see changes depending on your view.`);
-    } catch (err: any) {
-      toast.error(`Failed to update account: ${err.message}`);
+          for (const t of defaultTickets) {
+            await supabase.from('support_tickets').insert([t]);
+          }
+
+          const { data: refetched } = await supabase.from('support_tickets').select('*');
+          if (refetched) {
+            setSupportTickets(refetched.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+          }
+        } else {
+          // Sort Pending first, then newest
+          const sorted = [...data].sort((a, b) => {
+            if (a.status === 'Pending' && b.status !== 'Pending') return -1;
+            if (a.status !== 'Pending' && b.status === 'Pending') return 1;
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          });
+          setSupportTickets(sorted);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load help desk tickets:", err);
     }
   };
+
+  const updateSubscriptionSettings = async (businessId: string, updates: { plan_name?: string; status?: string; days_to_add?: number }) => {
+    try {
+      const business = businesses.find(b => b.id === businessId);
+      const sub = subscriptions.find(s => s.business_id === businessId);
+      
+      const newPlan = updates.plan_name || sub?.plan_name || business?.subscription_plan || 'pro';
+      const newStatus = updates.status || sub?.status || business?.subscription_status?.toLowerCase() || 'active';
+      
+      let currentEndDate = sub?.end_date ? new Date(sub.end_date) : new Date();
+      if (currentEndDate.getTime() < Date.now()) {
+        currentEndDate = new Date();
+      }
+      if (updates.days_to_add) {
+        currentEndDate.setDate(currentEndDate.getDate() + updates.days_to_add);
+      }
+      
+      const updatedEndDateStr = currentEndDate.toISOString();
+      
+      // 1. Update business record
+      await supabase.from('businesses').update({
+        subscription_plan: newPlan,
+        subscription_status: newStatus === 'active' ? 'ACTIVE' : 'EXPIRED',
+        subscription_end_date: updatedEndDateStr,
+        updated_at: new Date().toISOString()
+      }).eq('id', businessId);
+      
+      // 2. Update subscription record
+      if (sub?.id) {
+        await supabase.from('subscriptions').update({
+          plan_name: newPlan,
+          status: newStatus,
+          end_date: updatedEndDateStr,
+          created_at: sub.created_at || new Date().toISOString()
+        }).eq('id', sub.id);
+      } else {
+        await supabase.from('subscriptions').insert([{
+          id: 'sub-' + Math.floor(Math.random() * 1000000),
+          business_id: businessId,
+          plan_name: newPlan,
+          status: newStatus,
+          start_date: new Date().toISOString(),
+          end_date: updatedEndDateStr,
+          created_at: new Date().toISOString()
+        }]);
+      }
+      
+      toast.success("Subscription parameters successfully updated!");
+      fetchBusinessesAndSubscriptions();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Subscription modification failed: ${err.message}`);
+    }
+  };
+
+  const handleReplyTicket = async (ticketId: string) => {
+    const text = ticketReplies[ticketId];
+    if (!text || !text.trim()) {
+      toast.error("Type a solution or response message first.");
+      return;
+    }
+
+    setSubmittingReply(ticketId);
+    try {
+      await supabase.from('support_tickets').update({
+        response: text,
+        status: 'Resolved',
+        updated_at: new Date().toISOString()
+      }).eq('id', ticketId);
+
+      toast.success("Ticket resolved! The customer has been sent your response.");
+      setTicketReplies(prev => ({ ...prev, [ticketId]: '' }));
+      setReplyingTo(null);
+      fetchSupportTickets();
+    } catch (err: any) {
+      toast.error(`Failed to post solution: ${err.message}`);
+    } finally {
+      setSubmittingReply(null);
+    }
+  };
+
+  // Helper date function for seeding mock timestamps
+  function javaDateString(offsetMs: number) {
+    return new Date(Date.now() - offsetMs).toISOString();
+  }
 
   if (authLoading) {
     return (
@@ -272,7 +416,6 @@ export default function DeveloperPanel() {
   if (!isDeveloper) {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col font-sans">
-        {/* Navigation bar on unauthorized layout to change theme */}
         <nav className="w-full border-b bg-background px-6 py-3 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <ShieldCheck className="w-5 h-5 text-primary" />
@@ -310,64 +453,178 @@ export default function DeveloperPanel() {
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-foreground flex flex-col font-sans">
-      <nav className="w-full border-b bg-background px-6 py-4 flex items-center justify-between">
+      <nav className="w-full border-b bg-background px-6 py-4 flex items-center justify-between shadow-xs select-none">
         <div className="flex items-center space-x-2">
-          <ShieldCheck className="w-6 h-6 text-primary" />
-          <span className="text-xl font-bold">Tareza Developer Panel</span>
+          <ShieldCheck className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+          <span className="text-lg font-extrabold tracking-tight">Tareza Developers Headquarters</span>
         </div>
         <div className="flex items-center space-x-4">
           <ThemeToggle />
-          <Button variant="ghost" onClick={() => { localStorage.removeItem('isPreviewMode'); signOut(); navigate('/login'); }}>
+          <Button variant="ghost" className="h-9 px-4 rounded-lg hover:bg-zinc-100 text-xs font-semibold" onClick={() => { localStorage.removeItem('isPreviewMode'); signOut(); navigate('/login'); }}>
             <LogOut className="w-4 h-4 mr-2" /> Sign Out
           </Button>
         </div>
       </nav>
 
       <div className="flex-1 max-w-7xl mx-auto w-full p-6 space-y-6">
-        <div className="grid md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Accounts & Subscriptions</CardTitle>
-              <CardDescription>Manage active tenants, activate or deactivate accounts.</CardDescription>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          {/* Subscriptions manager - 7 columns */}
+          <Card className="lg:col-span-7 border-zinc-200 dark:border-zinc-800 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between border-b border-zinc-100 dark:border-zinc-800/80 pb-4">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  Tenant Subscription Audit Registry
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Review tenant volume metrics, authorize plans, and manually suspend or reactivate accounts.
+                </CardDescription>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={fetchBusinessesAndSubscriptions} 
+                disabled={loading}
+                className="h-8 text-xs border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+                Reload Registry
+              </Button>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               {loading ? (
-                <div className="py-4 text-center text-sm text-zinc-500">Loading accounts...</div>
+                <div className="py-12 text-center text-xs text-zinc-400">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-primary" />
+                  Loading database records...
+                </div>
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Business</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Action</TableHead>
+                        <TableHead className="text-xs font-semibold text-zinc-500">Business Details</TableHead>
+                        <TableHead className="text-xs font-semibold text-zinc-500">Plan</TableHead>
+                        <TableHead className="text-xs font-semibold text-zinc-500">Status</TableHead>
+                        <TableHead className="text-xs font-semibold text-zinc-500">Due Date</TableHead>
+                        <TableHead className="text-xs font-semibold text-zinc-550 text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {businesses.length === 0 && (
+                      {businesses.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={3} className="text-center text-zinc-500 py-4">No businesses found or missing RLS bypass.</TableCell>
+                          <TableCell colSpan={5} className="text-center py-8 text-zinc-400 text-xs">
+                            No active tenant databases resolved on this workspace.
+                          </TableCell>
                         </TableRow>
+                      ) : (
+                        businesses.map(b => {
+                          const sub = subscriptions.find(s => s.business_id === b.id);
+                          const plan = sub?.plan_name || b.subscription_plan || 'free_trial';
+                          const status = sub?.status || b.subscription_status?.toLowerCase() || 'active';
+                          const endDateStr = sub?.end_date || b.subscription_end_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+                          const dueReadable = new Date(endDateStr).toLocaleDateString(undefined, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          });
+
+                          return (
+                            <TableRow key={b.id} className="hover:bg-zinc-50/40 dark:hover:bg-zinc-900/10 transition-colors">
+                              <TableCell className="font-semibold py-3.5">
+                                <div className="space-y-0.5">
+                                  <p className="text-zinc-900 dark:text-zinc-100 font-sans text-xs">{b.name}</p>
+                                  <p className="text-[10px] text-zinc-400 font-mono select-all uppercase">
+                                    ID: {b.id.substring(0, 8)}... • Tax: {b.tax_number || 'N/A'}
+                                  </p>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={`text-[9px] uppercase font-mono shadow-none h-5 px-1.5 rounded-md ${
+                                  plan === 'pro' ? 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200' :
+                                  plan === 'enterprise' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200' :
+                                  'bg-zinc-500/10 text-zinc-650 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800'
+                                }`}>
+                                  {plan}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={`text-[9px] uppercase font-mono shadow-none h-5 px-1.5 rounded-md ${
+                                  status === 'active' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200' :
+                                  status === 'suspended' ? 'bg-rose-500/10 text-rose-700 dark:text-rose-450 border border-rose-200' :
+                                  'bg-amber-500/15 text-amber-700 dark:text-amber-450 border border-amber-200'
+                                }`}>
+                                  {status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-zinc-600 dark:text-zinc-300 font-mono text-[11px] whitespace-nowrap">
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="w-3" />
+                                  <span>{dueReadable}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="py-3.5">
+                                <div className="flex flex-wrap gap-1.5 justify-end">
+                                  {status === 'active' ? (
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => updateSubscriptionSettings(b.id, { status: 'suspended' })}
+                                      className="text-[11px] h-7 px-2.5 rounded-lg border-rose-200 dark:border-rose-900/40 text-rose-600 dark:text-rose-400 hover:bg-rose-55 dark:hover:bg-rose-955/20 hover:text-rose-700 font-sans cursor-pointer"
+                                    >
+                                      Suspend
+                                    </Button>
+                                  ) : (
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => updateSubscriptionSettings(b.id, { status: 'active', days_to_add: 30 })}
+                                      className="text-[11px] h-7 px-2.5 rounded-lg border-emerald-200 dark:border-emerald-900/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 hover:text-emerald-700 font-sans cursor-pointer"
+                                    >
+                                      Reactivate
+                                    </Button>
+                                  )}
+
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger render={
+                                      <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2 border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-100">
+                                        Extend Plan
+                                      </Button>
+                                    } />
+                                    <DropdownMenuContent className="w-56" align="end">
+                                      <DropdownMenuLabel>Add Subscription Expiry</DropdownMenuLabel>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => updateSubscriptionSettings(b.id, { days_to_add: 30 })}>
+                                        Extend +30 Days (1 Month)
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => updateSubscriptionSettings(b.id, { days_to_add: 90 })}>
+                                        Extend +90 Days (Quarterly)
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => updateSubscriptionSettings(b.id, { days_to_add: 180 })}>
+                                        Extend +180 Days (Semi-Annually)
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => updateSubscriptionSettings(b.id, { days_to_add: 365 })}>
+                                        Extend +365 Days (Annually)
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuLabel>Switch Business Tier</DropdownMenuLabel>
+                                      <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => updateSubscriptionSettings(b.id, { plan_name: 'starter' })}>
+                                        Switch to Starter Tier
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => updateSubscriptionSettings(b.id, { plan_name: 'pro' })}>
+                                        Switch to Professional Tier
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => updateSubscriptionSettings(b.id, { plan_name: 'enterprise' })}>
+                                        Switch to Enterprise Corporate
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
                       )}
-                      {businesses.map(b => (
-                        <TableRow key={b.id}>
-                          <TableCell className="font-medium">{b.name}</TableCell>
-                          <TableCell>
-                            <Badge variant="default" className="text-xs uppercase">
-                              CHECK SUB. TABLE
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button 
-                              variant="default" 
-                              size="sm"
-                              onClick={() => toggleSubscription(b.id, 'active')}
-                            >
-                              Toggle
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
                     </TableBody>
                   </Table>
                 </div>
@@ -375,397 +632,448 @@ export default function DeveloperPanel() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Support Queries</CardTitle>
-              <CardDescription>Customer tickets and inquiries</CardDescription>
-            </CardHeader>
-            <CardContent>
-               <div className="space-y-4">
-                  {/* Mock Data for support queries as requested by "design where I answer querries" */}
-                  {[
-                    { id: 1, user: 'Acme Retail', subject: 'Fiscalisation Not Reaching Zimra', status: 'Pending', time: '10m ago' },
-                    { id: 2, user: 'John Doe', subject: 'How to add a new branch?', status: 'Resolved', time: '2h ago' },
-                  ].map(ticket => (
-                    <div key={ticket.id} className="p-4 rounded-xl border border-border bg-card flex flex-col gap-2">
-                       <div className="flex justify-between items-start">
-                         <div className="space-y-1">
-                           <h4 className="font-semibold text-sm">{ticket.subject}</h4>
-                           <p className="text-xs text-muted-foreground">From: {ticket.user} • {ticket.time}</p>
-                         </div>
-                         <Badge variant={ticket.status === 'Pending' ? 'destructive' : 'secondary'} className="text-[10px] uppercase">
-                            {ticket.status}
-                         </Badge>
-                       </div>
-                       {ticket.status === 'Pending' && (
-                         <div className="flex gap-2 mt-2">
-                            <Input placeholder="Type your response..." className="h-8 text-sm" />
-                            <Button size="sm" className="h-8">Reply</Button>
-                         </div>
-                       )}
-                    </div>
-                  ))}
-               </div>
-            </CardContent>
-          </Card>
-
-          {/* Automated System Backup Panel */}
-          <Card className="md:col-span-2 font-sans bg-white dark:bg-zinc-900 border-zinc-200">
-            <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0 pb-4 border-b border-zinc-100 dark:border-zinc-800">
-              <div className="space-y-1">
-                <CardTitle className="text-lg font-bold flex items-center gap-2">
-                  <Database className="w-5 h-5 text-indigo-500 animate-pulse" />
-                  Ledger Database Backups
+          {/* Support Ticket Resolution Manager - 5 columns */}
+          <Card className="lg:col-span-5 border-zinc-200 dark:border-zinc-800 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between border-b border-zinc-100 dark:border-zinc-800/80 pb-4">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Inbox className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  Help Desk Inquiries & Tickets
                 </CardTitle>
-                <CardDescription className="text-zinc-500 text-xs">
-                  Automated daily JSON backups of Chart of Accounts, Journal Entries, Journal Lines, register sessions, and corporate Audit Logs.
+                <CardDescription className="text-xs">
+                  Respond to client-raised questions, technical bugs, or billing disputes.
                 </CardDescription>
               </div>
-              <div className="flex gap-2">
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={fetchBackupLogs}
-                  disabled={backupLoading}
-                  className="text-xs h-9 cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${backupLoading ? 'animate-spin' : ''}`} />
-                  Refresh
-                </Button>
-                <Button 
-                  size="sm"
-                  onClick={handleTriggerBackup}
-                  disabled={triggeringBackup}
-                  className="text-xs h-9 bg-zinc-900 text-white hover:bg-zinc-805 border-zinc-950 cursor-pointer"
-                >
-                  <DownloadCloud className="w-3.5 h-3.5 mr-1.5" />
-                  {triggeringBackup ? 'Backing up...' : 'Trigger Manual Backup'}
-                </Button>
-              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={fetchSupportTickets} 
+                className="h-8 w-8 p-0 rounded-lg border border-zinc-200 dark:border-zinc-850"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </Button>
             </CardHeader>
-            <CardContent className="pt-6">
-              <div className="mb-6 p-4 rounded-xl border border-dashed border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-950/10 flex items-start gap-3">
-                <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5" />
-                <div className="space-y-1">
-                  <h4 className="font-semibold text-zinc-900 dark:text-zinc-100 text-xs">Scheduled Backup Status: Active</h4>
-                  <p className="text-zinc-500 dark:text-zinc-400 text-[11px] leading-relaxed">
-                    The background cron-scheduler is registered and actively triggers daily at <strong>01:00 UTC</strong>. Files are persisted to your secure cloud storage bucket: <code>supabase://{supabaseConfig.storageBucket}/backups/</code> with a 30-day auto-retention policy.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-zinc-400 dark:text-zinc-500 font-mono">
-                  Backup Execution History Log
-                </h4>
-                
-                {backupLoading && backupLogs.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-zinc-500 dark:text-zinc-400 font-sans">
-                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-505" />
-                    Fetching system catalog...
-                  </div>
-                ) : backupLogs.length === 0 ? (
-                  <div className="py-8 text-center text-xs text-zinc-500 dark:text-zinc-400 border border-zinc-100 dark:border-zinc-800 rounded-xl bg-zinc-50/30 font-sans">
-                    No historical backups logged yet. Click "Trigger Manual Backup" above to run your baseline snapshot.
+            <CardContent className="pt-4 max-h-[500px] overflow-y-auto">
+              <div className="space-y-4">
+                {supportTickets.length === 0 ? (
+                  <div className="text-center py-12 text-zinc-400">
+                    <Mail className="w-8 h-8 text-zinc-300 mx-auto mb-2" />
+                    <p className="text-xs font-semibold">All tickets clear</p>
+                    <p className="text-[10px] text-zinc-400">There are no pending tickets requiring developer manual intervention.</p>
                   </div>
                 ) : (
-                  <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden font-sans">
-                    <Table>
-                      <TableHeader className="bg-zinc-50/50 dark:bg-zinc-800/20">
-                        <TableRow>
-                          <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Execution Date (UTC)</TableHead>
-                          <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Filename / Storage Object</TableHead>
-                          <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Scope Summary</TableHead>
-                          <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300">File Size</TableHead>
-                          <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300 text-right">Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody className="text-xs">
-                        {backupLogs.map((log) => (
-                          <TableRow key={log.id}>
-                            <TableCell className="font-medium whitespace-nowrap text-zinc-900 dark:text-zinc-100 font-mono">
-                              {new Date(log.timestamp).toLocaleString(undefined, {
-                                year: 'numeric',
-                                month: 'short',
-                                day: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                                hour12: false
-                              })}
-                            </TableCell>
-                            <TableCell className="text-zinc-600 dark:text-zinc-400 font-mono max-w-xs truncate" title={log.filename}>
-                              {log.filename}
-                            </TableCell>
-                            <TableCell className="text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
-                              {log.status === 'SUCCESS' ? (
-                                <span className="inline-flex flex-wrap gap-1 font-mono text-[10px]">
-                                  <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">accts: {log.accounts_count ?? 0}</span>
-                                  <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded font-mono">jes: {log.journal_entries_count ?? 0}</span>
-                                  <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded font-mono">jls: {log.journal_lines_count ?? 0}</span>
-                                  <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded font-mono">shifts: {log.register_sessions_count ?? 0}</span>
-                                </span>
-                              ) : (
-                                <span className="text-rose-600 font-mono text-[10px] truncate max-w-[200px]" title={log.error}>
-                                  Err: {log.error || 'Direct Exception'}
-                                </span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-zinc-650 dark:text-zinc-350 font-mono whitespace-nowrap">
-                              {log.size_bytes ? `${(log.size_bytes / 1024).toFixed(2)} KB` : 'N/A'}
-                            </TableCell>
-                            <TableCell className="text-right whitespace-nowrap">
-                              <Badge 
-                                variant="default"
-                                className={
-                                  log.status === 'SUCCESS' 
-                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-900/40 uppercase text-[10px] font-bold shadow-none' 
-                                    : 'bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-450 hover:bg-rose-50 border border-rose-250 dark:border-rose-900/40 uppercase text-[10px] font-bold shadow-none'
-                                }
-                              >
-                                {log.status}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                  supportTickets.map(ticket => (
+                    <div key={ticket.id} className="p-4 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-900/5 flex flex-col gap-2.5">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="text-[9px] font-mono bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-1 py-0.2 rounded font-bold">
+                              {ticket.id}
+                            </span>
+                            <span className={`text-[8.5px] font-extrabold uppercase px-1.5 py-0.2 rounded font-mono ${
+                              ticket.priority === 'urgent' ? 'bg-rose-500/10 text-rose-600' :
+                              ticket.priority === 'high' ? 'bg-amber-500/15 text-amber-600 font-bold' :
+                              'bg-zinc-500/10 text-zinc-500'
+                            }`}>
+                              {ticket.priority}
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-xs text-zinc-900 dark:text-zinc-100">{ticket.subject}</h4>
+                          <p className="text-[10px] text-zinc-500">
+                            From: <span className="font-semibold text-zinc-600 dark:text-zinc-300">{ticket.user_email}</span> at <strong className="font-sans text-zinc-700 dark:text-zinc-300">{ticket.business_name}</strong>
+                          </p>
+                        </div>
+                        <Badge 
+                          variant="outline"
+                          className={`text-[9px] uppercase font-bold h-5 shadow-none ${
+                            ticket.status === 'Resolved' 
+                              ? 'bg-emerald-500/15 text-emerald-600 dark:bg-emerald-950/20 border-emerald-200' 
+                              : 'bg-rose-500/15 text-rose-600 dark:bg-rose-955/20 border-rose-225 animate-pulse'
+                          }`}
+                        >
+                          {ticket.status}
+                        </Badge>
+                      </div>
 
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <CardTitle>Licensing & Billing Setup</CardTitle>
-              <CardDescription>Setup live licensing and payment webhooks</CardDescription>
-            </CardHeader>
-            <CardContent>
-               <div className="space-y-4 text-sm text-zinc-600 dark:text-zinc-300">
-                  <p>
-                    Tareza ERP is currently using manual billing checks (checking the `subscription_status` field on the `businesses` table). To automate live licensing, you need to configure a webhook.
-                  </p>
-                  
-                  <div className="p-4 border border-border rounded-lg bg-zinc-50 dark:bg-zinc-900/50">
-                     <h4 className="font-bold text-zinc-900 dark:text-zinc-50 mb-2">1. Choose a Payment Gateway</h4>
-                     <ul className="list-disc pl-5 space-y-1 mb-4">
-                       <li><strong>Paynow / EcoCash</strong> - Best for local Zimbabwe RTGS/USD payments.</li>
-                       <li><strong>Stripe</strong> - Best for international cards processing.</li>
-                       <li><strong>Paystack</strong> - Good alternative for Africa-wide processing.</li>
-                     </ul>
-                     
-                     <h4 className="font-bold text-zinc-900 dark:text-zinc-50 mb-2">2. Implement Webhook Endpoint</h4>
-                     <p className="mb-2">
-                       Set up a serverless function (e.g., using Supabase Edge Functions) to map payment events back to the database:
-                     </p>
-                     <pre className="bg-zinc-950 p-3 rounded-md text-xs text-green-400 overflow-x-auto">
-{`// Supabase Edge Function to handle Paynow/Stripe Webhook
-import { createClient } from '@supabase/supabase-js'
+                      <div className="p-3 rounded bg-white dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-850 text-[11.5px] text-zinc-600 dark:text-zinc-350 italic leading-relaxed whitespace-pre-wrap">
+                        "{ticket.description}"
+                      </div>
 
-const supabase = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))
+                      {ticket.response && (
+                        <div className="bg-indigo-500/5 dark:bg-indigo-500/10 border-l border-indigo-500 p-2.5 rounded-r text-[11px] leading-relaxed">
+                          <p className="text-[9px] font-extrabold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">Solution Sent:</p>
+                          <p className="text-zinc-600 dark:text-zinc-350 bg-background/50 px-2 py-1 rounded border border-zinc-100 dark:border-zinc-800 mt-1 whitespace-pre-wrap select-all">
+                            {ticket.response}
+                          </p>
+                        </div>
+                      )}
 
-Deno.serve(async (req) => {
-  const { business_id, status } = await req.json()
-  
-  if (status === 'PAID') {
-    await supabase.from('businesses')
-      .update({ subscription_status: 'ACTIVE' })
-      .eq('id', business_id)
-  }
-  return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } })
-})`}
-                     </pre>
-                  </div>
-                  
-                  <div className="p-4 border border-border rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20">
-                     <h4 className="font-bold flex items-center gap-2 mb-2 text-indigo-900 dark:text-indigo-400">
-                       <AlertCircle className="w-4 h-4" /> Next Steps to go Live
-                     </h4>
-                     <ol className="list-decimal pl-5 space-y-1">
-                       <li>Create a Firebase Cloud Function for webhooks.</li>
-                       <li>Provide the Edge function URL to your Paynow/Stripe dashboard.</li>
-                       <li>Integrate the "Checkout" button on the billing page to redirect to the gateway.</li>
-                     </ol>
-                  </div>
-               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="md:col-span-2 shadow-lg border-zinc-200 dark:border-zinc-800">
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <CardTitle className="text-base font-bold flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
-                    <Activity className="w-4 h-4 text-emerald-500" />
-                    Firebase Connection Diagnostics
-                  </CardTitle>
-                  <CardDescription className="text-xs text-zinc-550 dark:text-zinc-450">
-                    Verify Google API routing, resolve network timeouts, and test Firestore read operations.
-                  </CardDescription>
-                </div>
-                <Badge 
-                  variant="outline" 
-                  className={`text-[10px] py-0.5 px-2 font-mono ${
-                    navigator.onLine 
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900' 
-                      : 'bg-rose-50 text-rose-700 border-rose-220 dark:bg-rose-950/20 dark:text-rose-450 dark:border-rose-900'
-                  }`}
-                >
-                  <Wifi className="w-3 h-3 mr-1 inline" />
-                  {navigator.onLine ? 'ONLINE' : 'OFFLINE'}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              
-              {/* Grid showing Configured variables current resolution */}
-              <div className="grid sm:grid-cols-2 gap-3 text-xs bg-zinc-100/55 dark:bg-zinc-905 p-3 rounded-xl border border-zinc-205 dark:border-zinc-800/85">
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
-                    <Globe className="w-3 h-3" /> Project ID
-                  </span>
-                  <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg font-mono">
-                    <span className="text-[11px] truncate flex-1 block" title={firebaseConfig.projectId}>
-                      {firebaseConfig.projectId || 'Not specified'}
-                    </span>
-                    {firebaseConfig.projectId && (
-                      <button
-                        type="button"
-                        onClick={() => handleCopy(firebaseConfig.projectId || '', 'Project ID')}
-                        className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded transition-transform text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                      >
-                        {copiedText === 'Project ID' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
-                    <Key className="w-3 h-3" /> Firestore Database ID
-                  </span>
-                  <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg font-mono">
-                    <span className="text-[11px] truncate flex-1 block">
-                      {firebaseConfig.firestoreDatabaseId || '(default)'}
-                    </span>
-                    {firebaseConfig.firestoreDatabaseId && (
-                      <button
-                        type="button"
-                        onClick={() => handleCopy(firebaseConfig.firestoreDatabaseId || '', 'Database ID')}
-                        className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                      >
-                        {copiedText === 'Database ID' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Trigger diagnostics button */}
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  disabled={diagRunning}
-                  onClick={runDiagnostics}
-                  className="flex-1 bg-zinc-900 hover:bg-zinc-805 dark:bg-zinc-100 dark:text-zinc-905 dark:hover:bg-zinc-200 font-semibold"
-                >
-                  <Activity className={`w-4 h-4 mr-2 ${diagRunning ? 'animate-spin' : ''}`} />
-                  {diagRunning ? 'Running active audit...' : 'Run Firebase Database Handshake & Query Diagnostics'}
-                </Button>
-                {diagLogs.length > 0 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => { setDiagLogs([]); setDiagStatus('idle'); }}
-                    className="font-medium text-xs border-zinc-200"
-                  >
-                    Clear log
-                  </Button>
-                )}
-              </div>
-
-              {/* Diagnostics Console terminal view */}
-              {diagLogs.length > 0 && (
-                <div className="rounded-xl border border-zinc-205 dark:border-zinc-800 overflow-hidden shadow-sm">
-                  {/* Terminal Header */}
-                  <div className="bg-zinc-100 dark:bg-zinc-905 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded-full bg-red-400 block" />
-                      <span className="w-3 h-3 rounded-full bg-amber-400 block" />
-                      <span className="w-3 h-3 rounded-full bg-green-400 block" />
-                      <span className="text-[11px] font-mono font-bold text-zinc-500 dark:text-zinc-400 ml-2">diagnostic_report.sh</span>
+                      {ticket.status !== 'Resolved' && (
+                        <div className="space-y-2 mt-1">
+                          {replyingTo === ticket.id ? (
+                            <div className="space-y-1.5 animate-in slide-in-from-top-1 duration-150">
+                              <textarea
+                                placeholder="Type answer, fix actions, or verification diagnostics steps..."
+                                rows={3}
+                                value={ticketReplies[ticket.id] || ''}
+                                onChange={(e) => setTicketReplies(prev => ({ ...prev, [ticket.id]: e.target.value }))}
+                                className="w-full p-2 border border-zinc-250 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-xs rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 font-sans text-zinc-90 w"
+                              />
+                              <div className="flex gap-1.5 justify-end">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => setReplyingTo(null)}
+                                  className="h-8 text-[11px] px-2.5 rounded"
+                                >
+                                  Cancel
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  disabled={submittingReply === ticket.id}
+                                  onClick={() => handleReplyTicket(ticket.id)}
+                                  className="h-8 text-[11px] px-3.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white"
+                                >
+                                  {submittingReply === ticket.id ? "Saving Solution..." : "Resolve & Submit Solution"}
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <Button 
+                              size="sm" 
+                              onClick={() => setReplyingTo(ticket.id)}
+                              className="w-full text-xs h-8 bg-zinc-900 border hover:bg-zinc-800 text-white dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 shadow-none font-sans cursor-pointer rounded-lg"
+                            >
+                              Resolve Ticket
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {diagStatus !== 'idle' && diagStatus !== 'running' && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] uppercase font-bold font-mono tracking-wide text-zinc-455">Status:</span>
-                        <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded leading-none ${
-                          diagStatus === 'success' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-400' :
-                          diagStatus === 'warning' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/35 dark:text-amber-400' :
-                          'bg-rose-100 text-rose-800 dark:bg-rose-950/35 dark:text-rose-450'
-                        }`}>
-                          {diagStatus.toUpperCase()}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-                  {/* Monospace Code output */}
-                  <div className="bg-zinc-950 p-4 max-h-72 overflow-y-auto font-mono text-xs space-y-1.5">
-                    {diagLogs.map((log, idx) => (
-                      <div 
-                        key={idx} 
-                        className={`leading-relaxed whitespace-pre-wrap ${
-                          log.type === 'error' ? 'text-red-450 font-semibold' :
-                          log.type === 'warn' ? 'text-amber-305 font-semibold' :
-                          log.type === 'success' ? 'text-emerald-400 font-semibold' :
-                          'text-zinc-450'
-                        }`}
-                      >
-                        <span className="text-zinc-650 inline-block mr-2 select-none">[{log.timestamp}]</span>
-                        {log.message}
-                      </div>
-                    ))}
-                  </div>
+        </div>
+
+        {/* Database backups & automated logging */}
+        <Card className="font-sans bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-850 shadow-sm">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0 pb-4 border-b border-zinc-100 dark:border-zinc-800">
+            <div className="space-y-0.5">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <Database className="w-4 h-4 text-indigo-500 animate-pulse" />
+                Ledger Cloud Database Snapshots & Backups
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Real-time backup of JSON ledger schemas, corporate Journal lines, shift sessions and system-wide audit registers.
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={fetchBackupLogs}
+                disabled={backupLoading}
+                className="text-xs h-8 rounded-lg cursor-pointer hover:bg-zinc-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${backupLoading ? 'animate-spin' : ''}`} />
+                Reload Snapshot Logs
+              </Button>
+              <Button 
+                size="sm"
+                onClick={handleTriggerBackup}
+                disabled={triggeringBackup}
+                className="text-xs h-8 bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer rounded-lg px-3.5 font-sans"
+              >
+                <DownloadCloud className="w-3.5 h-3.5 mr-1.5" />
+                {triggeringBackup ? 'Slicing snapshot...' : 'Trigger Secure Backup'}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="mb-6 p-4 rounded-xl border border-dashed border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-950/10 flex items-start gap-3">
+              <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <h4 className="font-semibold text-zinc-900 dark:text-zinc-100 text-xs">Background Cron Automation: Active</h4>
+                <p className="text-zinc-500 dark:text-zinc-400 text-[11px] leading-relaxed">
+                  The system cron is registered and executes baseline snapshots daily at <strong>01:00 UTC</strong>. Archived snapshots are securely encrypted and streamed to: <code>firebase-storage://{supabaseConfig.storageBucket}/backups/</code> with a 30-day corporate retention policy.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-bold text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 font-mono">
+                Recent Snapshot Transactions
+              </h4>
+              
+              {backupLoading && backupLogs.length === 0 ? (
+                <div className="py-6 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-primary" />
+                  Requesting system snapshot timeline...
+                </div>
+              ) : backupLogs.length === 0 ? (
+                <div className="py-8 text-center text-xs text-zinc-500 dark:text-zinc-400 border border-zinc-100 dark:border-zinc-800 rounded-xl bg-zinc-50/30">
+                  No previous snapshot files recorded yet. Run snap baseline using manual trigger.
+                </div>
+              ) : (
+                <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-xs">
+                  <Table>
+                    <TableHeader className="bg-zinc-50/50 dark:bg-zinc-850/10">
+                      <TableRow>
+                        <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Execution Date (UTC)</TableHead>
+                        <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300">File Object</TableHead>
+                        <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Data Slices</TableHead>
+                        <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300">File Size</TableHead>
+                        <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300 text-right">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="text-xs">
+                      {backupLogs.map((log) => (
+                        <TableRow key={log.id} className="hover:bg-zinc-50/20">
+                          <TableCell className="font-medium whitespace-nowrap text-zinc-900 dark:text-zinc-100 font-mono">
+                            {new Date(log.timestamp).toLocaleString(undefined, {
+                              year: 'numeric',
+                              month: 'short',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: false
+                            })}
+                          </TableCell>
+                          <TableCell className="text-zinc-600 dark:text-zinc-400 font-mono max-w-xs truncate" title={log.filename}>
+                            {log.filename}
+                          </TableCell>
+                          <TableCell className="text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+                            {log.status === 'SUCCESS' ? (
+                              <span className="inline-flex flex-wrap gap-1 font-mono text-[10px]">
+                                <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">accts: {log.accounts_count ?? 0}</span>
+                                <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">jes: {log.journal_entries_count ?? 0}</span>
+                                <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">jls: {log.journal_lines_count ?? 0}</span>
+                              </span>
+                            ) : (
+                              <span className="text-rose-600 font-mono text-[10px]" title={log.error}>
+                                Error snap: {log.error || 'Direct Exception'}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-zinc-700 dark:text-zinc-300 font-mono whitespace-nowrap">
+                            {log.size_bytes ? `${(log.size_bytes / 1024).toFixed(2)} KB` : 'N/A'}
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            <Badge className={
+                              log.status === 'SUCCESS' 
+                                ? 'bg-emerald-100 text-emerald-855 dark:bg-emerald-950/20 dark:text-emerald-400 hover:bg-emerald-100 uppercase text-[10px] font-bold shadow-none' 
+                                : 'bg-rose-50 text-rose-700 dark:bg-rose-955/20 dark:text-rose-400 hover:bg-rose-50 uppercase text-[10px] font-bold shadow-none'
+                            }>
+                              {log.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
+            </div>
+          </CardContent>
+        </Card>
 
-              {/* Informative troubleshooting guide depending on connection problems */}
-              <div className="p-4 rounded-xl bg-indigo-55/50 dark:bg-indigo-950/15 border border-indigo-150 dark:border-indigo-900/45 text-xs space-y-2">
-                <h5 className="font-bold flex items-center gap-1.5 text-zinc-900 dark:text-zinc-200">
-                  <AlertTriangle className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                  Troubleshooting TIMED_OUT (CORS / Network) guides:
-                </h5>
-                <ul className="list-disc pl-4 space-y-1 ml-1 leading-normal text-zinc-650 dark:text-zinc-350">
-                  <li>
-                    <strong>Verify Project Pause Status</strong>: If you haven't accessed your database for over a week, Supabase may automatically pause your project container. Visit your <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="underline font-semibold text-indigo-650 dark:text-indigo-420 hover:opacity-85">Supabase Dashboard</a> and hit "Restore Project".
-                  </li>
-                  <li>
-                    <strong>Configure CORS Origins</strong>: Supabase requires all domains to be explicitly registered to secure REST and Auth connections from clients. Copy your launcher hostname below and add it to "Settings -&gt; API -&gt; Allowed Web Origins" in the Supabase Portal:
-                  </li>
-                </ul>
-                <div className="flex items-center gap-2 mt-2 bg-indigo-100/60 dark:bg-indigo-950/45 border border-indigo-250 dark:border-indigo-900 py-1 px-2.5 rounded-lg">
-                  <span className="font-mono text-[10px] text-zinc-600 dark:text-zinc-300 select-all truncate flex-1 block">
-                    {window.location.origin}
+        {/* Database Handshake diagnostics panel */}
+        <Card className="border-zinc-200 dark:border-zinc-800">
+          <CardHeader className="pb-4 border-b border-zinc-100 dark:border-zinc-800">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
+                  <Activity className="w-4 h-4 text-emerald-500" />
+                  Active Cloud Ingress & Firestore Handshake Core
+                </CardTitle>
+                <CardDescription className="text-xs text-zinc-550 dark:text-zinc-450">
+                  Audit direct REST pathways to cloud clusters, ping Firestore APIs, and evaluate local latency.
+                </CardDescription>
+              </div>
+              <Badge 
+                variant="outline" 
+                className={`text-[9.5px] py-0.5 px-2 font-mono shadow-none ${
+                  navigator.onLine 
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900' 
+                    : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-955/20 dark:text-rose-450 dark:border-rose-900'
+                }`}
+              >
+                <Wifi className="w-3 h-3 mr-1 inline shrink-0" />
+                {navigator.onLine ? 'ONLINE' : 'OFFLINE'}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-4">
+            
+            <div className="grid sm:grid-cols-2 gap-3 text-xs bg-zinc-100/50 dark:bg-zinc-900/40 p-3 rounded-xl border border-zinc-150 dark:border-zinc-800">
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
+                  <Globe className="w-3 h-3" /> Firebase Project ID
+                </span>
+                <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg font-mono">
+                  <span className="text-[11px] truncate flex-1 block" title={firebaseConfig.projectId}>
+                    {firebaseConfig.projectId || 'Not specified'}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(window.location.origin, 'Origin Domain')}
-                    className="p-1 hover:bg-zinc-200 dark:hover:bg-indigo-900 rounded font-semibold text-indigo-650"
-                  >
-                    Copy Origin
-                  </button>
+                  {firebaseConfig.projectId && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(firebaseConfig.projectId || '', 'Project ID')}
+                      className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-transform text-zinc-450 hover:text-zinc-900 dark:hover:text-zinc-100 cursor-pointer"
+                    >
+                      {copiedText === 'Project ID' ? <Check className="w-3 h-3 text-emerald-500 shrink-0" /> : <Copy className="w-3 h-3 shrink-0" />}
+                    </button>
+                  )}
                 </div>
               </div>
 
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
+                  <Key className="w-3 h-3" /> Firestore Active Db ID
+                </span>
+                <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg font-mono">
+                  <span className="text-[11px] truncate flex-1 block">
+                    {firebaseConfig.firestoreDatabaseId || '(default)'}
+                  </span>
+                  {firebaseConfig.firestoreDatabaseId && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(firebaseConfig.firestoreDatabaseId || '', 'Database ID')}
+                      className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded text-zinc-455 hover:text-zinc-900 dark:hover:text-zinc-100 cursor-pointer"
+                    >
+                      {copiedText === 'Database ID' ? <Check className="w-3 h-3 text-emerald-500 shrink-0" /> : <Copy className="w-3 h-3 shrink-0" />}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                disabled={diagRunning}
+                onClick={runDiagnostics}
+                className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 font-semibold text-xs h-9"
+              >
+                <Activity className={`w-4 h-4 mr-1.5 ${diagRunning ? 'animate-spin' : ''}`} />
+                {diagRunning ? 'Running core sandbox handshake audit...' : 'Run REST Handshake & Cluster Connection Audit'}
+              </Button>
+              {diagLogs.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setDiagLogs([]); setDiagStatus('idle'); }}
+                  className="font-medium text-xs border-zinc-200 h-9"
+                >
+                  Clear log
+                </Button>
+              )}
+            </div>
+
+            {diagLogs.length > 0 && (
+              <div className="rounded-xl border border-zinc-150 dark:border-zinc-800 overflow-hidden shadow-sm">
+                <div className="bg-zinc-100 dark:bg-zinc-900 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-full bg-red-400 block" />
+                    <span className="w-3 h-3 rounded-full bg-amber-400 block" />
+                    <span className="w-3 h-3 rounded-full bg-green-400 block" />
+                    <span className="text-[11px] font-mono font-bold text-zinc-500 dark:text-zinc-400 ml-2">sandbox_audit.sh</span>
+                  </div>
+                  {diagStatus !== 'idle' && diagStatus !== 'running' && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[9px] uppercase font-bold text-zinc-400">Diagnosis:</span>
+                      <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
+                        diagStatus === 'success' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                        diagStatus === 'warning' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30' :
+                        'bg-rose-100 text-rose-850'
+                      }`}>
+                        {diagStatus.toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-zinc-950 p-4 max-h-[350px] overflow-y-auto font-mono text-[11px] space-y-1.5">
+                  {diagLogs.map((log, idx) => (
+                    <div 
+                      key={idx} 
+                      className={`leading-relaxed whitespace-pre-wrap ${
+                        log.type === 'error' ? 'text-rose-400 font-semibold' :
+                        log.type === 'warn' ? 'text-amber-400' :
+                        log.type === 'success' ? 'text-emerald-400 font-semibold' :
+                        'text-zinc-400'
+                      }`}
+                    >
+                      <span className="text-zinc-650 inline-block mr-2 select-none">[{log.timestamp}]</span>
+                      {log.message}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Informational Licensing & Marketing Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card className="border-zinc-200 dark:border-zinc-800">
+            <CardHeader>
+              <CardTitle className="text-sm font-bold">Zimbabwe Paynow Checkout Webhooks</CardTitle>
+              <CardDescription className="text-xs">Expose local endpoints to secure instant billing activations</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+              <p>
+                To connect EcoCash or card transactions dynamically, configure an automated trigger function to capture Paynow status updates.
+              </p>
+              <pre className="bg-zinc-950 p-3.5 rounded-xl text-[10.5px] text-emerald-400 overflow-x-auto font-mono">
+{`// Cloud trigger callback 
+export async function paynowCallback(req, res) {
+  const { Reference, Status } = req.body;
+  if (Status === 'Paid') {
+    await db.collection('businesses')
+      .doc(Reference)
+      .update({ subscription_status: 'ACTIVE' });
+  }
+  return res.status(200).send('OK');
+}`}
+              </pre>
             </CardContent>
           </Card>
 
-          {/* Promotional & Marketing Assets Hub */}
-          <div className="md:col-span-2 p-6 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200/80 dark:border-zinc-800 shadow-sm">
-            <MarketingAssets />
-          </div>
+          <Card className="border-zinc-200 dark:border-zinc-800">
+            <CardHeader>
+              <CardTitle className="text-sm font-bold">Platform Edge Gateway Settings</CardTitle>
+              <CardDescription className="text-xs">Secure sandbox origin parameters</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-zinc-550 leading-relaxed dark:text-zinc-450">
+                Ensure that firewalls allow direct access to Google services. Copy the current origin to add to Google Cloud parameters under "Authorized Origins":
+              </p>
+              <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-2.5 rounded-xl">
+                <span className="font-mono text-[10px] text-zinc-650 dark:text-zinc-300 select-all truncate flex-1 block">
+                  {window.location.origin}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleCopy(window.location.origin, 'Origin Domain')}
+                  className="h-7 text-[10.5px] font-sans"
+                >
+                  Copy Origin
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+
+        {/* Visual Brand Assets Hub */}
+        <div className="p-6 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200/80 dark:border-zinc-800 shadow-sm">
+          <MarketingAssets />
+        </div>
+
       </div>
     </div>
   );

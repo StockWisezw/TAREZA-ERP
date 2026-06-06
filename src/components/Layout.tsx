@@ -100,7 +100,7 @@ export default function Layout() {
   const { signOut, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw';
+  const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw' || user?.email === 'dev@tarezaerp.co.zw';
   const [isLocked, setIsLocked] = React.useState(false);
   const [unlockPin, setUnlockPin] = React.useState('');
   

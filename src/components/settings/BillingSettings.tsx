@@ -34,6 +34,40 @@ import { Label } from '../ui/label';
 import { supabase } from '../../lib/supabaseClient';
 import { toast } from 'sonner';
 
+const CYCLES = {
+  monthly: { label: 'Monthly', months: 1, days: 30, discount: 0, suffix: 'mo' },
+  quarterly: { label: 'Quarterly', months: 3, days: 90, discount: 10, suffix: '3 mos' },
+  semi_annually: { label: 'Semi-Annually', months: 6, days: 180, discount: 15, suffix: '6 mos' },
+  annually: { label: 'Annually', months: 12, days: 365, discount: 20, suffix: '12 mos' }
+};
+
+const PLAN_BASE_PRICES = {
+  starter: 15,
+  pro: 50,
+  enterprise: 99
+};
+
+const getPlanPriceInfo = (plan: 'starter' | 'pro' | 'enterprise', cycle: 'monthly' | 'quarterly' | 'semi_annually' | 'annually') => {
+  const basePrice = PLAN_BASE_PRICES[plan];
+  const info = CYCLES[cycle];
+  const totalRaw = basePrice * info.months;
+  const discountAmount = totalRaw * (info.discount / 100);
+  const totalCost = Math.round(totalRaw - discountAmount);
+  const monthlyEquivalent = totalCost / info.months;
+  const savings = discountAmount;
+  
+  return {
+    basePrice,
+    totalCost,
+    monthlyEquivalent,
+    savings,
+    days: info.days,
+    months: info.months,
+    discount: info.discount,
+    label: info.label
+  };
+};
+
 export function BillingSettings() {
   const [businessData, setBusinessData] = useState<any>(null);
   const [subscription, setSubscription] = useState<any>(null);
@@ -44,6 +78,7 @@ export function BillingSettings() {
   const [isPaynowOpen, setIsPaynowOpen] = useState(false);
   const [selectedPlanCode, setSelectedPlanCode] = useState<'starter' | 'pro' | 'enterprise'>('pro');
   const [selectedPlanCost, setSelectedPlanCost] = useState<number>(50);
+  const [selectedCycle, setSelectedCycle] = useState<'monthly' | 'quarterly' | 'semi_annually' | 'annually'>('monthly');
   const [paynowCurrency, setPaynowCurrency] = useState<'USD' | 'ZiG'>('USD');
   const [mobileMethod, setMobileMethod] = useState<'ecocash' | 'innbucks' | 'onemoney' | 'visa'>('ecocash');
   const [mobileNumber, setMobileNumber] = useState('');
@@ -98,9 +133,11 @@ export function BillingSettings() {
   const isOverdue = planStatus === 'GRACE_PERIOD';
   const isAboutToDue = isOverdue || (daysLeft <= 5);
 
-  const handlePaynowInit = (plan: 'starter' | 'pro' | 'enterprise', cost: number) => {
+  const handlePaynowInit = (plan: 'starter' | 'pro' | 'enterprise', cycle: 'monthly' | 'quarterly' | 'semi_annually' | 'annually' = 'monthly') => {
+    const priceInfo = getPlanPriceInfo(plan, cycle);
     setSelectedPlanCode(plan);
-    setSelectedPlanCost(cost);
+    setSelectedPlanCost(priceInfo.totalCost);
+    setSelectedCycle(cycle);
     setMobileNumber(businessData?.phone || '');
     setSandboxStep('input');
     setPinCode('');
@@ -152,9 +189,10 @@ export function BillingSettings() {
         return;
       }
 
-      // Calculate future subscription end date: add 30 days securely
+      // Calculate future subscription end date: add corresponding cycle days securely
+      const priceInfo = getPlanPriceInfo(selectedPlanCode, selectedCycle);
       const baseDate = expiresAt && expiresAt.getTime() > Date.now() ? expiresAt : new Date();
-      const newExpiry = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+      const newExpiry = new Date(baseDate.getTime() + priceInfo.days * 24 * 60 * 60 * 1000);
 
       // 1. Update businesses table in Supabase
       const { error: buError } = await supabase.from('businesses')
@@ -235,9 +273,9 @@ export function BillingSettings() {
             <Button 
               onClick={() => handlePaynowInit(
                 subscription?.plan_name === 'starter' ? 'starter' : subscription?.plan_name === 'enterprise' ? 'enterprise' : 'pro',
-                subscription?.plan_name === 'starter' ? 15 : subscription?.plan_name === 'enterprise' ? 99 : 50
+                selectedCycle
               )}
-              className="bg-zinc-950 hover:bg-zinc-850 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 font-bold text-xs h-10 px-5 rounded-xl shadow-md border-none flex items-center gap-2"
+              className="bg-zinc-950 hover:bg-zinc-850 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 font-bold text-xs h-10 px-5 rounded-xl shadow-md border-none flex items-center gap-2 cursor-pointer"
             >
               <Smartphone className="w-4 h-4 text-emerald-500" />
               Pay Now with Paynow
@@ -272,9 +310,9 @@ export function BillingSettings() {
               variant="outline" 
               onClick={() => handlePaynowInit(
                 subscription?.plan_name === 'starter' ? 'starter' : subscription?.plan_name === 'enterprise' ? 'enterprise' : 'pro',
-                subscription?.plan_name === 'starter' ? 15 : subscription?.plan_name === 'enterprise' ? 99 : 50
+                selectedCycle
               )}
-              className="shrink-0 bg-white dark:bg-zinc-950 shadow-sm border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+              className="shrink-0 bg-white dark:bg-zinc-950 shadow-sm border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 cursor-pointer"
             >
                <CreditCard className="w-4 h-4 mr-2 text-zinc-400" /> Renew with Paynow
             </Button>
@@ -300,88 +338,193 @@ export function BillingSettings() {
               <div className="p-6 flex flex-col justify-center">
                  <p className="text-sm font-medium text-zinc-500 mb-1">Billing Cycle</p>
                  <div className="flex items-end gap-2">
-                    <h4 className="text-xl font-bold text-zinc-900 dark:text-white">{planCost} <span className="text-xs font-semibold text-zinc-400">/mo</span></h4>
+                    <h4 className="text-lg font-bold text-zinc-900 dark:text-white capitalize">
+                      {selectedCycle} Payments
+                    </h4>
                  </div>
-                 <p className="text-xs text-zinc-500 mt-2 font-medium">Billed on the 1st of every month.</p>
+                 <p className="text-xs text-zinc-500 mt-2 font-medium">
+                   {selectedCycle === 'monthly' ? 'Billed monthly.' : `Billed every ${CYCLES[selectedCycle].months} months with ${CYCLES[selectedCycle].discount}% discount.`}
+                 </p>
               </div>
            </div>
         </CardContent>
       </Card>
 
       {/* Available Plans Grid */}
-      <div className="space-y-4">
-        <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 uppercase tracking-widest px-1">Available Plans</h4>
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-1">
+          <div>
+            <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 uppercase tracking-widest font-sans">Available Plans</h4>
+            <p className="text-xs text-zinc-500 mt-1">Select the best business volume tier and save with custom billing terms.</p>
+          </div>
+          
+          {/* Cycle Tabs Selector - Monthly, Quarterly (10%), Semi-Annually (15%), Annually (20%) */}
+          <div className="flex bg-zinc-150/15 dark:bg-zinc-800 p-1 rounded-xl gap-1 max-w-full overflow-x-auto border border-zinc-200/50 dark:border-zinc-700/50">
+            {Object.keys(CYCLES).map((key) => {
+              const info = CYCLES[key as keyof typeof CYCLES];
+              const isSelected = selectedCycle === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSelectedCycle(key as any)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer select-none border-0 ${
+                    isSelected 
+                      ? 'bg-zinc-900 text-white dark:bg-zinc-950 dark:text-indigo-400 shadow-sm' 
+                      : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 bg-transparent'
+                  }`}
+                >
+                  <span>{info.label}</span>
+                  {info.discount > 0 && (
+                    <span className="ml-1 text-[9px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-extrabold animate-pulse">
+                      -{info.discount}%
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Starter Plan */}
-          <Card className="relative overflow-hidden border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm flex flex-col">
-            <CardHeader className="bg-zinc-50/50 dark:bg-zinc-900/50 pb-6 border-b border-zinc-100 dark:border-zinc-800">
-              <CardTitle className="text-lg font-bold text-zinc-800 dark:text-zinc-200">Starter</CardTitle>
-              <div className="mt-4 flex items-baseline text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight">
-                $15
-                <span className="ml-1 text-base font-medium text-zinc-500">/mo</span>
-              </div>
-              <CardDescription className="pt-3 text-zinc-650 dark:text-zinc-400 leading-relaxed font-medium">Perfect for small, single-location shops or kiosks.</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-4 flex-1">
-              <ul className="space-y-3 shrink-0 text-sm">
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">1 Branch / Warehouse</span></li>
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">3 User Accounts</span></li>
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Core POS & Inventory</span></li>
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Standard Support</span></li>
-              </ul>
-            </CardContent>
-            <CardFooter className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
-              <Button 
-                variant="outline" 
-                className="w-full border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-950" 
-                onClick={() => handlePaynowInit('starter', 15)}
-              >
-                Downgrade to Starter
-              </Button>
-            </CardFooter>
-          </Card>
+          {/* Starter Plan */}
+          {(() => {
+            const info = getPlanPriceInfo('starter', selectedCycle);
+            const isActive = planNameRaw === 'starter';
+            return (
+              <Card className={`relative overflow-hidden bg-white dark:bg-zinc-900 shadow-sm flex flex-col ${isActive ? 'border-zinc-900 dark:border-zinc-50' : 'border-zinc-200 dark:border-zinc-800'}`}>
+                <CardHeader className="bg-zinc-50/50 dark:bg-zinc-900/50 pb-6 border-b border-zinc-100 dark:border-zinc-850">
+                  <div className="flex justify-between items-start">
+                    <CardTitle className="text-lg font-bold text-zinc-805 dark:text-zinc-200 font-sans">Starter</CardTitle>
+                    {isActive && (
+                      <Badge className="bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 text-[10px] uppercase font-bold tracking-wider">
+                        Current
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-4 flex flex-col tracking-tight">
+                    <div className="flex items-baseline text-4xl font-extrabold text-zinc-900 dark:text-white">
+                      ${info.monthlyEquivalent.toFixed(2).replace('.00', '')}
+                      <span className="ml-1 text-base font-medium text-zinc-500 font-sans">/mo</span>
+                    </div>
+                    {selectedCycle !== 'monthly' && (
+                      <div className="text-xs text-emerald-650 dark:text-emerald-400 font-bold mt-1.5 flex items-center gap-1">
+                        <span>Billed as ${info.totalCost} for {info.months} mos</span>
+                        <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-[9px] px-1.5 py-0.5 rounded-full">
+                          Save ${info.savings.toFixed(0)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <CardDescription className="pt-3 text-zinc-550 dark:text-zinc-400 leading-relaxed font-semibold">Perfect for small, single-location shops or kiosks.</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-4 flex-1">
+                  <ul className="space-y-3 shrink-0 text-sm">
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">1 Branch / Warehouse</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">3 User Accounts</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Core POS & Inventory</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Standard Support</span></li>
+                  </ul>
+                </CardContent>
+                <CardFooter className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
+                  <Button 
+                    variant="outline" 
+                    className="w-full border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-950 cursor-pointer text-xs font-bold" 
+                    onClick={() => handlePaynowInit('starter', selectedCycle)}
+                  >
+                    Downgrade/Select Starter
+                  </Button>
+                </CardFooter>
+              </Card>
+            );
+          })()}
 
           {/* Consultancy Pro (Current standard selection) */}
-          <Card className="relative overflow-hidden border-indigo-500/50 dark:border-indigo-500/50 shadow-md flex flex-col scale-[1.02] bg-white dark:bg-zinc-900 ring-1 ring-indigo-500/20">
-            <div className="absolute top-0 right-0 bg-indigo-650 text-white text-[10px] font-bold px-3 py-1 uppercase tracking-widest rounded-bl-lg">
-              Target Choice
-            </div>
-            <CardHeader className="bg-indigo-500/5 dark:bg-indigo-500/5 pb-6 border-b border-indigo-500/10 dark:border-indigo-500/25">
-              <CardTitle className="text-lg font-bold text-indigo-650 dark:text-indigo-400">Consultancy Pro</CardTitle>
-              <div className="mt-4 flex items-baseline text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight">
-                $50
-                <span className="ml-1 text-base font-medium text-zinc-500 font-sans">/mo</span>
-              </div>
-              <CardDescription className="pt-3 text-zinc-650 dark:text-zinc-400 leading-relaxed font-medium">Physical stocktake support plus total Cloud ERP access.</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-4 flex-1">
-              <ul className="space-y-3 shrink-0 text-sm">
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">1 Monthly Stocktake Visit</span></li>
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">Up to 3 Branches / Warehouses</span></li>
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">Up to 10 User Accounts</span></li>
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">ZIMRA & tax readiness</span></li>
-              </ul>
-            </CardContent>
-            <CardFooter className="pt-6 border-t border-indigo-500/10 dark:border-indigo-500/25">
-              <Button 
-                onClick={() => handlePaynowInit('pro', 50)} 
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-sm"
-              >
-                {planNameRaw === 'pro' ? 'Renew Plan with Paynow' : 'Convert/Upgrade to Pro'}
-              </Button>
-            </CardFooter>
-          </Card>
+          {(() => {
+            const info = getPlanPriceInfo('pro', selectedCycle);
+            const isActive = planNameRaw === 'pro';
+            return (
+              <Card className="relative overflow-hidden border-indigo-500/50 dark:border-indigo-500/50 shadow-md flex flex-col scale-[1.02] bg-white dark:bg-zinc-900 ring-1 ring-indigo-500/20">
+                <div className="absolute top-0 right-0 bg-indigo-650 text-white text-[9px] font-extrabold px-3 py-1 uppercase tracking-widest rounded-bl-lg animate-pulse">
+                  Target Choice
+                </div>
+                <CardHeader className="bg-indigo-500/5 dark:bg-indigo-500/5 pb-6 border-b border-indigo-500/10 dark:border-indigo-500/25">
+                  <div className="flex justify-between items-start">
+                    <CardTitle className="text-lg font-bold text-indigo-650 dark:text-indigo-400">Consultancy Pro</CardTitle>
+                    {isActive && (
+                      <Badge className="bg-indigo-650 text-white dark:bg-indigo-400 dark:text-zinc-950 text-[10px] uppercase font-semibold">
+                        Current
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-4 flex flex-col tracking-tight">
+                    <div className="flex items-baseline text-4xl font-extrabold text-zinc-900 dark:text-white">
+                      ${info.monthlyEquivalent.toFixed(2).replace('.00', '')}
+                      <span className="ml-1 text-base font-medium text-zinc-500 font-sans">/mo</span>
+                    </div>
+                    {selectedCycle !== 'monthly' && (
+                      <div className="text-xs text-emerald-600 dark:text-emerald-400 font-bold mt-1.5 flex items-center gap-1">
+                        <span>Billed as ${info.totalCost} for {info.months} mos</span>
+                        <span className="bg-emerald-500/10 text-emerald-605 dark:text-emerald-404 font-mono text-[9px] px-1.5 py-0.5 rounded-full">
+                          Save ${info.savings.toFixed(0)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <CardDescription className="pt-3 text-zinc-650 dark:text-zinc-400 leading-relaxed font-medium">Physical stocktake support plus total Cloud ERP access.</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-4 flex-1">
+                  <ul className="space-y-3 shrink-0 text-sm">
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">1 Monthly Stocktake Visit</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">Up to 3 Branches / Warehouses</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">Up to 10 User Accounts</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">ZIMRA & tax readiness</span></li>
+                  </ul>
+                </CardContent>
+                <CardFooter className="pt-6 border-t border-indigo-500/10 dark:border-indigo-500/25">
+                  <Button 
+                    onClick={() => handlePaynowInit('pro', selectedCycle)} 
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-sm h-10 px-4 text-xs cursor-pointer rounded-xl border-none flex items-center justify-center gap-1"
+                  >
+                    {isActive ? `Renew (${selectedCycle}) with Paynow` : 'Convert/Upgrade to Pro'}
+                  </Button>
+                </CardFooter>
+              </Card>
+            );
+          })()}
 
           {/* Enterprise Plan */}
-          <Card className="relative overflow-hidden border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm flex flex-col">
-            <CardHeader className="bg-zinc-50/50 dark:bg-zinc-900/50 pb-6 border-b border-zinc-100 dark:border-zinc-800">
-              <CardTitle className="text-lg font-bold text-zinc-800 dark:text-zinc-200">Enterprise</CardTitle>
-              <div className="mt-4 flex items-baseline text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight">
-                $99
-                <span className="ml-1 text-base font-medium text-zinc-500">/mo</span>
-              </div>
-              <CardDescription className="pt-3 text-zinc-650 dark:text-zinc-400 leading-relaxed font-medium">Unlimited options for high volume franchise operations.</CardDescription>
-            </CardHeader>
+          {(() => {
+            const info = getPlanPriceInfo('enterprise', selectedCycle);
+            const isActive = planNameRaw === 'enterprise';
+            return (
+              <Card className={`relative overflow-hidden bg-white dark:bg-zinc-900 shadow-sm flex flex-col ${isActive ? 'border-zinc-900 dark:border-zinc-50' : 'border-zinc-200 dark:border-zinc-800'}`}>
+                <CardHeader className="bg-zinc-50/50 dark:bg-zinc-900/50 pb-6 border-b border-zinc-100 dark:border-zinc-805">
+                  <div className="flex justify-between items-start">
+                    <CardTitle className="text-lg font-bold text-zinc-805 dark:text-zinc-200 font-sans">Enterprise</CardTitle>
+                    {isActive && (
+                      <Badge className="bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 text-[10px] uppercase font-bold tracking-wider">
+                        Current
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-4 flex flex-col tracking-tight">
+                    <div className="flex items-baseline text-4xl font-extrabold text-zinc-900 dark:text-white">
+                      ${info.monthlyEquivalent.toFixed(2).replace('.00', '')}
+                      <span className="ml-1 text-base font-medium text-zinc-500 font-sans font-medium">/mo</span>
+                    </div>
+                    {selectedCycle !== 'monthly' && (
+                      <div className="text-xs text-emerald-650 dark:text-emerald-400 font-bold mt-1.5 flex items-center gap-1">
+                        <span>Billed as ${info.totalCost} for {info.months} mos</span>
+                        <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-[9px] px-1.5 py-0.5 rounded-full">
+                          Save ${info.savings.toFixed(0)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <CardDescription className="pt-3 text-zinc-650 dark:text-zinc-400 leading-relaxed font-semibold">Unlimited options for high volume franchise operations.</CardDescription>
+                </CardHeader>
             <CardContent className="pt-6 space-y-4 flex-1">
               <ul className="space-y-3 shrink-0 text-sm">
                 <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Unlimited Branches</span></li>
@@ -392,13 +535,15 @@ export function BillingSettings() {
             </CardContent>
             <CardFooter className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
               <Button 
-                className="w-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-950 dark:border border-zinc-800 shadow-sm" 
-                onClick={() => handlePaynowInit('enterprise', 99)}
+                className="w-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-950 dark:border border-zinc-800 shadow-sm cursor-pointer h-10 text-xs font-bold rounded-xl" 
+                onClick={() => handlePaynowInit('enterprise', selectedCycle)}
               >
-                Upgrade to Enterprise
+                Upgrade/Select Enterprise
               </Button>
             </CardFooter>
           </Card>
+            );
+          })()}
         </div>
       </div>
 
