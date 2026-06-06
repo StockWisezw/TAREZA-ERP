@@ -22,6 +22,7 @@ import DeveloperPanel from './pages/DeveloperPanel';
 import Reports from './pages/Reports';
 import CashManagement from './pages/CashManagement';
 import Accounting from './pages/Accounting';
+import Messenger from './pages/Messenger';
 import { Toaster } from './components/ui/sonner';
 import { syncRBZExchangeRates } from './services/currencyService';
 
@@ -51,7 +52,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Landing />} />
               <Route path="/login" element={<Login />} />
-              <Route path="/dev-portal" element={<DeveloperPanel />} />
+              <Route path="/dev-portal" element={<ProtectedRoute><DeveloperPanel /></ProtectedRoute>} />
               <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/pos" element={<POS />} />
@@ -63,6 +64,7 @@ export default function App() {
                 <Route path="/reports" element={<Reports />} />
                 <Route path="/cash" element={<CashManagement />} />
                 <Route path="/accounting" element={<Accounting />} />
+                <Route path="/messenger" element={<Messenger />} />
               </Route>
             </Routes>
           </BrowserRouter>

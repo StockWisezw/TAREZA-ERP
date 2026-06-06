@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
-import { Search, Plus, Filter, ClipboardList, CheckCircle2, Play, AlertTriangle, Settings, Calendar as CalendarIcon, Tag, Trash2, Check, RotateCcw, Landmark, Sparkles, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { Search, Plus, Filter, ClipboardList, CheckCircle2, Play, AlertTriangle, Settings, Calendar as CalendarIcon, Tag, Trash2, Check, RotateCcw, Landmark, Sparkles, RefreshCw, Eye, EyeOff, Printer } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, doc, db, getDoc, updateDoc } from '@/lib/supabaseClient';
 
 export function Stocktake() {
   const [stocktakes, setStocktakes] = useState<any[]>([]);
@@ -35,10 +35,80 @@ export function Stocktake() {
   const [savingProgress, setSavingProgress] = useState(false);
   const [reconciliationValuation, setReconciliationValuation] = useState<'cost' | 'sales'>('cost');
 
+  const [userBranchId, setUserBranchId] = useState<string | null>(null);
+  const [userBusinessId, setUserBusinessId] = useState<string | null>(null);
+  const [openSessionsList, setOpenSessionsList] = useState<any[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('');
+
   useEffect(() => {
     fetchStocktakes();
     fetchProducts();
+    loadUserContext();
   }, []);
+
+  const loadUserContext = async () => {
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user) return;
+
+      const { data: businessUserData } = await supabase
+        .from('business_users')
+        .select('business_id, branch_id')
+        .eq('user_id', userData.user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (businessUserData) {
+        setUserBusinessId(businessUserData.business_id);
+        setUserBranchId(businessUserData.branch_id);
+        
+        // Fetch open register_sessions
+        const { data: sessions } = await supabase
+          .from('register_sessions')
+          .eq('business_id', businessUserData.business_id)
+          .eq('branch_id', businessUserData.branch_id)
+          .eq('status', 'OPEN');
+        
+        if (sessions) {
+          setOpenSessionsList(sessions);
+          if (sessions.length > 0) {
+            setSelectedSessionId(sessions[0].id);
+          } else {
+            setSelectedSessionId('none');
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error loading user context for stocktaking:", err);
+    }
+  };
+
+  const calculateAuditDiscrepancies = (items: any[], branchId?: string) => {
+    let shortageAmount = 0;
+    let overageAmount = 0;
+
+    items.forEach(item => {
+      const branchInventory = branchId 
+        ? item.product?.inventory?.find((i: any) => i.branch_id === branchId)
+        : null;
+      const systemQty = branchInventory ? branchInventory.quantity : (item.product?.inventory?.[0]?.quantity || 0);
+      const countedQty = Number(item.counted_qty || 0);
+      const retailPrice = Number(item.product?.retail_price || 0);
+      const variance = countedQty - systemQty;
+
+      if (variance < 0) {
+        shortageAmount += Math.abs(variance) * retailPrice;
+      } else if (variance > 0) {
+        overageAmount += variance * retailPrice;
+      }
+    });
+
+    return {
+      shortageAmount,
+      overageAmount,
+      netVariance: overageAmount - shortageAmount
+    };
+  };
 
   const fetchProducts = async () => {
     try {
@@ -79,6 +149,10 @@ export function Stocktake() {
           completed_at,
           business_id,
           branch_id,
+          pos_session_id,
+          total_shortage,
+          total_overage,
+          charge_sales_posted,
           branches ( id, name )
         `)
         .order('started_at', { ascending: false });
@@ -220,10 +294,37 @@ export function Stocktake() {
   const handleApprove = async () => {
     if (!reviewItem) return;
     try {
+      const currentPosSessionId = reviewItem.pos_session_id;
+      if (!currentPosSessionId) {
+        throw new Error("Cannot approve stock discrepancies: A valid, open POS active register session must be selected and linked to this stocktake first.");
+      }
+
+      const { data: checkSession, error: checkSessionErr } = await supabase
+        .from('register_sessions')
+        .select('id, status')
+        .eq('id', currentPosSessionId)
+        .maybeSingle();
+
+      if (checkSessionErr || !checkSession) {
+        throw new Error("Could not verify the linked POS active register session. Please ensure a valid session is linked.");
+      }
+
+      if (checkSession.status !== 'OPEN') {
+        throw new Error("The linked POS register session is closed. Stock discrepancy submissions require linking to an active, OPEN cashier shift session.");
+      }
+
+      const branchId = reviewItem.branch_id || reviewItem.branches?.id;
+      const calcs = calculateAuditDiscrepancies(reviewItemsData, branchId);
+
       // 1. Update advanced header
       const { error: errorAdv } = await supabase
         .from('stocktakes_advanced')
-        .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
+        .update({ 
+          status: 'COMPLETED', 
+          completed_at: new Date().toISOString(),
+          total_shortage: calcs.shortageAmount,
+          total_overage: calcs.overageAmount
+        })
         .eq('id', reviewItem.id);
       
       if (errorAdv) throw errorAdv;
@@ -235,7 +336,6 @@ export function Stocktake() {
         .eq('id', reviewItem.id);
 
       // 3. Update active inventory quantities inside actual Inventory model.
-      const branchId = reviewItem.branch_id || reviewItem.branches?.id;
       const businessId = reviewItem.business_id;
 
       if (!branchId) {
@@ -295,13 +395,41 @@ export function Stocktake() {
   const handleDirectApprove = async (stId: string, items: any[]) => {
     try {
       setSavingProgress(true);
+
+      const currentPosSessionId = activeStocktake?.pos_session_id;
+      if (!currentPosSessionId) {
+        throw new Error("Cannot submit stock discrepancies: A valid, open POS active register session must be selected and linked to this stocktake first.");
+      }
+
+      const { data: checkSession, error: checkSessionErr } = await supabase
+        .from('register_sessions')
+        .select('id, status')
+        .eq('id', currentPosSessionId)
+        .maybeSingle();
+
+      if (checkSessionErr || !checkSession) {
+        throw new Error("Could not verify the linked POS active register session. Please ensure a valid session is linked.");
+      }
+
+      if (checkSession.status !== 'OPEN') {
+        throw new Error("The linked POS register session is closed. Stock discrepancy submissions require linking to an active, OPEN cashier shift session.");
+      }
+
       await saveCountedItemsToDB(stId, items);
       localStorage.setItem(`stocktake_counted_${stId}`, JSON.stringify(items));
+
+      const branchId = activeStocktake?.branch_id;
+      const calcs = calculateAuditDiscrepancies(items, branchId);
 
       // 1. Update advanced header
       const { error: errorAdv } = await supabase
         .from('stocktakes_advanced')
-        .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
+        .update({ 
+          status: 'COMPLETED', 
+          completed_at: new Date().toISOString(),
+          total_shortage: calcs.shortageAmount,
+          total_overage: calcs.overageAmount
+        })
         .eq('id', stId);
       
       if (errorAdv) throw errorAdv;
@@ -313,7 +441,6 @@ export function Stocktake() {
         .eq('id', stId);
 
       // 3. Update active inventory quantities inside actual Inventory model.
-      const branchId = activeStocktake?.branch_id;
       const businessId = activeStocktake?.business_id;
 
       if (!branchId) {
@@ -429,12 +556,31 @@ export function Stocktake() {
         throw new Error('Could not resolve business or branch context. Please ensure your user profile is fully configured.');
       }
 
+      if (!selectedSessionId || selectedSessionId === 'none') {
+        throw new Error("You MUST select and link a valid, open POS active register session to start stock auditing and record discrepancies.");
+      }
+
+      const { data: checkSession, error: checkSessionErr } = await supabase
+        .from('register_sessions')
+        .select('id, status')
+        .eq('id', selectedSessionId)
+        .maybeSingle();
+
+      if (checkSessionErr || !checkSession) {
+        throw new Error("Could not verify the selected POS active register session. Please ensure a valid session is selected.");
+      }
+
+      if (checkSession.status !== 'OPEN') {
+        throw new Error("The selected POS register session is closed. Stock discrepancy submissions require linking to an active, OPEN cashier shift session.");
+      }
+
       const insertData = {
         status: 'IN_PROGRESS',
         type: formData.get('type') as string,
         business_id: businessId,
         branch_id: branchId,
-        started_at: new Date().toISOString()
+        started_at: new Date().toISOString(),
+        pos_session_id: selectedSessionId !== 'none' ? selectedSessionId : null
       };
       
       const { data: newSt, error } = await supabase
@@ -827,14 +973,129 @@ export function Stocktake() {
             </div>
           </div>
 
-          <div className="p-6 bg-zinc-50 border-t border-zinc-200 flex justify-between items-center rounded-b-xl shrink-0">
-            <Button variant="outline" className="bg-white border-zinc-200" onClick={() => setReviewItem(null)}>Cancel</Button>
-            {reviewItem?.status === 'REVIEW' && (
-              <div className="flex gap-2">
-                <Button variant="outline" className="border-red-200 text-red-600 bg-red-50 hover:bg-red-100" onClick={handleReject}>Reject & Recount</Button>
-                <Button onClick={handleApprove} className="bg-zinc-900 text-white hover:bg-zinc-800">Approve & Write Changes</Button>
-              </div>
-            )}
+          <div className="p-6 bg-zinc-50 border-t border-zinc-200 flex flex-col sm:flex-row gap-4 justify-between items-center rounded-b-xl shrink-0">
+            <Button variant="outline" className="bg-white border-zinc-250 text-zinc-700 w-full sm:w-auto" onClick={() => setReviewItem(null)}>Close View</Button>
+            
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
+              {/* Print results button */}
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setTimeout(() => {
+                    window.print();
+                  }, 100);
+                }} 
+                className="bg-white border-zinc-300 text-zinc-700 hover:bg-zinc-50 font-semibold"
+              >
+                <Printer className="mr-1.5 h-4 w-4 text-zinc-500" /> Print Results
+              </Button>
+
+              {/* Charge POS Session button */}
+              {reviewItem?.status === 'COMPLETED' && reviewItem?.pos_session_id && !reviewItem?.charge_sales_posted && (
+                <Button 
+                  onClick={async () => {
+                    const calcs = calculateAuditDiscrepancies(reviewItemsData, reviewItem.branch_id || reviewItem.branches?.id);
+                    if (calcs.shortageAmount <= 0) {
+                      toast.info("There are no individual shortages in this stocktake to be charged to POS session.");
+                      return;
+                    }
+                    
+                    try {
+                      const sessRef = doc(db, 'register_sessions', reviewItem.pos_session_id);
+                      const sessSnap = await getDoc(sessRef);
+                      if (!sessSnap.exists()) {
+                        toast.error("Linked POS register session could not be retrieved from active database records.");
+                        return;
+                      }
+
+                      const sessData = sessSnap.data();
+                      if (sessData.status !== 'OPEN') {
+                        toast.error("Linked POS shift register session is closed. Stocktake adjustments can only be charged to open cashier shift sessions!");
+                        return;
+                      }
+
+                      // Post a custom sales receipt of the shortages to POS as sales
+                      const chargePayload = {
+                        receipt_number: `STK-CHG-${reviewItem.id.substring(0,8).toUpperCase()}`,
+                        receiptNumber: `STK-CHG-${reviewItem.id.substring(0,8).toUpperCase()}`,
+                        total: calcs.shortageAmount, 
+                        vat_total: 0,
+                        discount_total: 0,
+                        subtotal: calcs.shortageAmount,
+                        payment_method: 'stocktake_adjustment',
+                        payments: [{ method: 'stocktake_adjustment', amount: calcs.shortageAmount }],
+                        items: reviewItemsData.filter((i: any) => {
+                          const branchInventory = reviewItem?.branch_id 
+                            ? i.product?.inventory?.find((a: any) => a.branch_id === reviewItem.branch_id)
+                            : null;
+                          const systemQty = branchInventory ? branchInventory.quantity : (i.product?.inventory?.[0]?.quantity || 0);
+                          return Number(i.counted_qty || 0) < systemQty; 
+                        }).map((i: any) => {
+                          const branchInventory = reviewItem?.branch_id 
+                            ? i.product?.inventory?.find((a: any) => a.branch_id === reviewItem.branch_id)
+                            : null;
+                          const systemQty = branchInventory ? branchInventory.quantity : (i.product?.inventory?.[0]?.quantity || 0);
+                          const discrepancyQty = systemQty - Number(i.counted_qty || 0);
+                          const retailPrice = Number(i.product?.retail_price || 0);
+                          return {
+                            product: i.product,
+                            quantity: discrepancyQty,
+                            unitPrice: retailPrice,
+                            subtotal: discrepancyQty * retailPrice,
+                            vatAmount: 0
+                          };
+                        }),
+                        status: 'COMPLETED',
+                        business_id: reviewItem.business_id,
+                        branch_id: reviewItem.branch_id || reviewItem.branches?.id,
+                        created_at: new Date().toISOString()
+                      };
+
+                      // 1. Insert POS sale record
+                      const { error: saleErr } = await supabase.from('sales').insert([chargePayload]);
+                      if (saleErr) throw saleErr;
+
+                      // 2. Update active register session metrics
+                      const currentTotalSales = Number(sessData.sales_total || 0) + calcs.shortageAmount;
+                      const currentCountSales = Number(sessData.sales_count || 0) + 1;
+                      const currentExpectedObj = Number(sessData.expected_balance || 0) + calcs.shortageAmount;
+
+                      await updateDoc(sessRef, {
+                        sales_total: currentTotalSales,
+                        sales_count: currentCountSales,
+                        expected_balance: currentExpectedObj
+                      });
+
+                      // 3. Mark charge sales as posted inside advanced stocktake
+                      await supabase
+                        .from('stocktakes_advanced')
+                        .update({ charge_sales_posted: true })
+                        .eq('id', reviewItem.id);
+
+                      // 4. Trigger dispatch event for local POS session updates
+                      window.dispatchEvent(new Event('tareza-session-updated'));
+
+                      // 5. Update local state
+                      setReviewItem(prev => prev ? { ...prev, charge_sales_posted: true } : null);
+                      toast.success(`Success! Net shortage of $${calcs.shortageAmount.toFixed(2)} charged directly to POS Session.`);
+                      fetchStocktakes();
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to post charge to linked POS shift session.");
+                    }
+                  }}
+                  className="bg-indigo-650 hover:bg-indigo-700 text-white font-semibold"
+                >
+                  Charge Shortages to POS Session
+                </Button>
+              )}
+
+              {reviewItem?.status === 'REVIEW' && (
+                <>
+                  <Button variant="outline" className="border-red-200 text-red-650 bg-red-50 hover:bg-red-100 font-semibold" onClick={handleReject}>Reject & Recount</Button>
+                  <Button onClick={handleApprove} className="bg-zinc-900 text-white hover:bg-zinc-800 font-semibold">Approve & Write Changes</Button>
+                </>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -879,6 +1140,29 @@ export function Stocktake() {
                   Auto-load your complete product catalog with actual recorded stock. You only have to type correct values where discrepancies actually exist!
                 </span>
               </div>
+            </div>
+
+            <div className="space-y-1.5 mt-3">
+              <Label htmlFor="pos_session_id" className="text-xs font-semibold uppercase text-zinc-650">Link POS Active Register Session</Label>
+              {openSessionsList.length > 0 ? (
+                <Select value={selectedSessionId} onValueChange={(val) => setSelectedSessionId(val)}>
+                  <SelectTrigger className="border-zinc-200 bg-white text-zinc-800">
+                    <SelectValue placeholder="Select active shift session" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    {openSessionsList.map((session) => (
+                      <SelectItem key={session.id} value={session.id}>
+                        Shift Session #{session.id.substring(0, 8)} - Float: ${Number(session.opening_balance || 0).toFixed(2)}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="none">No Linked Session (Reconciliation Only)</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-800 text-[11px] leading-normal">
+                  <strong>Warning:</strong> No active register shift session found for this cashier or branch. Please start a cashier shift session first under Cash/POS Terminal to link stocktake reconciliations properly.
+                </div>
+              )}
             </div>
 
             <DialogFooter className="pt-4">
@@ -927,6 +1211,46 @@ export function Stocktake() {
           </div>
           
           <div className="p-4 sm:p-6 bg-zinc-50 space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
+            {/* Session verification warning bar */}
+            <div className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between bg-amber-500/10 p-3 rounded-lg border border-amber-500/20 text-xs shrink-0">
+              <div className="flex items-center gap-2">
+                <Landmark className="h-4 w-4 text-amber-600 shrink-0" />
+                <div>
+                  <span className="font-bold text-zinc-900 block sm:inline">Verification & Link POS Session: </span>
+                  <span className="text-zinc-650">Ensure this stocktake is charged to the correct active POS shift session.</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-600 font-semibold text-[11px] uppercase tracking-wide">Linked Session:</span>
+                <select
+                  value={activeStocktake?.pos_session_id || ''}
+                  onChange={async (e) => {
+                    const val = e.target.value;
+                    const valOrNull = val === '' ? null : val;
+                    const updatedStocktake = { ...activeStocktake, pos_session_id: valOrNull };
+                    setActiveStocktake(updatedStocktake);
+                    const { error } = await supabase
+                      .from('stocktakes_advanced')
+                      .update({ pos_session_id: valOrNull })
+                      .eq('id', activeStocktake.id);
+                    if (error) {
+                      toast.error("Failed to persist linked session structure to server database.");
+                    } else {
+                      toast.success("Linked POS shift session changed successfully!");
+                    }
+                  }}
+                  className="bg-white text-zinc-800 text-xs rounded border border-zinc-300 p-1 px-2 font-bold cursor-pointer hover:border-zinc-400 focus:outline-none"
+                >
+                  <option value="">-- No POS Session Linked --</option>
+                  {openSessionsList.map(sess => (
+                    <option key={sess.id} value={sess.id}>
+                      Shift #{sess.id?.substring(0, 8)} - Owner Cashier (Float: ${Number(sess.opening_balance).toFixed(2)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {/* Quick Actions & Barcode Input */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-white p-4 rounded-xl border border-zinc-200">
               <div className="md:col-span-6 relative space-y-1.5">
@@ -1295,6 +1619,25 @@ export function Stocktake() {
                 onClick={async () => {
                   if (!activeStocktake) return;
                   try {
+                    const currentPosSessionId = activeStocktake.pos_session_id;
+                    if (!currentPosSessionId) {
+                      throw new Error("Cannot submit stock discrepancies: A valid, open POS active register session must be selected and linked to this stocktake first.");
+                    }
+
+                    const { data: checkSession, error: checkSessionErr } = await supabase
+                      .from('register_sessions')
+                      .select('id, status')
+                      .eq('id', currentPosSessionId)
+                      .maybeSingle();
+
+                    if (checkSessionErr || !checkSession) {
+                      throw new Error("Could not verify the linked POS active register session. Please ensure a valid session is linked.");
+                    }
+
+                    if (checkSession.status !== 'OPEN') {
+                      throw new Error("The linked POS register session is closed. Stock discrepancy submissions require linking to an active, OPEN cashier shift session.");
+                    }
+
                     await saveCountedItemsToDB(activeStocktake.id, countedItems);
                     localStorage.setItem(`stocktake_counted_${activeStocktake.id}`, JSON.stringify(countedItems));
                     
@@ -1328,6 +1671,198 @@ export function Stocktake() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 5. Custom Cross-Browser Print Style Injection */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #stocktake-printable-area, #stocktake-printable-area * {
+            visibility: visible !important;
+          }
+          #stocktake-printable-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            z-index: 9999999 !important;
+            display: block !important;
+            background: white !important;
+            color: black !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      ` }} />
+
+      {/* 6. Printable Stock Audits & Discrepancy Sheet Container */}
+      <div id="stocktake-printable-area" className="hidden print:block p-8 bg-white text-black font-sans leading-relaxed text-sm">
+        {/* Elegant Header */}
+        <div className="border-b-2 border-zinc-950 pb-6 mb-6">
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-2xl font-black uppercase tracking-tight text-zinc-900">TAREZA ERP - STOCK AUDIT RECONCILIATION VOUCHER</h1>
+              <p className="text-[10px] text-zinc-500 font-mono mt-0.5 uppercase tracking-wide">GENERATED SECURELY VIA SYSTEM INVENTORY CONTROL CONTROLLER</p>
+            </div>
+            <div className="text-right">
+              <span className="inline-block px-3 py-1 bg-zinc-950 text-white font-mono text-xs font-bold rounded">
+                AUDIT ID: {reviewItem?.id?.substring(0, 12).toUpperCase()}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Info grid */}
+        <div className="grid grid-cols-2 gap-6 pb-6 border-b border-zinc-300 text-xs text-zinc-800">
+          <div className="space-y-1">
+            <p className="text-zinc-500 font-black uppercase tracking-wider text-[9px]">Audit Identification details</p>
+            <p><strong className="text-zinc-900">Strategy Category:</strong> {reviewItem?.type || 'FULL AUDIT'}</p>
+            <p><strong className="text-zinc-900">Target Branch ID:</strong> {reviewItem?.branches?.name || 'Central Head Office'}</p>
+            <p><strong className="text-zinc-900">Status Code:</strong> {reviewItem?.status || 'COMPLETED'}</p>
+          </div>
+          <div className="space-y-1 text-right">
+            <p className="text-zinc-500 font-black uppercase tracking-wider text-[9px]">Audit Timelines & POS shift context</p>
+            <p><strong className="text-zinc-900">Date Opened:</strong> {reviewItem?.started_at ? new Date(reviewItem.started_at).toLocaleString() : 'N/A'}</p>
+            <p><strong className="text-zinc-900">Date Finalized:</strong> {reviewItem?.completed_at ? new Date(reviewItem.completed_at).toLocaleString() : 'N/A'}</p>
+            <p><strong className="text-zinc-900">Charged POS Shift Session:</strong> {reviewItem?.pos_session_id ? `#${reviewItem.pos_session_id.substring(0, 12)}` : 'None linked to register'}</p>
+          </div>
+        </div>
+
+        {/* Items Discrepancy Table */}
+        <div className="my-6">
+          <h3 className="text-xs font-black uppercase tracking-wider text-zinc-700 mb-2.5">Discrepancy Audit Quantitative Breakdown</h3>
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b-2 border-zinc-400 bg-zinc-50 text-[10px] font-black uppercase text-zinc-500">
+                <th className="py-2.5 px-2">Item Name & SKU Code</th>
+                <th className="py-2.5 px-2 text-right">System expected</th>
+                <th className="py-2.5 px-2 text-right">Physical Count</th>
+                <th className="py-2.5 px-2 text-right">Variance Delta</th>
+                <th className="py-2.5 px-2 text-right">Selling Price</th>
+                <th className="py-2.5 px-2 text-right">Shortage Value</th>
+                <th className="py-2.5 px-2 text-right">Overage Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reviewItemsData && reviewItemsData.length > 0 ? (
+                reviewItemsData.map((item: any, idx: number) => {
+                  const branchInventory = reviewItem?.branch_id 
+                    ? item.product?.inventory?.find((i: any) => i.branch_id === reviewItem.branch_id)
+                    : null;
+                  const systemQty = branchInventory ? branchInventory.quantity : (item.product?.inventory?.[0]?.quantity || 0);
+                  const countedQty = Number(item.counted_qty || 0);
+                  const variance = countedQty - systemQty;
+                  const retailPrice = Number(item.product?.retail_price || 0);
+
+                  let shortageVal = 0;
+                  let overageVal = 0;
+
+                  if (variance < 0) {
+                    shortageVal = Math.abs(variance) * retailPrice;
+                  } else if (variance > 0) {
+                    overageVal = variance * retailPrice;
+                  }
+
+                  return (
+                    <tr key={idx} className="border-b border-zinc-200 text-zinc-800 text-[11px]">
+                      <td className="py-2 px-2">
+                        <div className="font-bold text-zinc-900">{item.product?.name}</div>
+                        <div className="text-[10px] text-zinc-450 font-mono">SKU: {item.product?.sku || 'N/A'}</div>
+                      </td>
+                      <td className="py-2 px-2 text-right font-mono text-zinc-700">{systemQty}</td>
+                      <td className="py-2 px-2 text-right font-mono text-zinc-900 font-bold">{countedQty}</td>
+                      <td className={`py-2 px-2 text-right font-mono font-semibold ${variance < 0 ? 'text-red-650' : variance > 0 ? 'text-emerald-700' : 'text-zinc-450'}`}>
+                        {variance > 0 ? `+${variance}` : variance === 0 ? '0' : variance}
+                      </td>
+                      <td className="py-2 px-2 text-right font-mono text-zinc-700">${retailPrice.toFixed(2)}</td>
+                      <td className={`py-2 px-2 text-right font-mono ${shortageVal > 0 ? 'text-red-700 font-bold' : 'text-zinc-300'}`}>
+                        {shortageVal > 0 ? `$${shortageVal.toFixed(2)}` : '-'}
+                      </td>
+                      <td className={`py-2 px-2 text-right font-mono ${overageVal > 0 ? 'text-emerald-800 font-bold' : 'text-zinc-300'}`}>
+                        {overageVal > 0 ? `$${overageVal.toFixed(2)}` : '-'}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={7} className="py-4 text-center text-zinc-400 font-medium">No inventory counted line items logged in this session report.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Financial Rec Reconciliation */}
+        {(() => {
+          const calcs = calculateAuditDiscrepancies(reviewItemsData, reviewItem?.branch_id);
+          return (
+            <div className="grid grid-cols-2 gap-6 my-6 border-b border-zinc-300 pb-6">
+              <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-lg">
+                <p className="text-[10px] font-black uppercase text-zinc-500 tracking-wider">Adjustment Ledger Reconciliation Summary</p>
+                <div className="mt-2.5 space-y-1.5 text-xs text-zinc-850">
+                  <p className="flex justify-between">
+                    <span>Gross Individual Shortages:</span>
+                    <strong className="text-red-655 font-mono text-sm">${calcs.shortageAmount.toFixed(2)}</strong>
+                  </p>
+                  <p className="flex justify-between">
+                    <span>Gross Individual Overs/Surpluses:</span>
+                    <strong className="text-emerald-800 font-mono text-sm">${calcs.overageAmount.toFixed(2)}</strong>
+                  </p>
+                  <div className="border-t border-zinc-250 my-1 pb-0.5"></div>
+                  <div className="flex justify-between font-black text-[13px] pt-1">
+                    <span>Charged to POS Shift (Shortages - Sales):</span>
+                    <span className="text-zinc-950 font-mono">
+                      ${calcs.shortageAmount.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-lg flex flex-col justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase text-zinc-500 tracking-wider">POS Register Session Audit Trail</p>
+                  <p className="text-xs text-zinc-700 mt-2 font-medium leading-relaxed">
+                    {reviewItem?.pos_session_id ? (
+                      reviewItem?.charge_sales_posted ? (
+                        <span className="text-emerald-800 font-black block">
+                          ✓ CHARGED & POSTED: This discrepancy's gross individual shortages have been successfully posted to active POS Register Shift Session #{reviewItem.pos_session_id.substring(0,8)} as standard sales checkout lines.
+                        </span>
+                      ) : (
+                        <span className="text-amber-850 font-black block">
+                          ⚠️ PENDING POSTING: This audit is linked to active POS session #{reviewItem.pos_session_id.substring(0,8)}. The associated individual shortages of ${calcs.shortageAmount.toFixed(2)} are pending manual checkout posting and approval by shift manager.
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-red-750 font-black block">
+                        ⚠️ NO CASHIER REGISTER SHIFT LINKED: This stocktake was completed without linking an active register shift. Discrepant shortages could not be direct-charged as cashier shift sales.
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className="text-[10px] text-zinc-550 border-t border-zinc-200 pt-1.5 font-mono">
+                  Branch Name: {reviewItem?.branches?.name || 'Main branch office'}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Sign-off Authorization */}
+        <div className="grid grid-cols-2 gap-12 mt-12 text-xs pt-8 border-t border-dashed border-zinc-300">
+          <div>
+            <p className="border-b border-zinc-400 h-10 w-48"></p>
+            <p className="mt-1 font-bold text-zinc-800 text-[11px] uppercase tracking-wide">Physical Stock Count Auditor</p>
+            <p className="text-[10px] text-zinc-500">NAME AND SIGNATURE / TIME DATE</p>
+          </div>
+          <div className="text-right flex flex-col items-end">
+            <p className="border-b border-zinc-400 h-10 w-48"></p>
+            <p className="mt-1 font-bold text-zinc-800 text-[11px] uppercase tracking-wide">Manager / Approved Cashier Sign-off</p>
+            <p className="text-[10px] text-zinc-500">SIGN-OFF AUTHORIZATION / DATE</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

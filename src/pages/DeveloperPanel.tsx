@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 import { 
   ShieldCheck, 
   LogOut, 
@@ -21,7 +23,8 @@ import {
   Check,
   Eye,
   EyeOff,
-  Server
+  Server,
+  Lock
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -35,9 +38,16 @@ import { toast } from 'sonner';
 const supabaseConfig = { storageBucket: 'tareza-backups' };
 
 export default function DeveloperPanel() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const { user, loading: authLoading, signOut } = useAuth();
+  const navigate = useNavigate();
+  const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw';
+
+  useEffect(() => {
+    if (isDeveloper) {
+      fetchBusinesses();
+      fetchBackupLogs();
+    }
+  }, [isDeveloper]);
 
   const [businesses, setBusinesses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -179,16 +189,7 @@ export default function DeveloperPanel() {
     setDiagRunning(false);
   };
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (email === 'tapsforex@gmail.com' && password === 'taps1302??') {
-      setIsAuthenticated(true);
-      fetchBusinesses();
-      fetchBackupLogs();
-    } else {
-      toast.error("Invalid credentials.");
-    }
-  };
+
 
   const fetchBackupLogs = async () => {
     setBackupLoading(true);
@@ -258,10 +259,19 @@ export default function DeveloperPanel() {
     }
   };
 
-  if (!isAuthenticated) {
+  if (authLoading) {
     return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
-        {/* Navigation bar on unauthenticated layout to change theme */}
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col items-center justify-center animate-fade-in font-sans">
+        <RefreshCw className="w-8 h-8 animate-spin text-primary mb-4" />
+        <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium">Checking Developer Credentials...</p>
+      </div>
+    );
+  }
+
+  if (!isDeveloper) {
+    return (
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col font-sans">
+        {/* Navigation bar on unauthorized layout to change theme */}
         <nav className="w-full border-b bg-background px-6 py-3 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <ShieldCheck className="w-5 h-5 text-primary" />
@@ -271,233 +281,34 @@ export default function DeveloperPanel() {
         </nav>
 
         <div className="flex-1 flex items-center justify-center p-4 md:p-8">
-          <div className="max-w-6xl w-full grid lg:grid-cols-12 gap-8 items-start">
-            
-            {/* Left Column: Sign In Form */}
-            <div className="lg:col-span-5 space-y-4">
-              <Card className="shadow-lg border-zinc-250 dark:border-zinc-800">
-                <CardHeader className="text-center space-y-2">
-                  <div className="mx-auto bg-primary/10 p-3 rounded-full w-14 h-14 flex items-center justify-center">
-                    <ShieldCheck className="w-7 h-7 text-primary" />
-                  </div>
-                  <CardTitle className="text-xl">Developer Sign In</CardTitle>
-                  <CardDescription>Enter admin credentials to authenticate the session</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleLogin} className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold text-zinc-650 dark:text-zinc-400">Username</label>
-                      <Input 
-                         type="email" 
-                         value={email} 
-                         onChange={e => setEmail(e.target.value)} 
-                         placeholder="tapsforex@gmail.com" 
-                         required
-                         className="h-10"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold text-zinc-650 dark:text-zinc-400">Password</label>
-                      <Input 
-                         type="password" 
-                         value={password} 
-                         onChange={e => setPassword(e.target.value)} 
-                         required
-                         className="h-10"
-                      />
-                    </div>
-                    <Button type="submit" className="w-full h-10 mt-2 font-medium">
-                      Authenticate Panel
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-
-              <div className="p-4 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-900/30 text-xs text-zinc-500 leading-relaxed text-center">
-                Need developer console access? Live network testing and CORS preflight triggers are available on the right to assist with staging connection configurations.
-              </div>
+          <Card className="max-w-md w-full shadow-lg border-zinc-200 dark:border-zinc-800 text-center p-8 rounded-2xl bg-card">
+            <div className="mx-auto bg-rose-50 dark:bg-rose-950/20 p-4 rounded-full w-16 h-16 flex items-center justify-center mb-6 border border-rose-100 dark:border-rose-900/50">
+              <Lock className="w-8 h-8 text-rose-600 dark:text-rose-400" />
             </div>
-
-            {/* Right Column: Connection Diagnostics Terminal */}
-            <div className="lg:col-span-7">
-              <Card className="shadow-lg border-zinc-200 dark:border-zinc-800">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <CardTitle className="text-base font-bold flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
-                        <Activity className="w-4 h-4 text-emerald-500" />
-                        Firebase Connection Diagnostics
-                      </CardTitle>
-                      <CardDescription className="text-xs text-zinc-500 dark:text-zinc-450">
-                        Verify Google API routing, resolve network timeouts, and test Firestore read operations.
-                      </CardDescription>
-                    </div>
-                    <Badge 
-                      variant="outline" 
-                      className={`text-[10px] py-0.5 px-2 font-mono ${
-                        navigator.onLine 
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900' 
-                          : 'bg-rose-50 text-rose-700 border-rose-220 dark:bg-rose-950/20 dark:text-rose-450 dark:border-rose-900'
-                      }`}
-                    >
-                      <Wifi className="w-3 h-3 mr-1 inline" />
-                      {navigator.onLine ? 'ONLINE' : 'OFFLINE'}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  
-                  {/* Grid showing Configured variables current resolution */}
-                  <div className="grid sm:grid-cols-2 gap-3 text-xs bg-zinc-100/55 dark:bg-zinc-905 p-3 rounded-xl border border-zinc-205 dark:border-zinc-800/85">
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
-                        <Globe className="w-3 h-3" /> Project ID
-                      </span>
-                      <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg font-mono">
-                        <span className="text-[11px] truncate flex-1 block" title={firebaseConfig.projectId}>
-                          {firebaseConfig.projectId || 'Not specified'}
-                        </span>
-                        {firebaseConfig.projectId && (
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(firebaseConfig.projectId || '', 'Project ID')}
-                            className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded transition-transform text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                          >
-                            {copiedText === 'Project ID' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase font-mono flex items-center gap-1">
-                        <Key className="w-3 h-3" /> Firestore Database ID
-                      </span>
-                      <div className="flex items-center gap-1.5 bg-background border border-zinc-200 dark:border-zinc-800 py-1.5 px-2.5 rounded-lg font-mono">
-                        <span className="text-[11px] truncate flex-1 block">
-                          {firebaseConfig.firestoreDatabaseId || '(default)'}
-                        </span>
-                        {firebaseConfig.firestoreDatabaseId && (
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(firebaseConfig.firestoreDatabaseId || '', 'Database ID')}
-                            className="p-1 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                          >
-                            {copiedText === 'Database ID' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Trigger diagnostics button */}
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      disabled={diagRunning}
-                      onClick={runDiagnostics}
-                      className="flex-1 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 font-semibold"
-                    >
-                      <Activity className={`w-4 h-4 mr-2 ${diagRunning ? 'animate-spin' : ''}`} />
-                      {diagRunning ? 'Testing connections & latency...' : 'Run Comprehensive Connection Ping & Health Check'}
-                    </Button>
-                    {diagLogs.length > 0 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => { setDiagLogs([]); setDiagStatus('idle'); }}
-                        className="font-medium text-xs border-zinc-200"
-                      >
-                        Clear console
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* Diagnostics Console terminal view */}
-                  {diagLogs.length > 0 && (
-                    <div className="rounded-xl border border-zinc-205 dark:border-zinc-800 overflow-hidden shadow-sm">
-                      {/* Terminal Header */}
-                      <div className="bg-zinc-100 dark:bg-zinc-905 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-3 h-3 rounded-full bg-red-400 block" />
-                          <span className="w-3 h-3 rounded-full bg-amber-400 block" />
-                          <span className="w-3 h-3 rounded-full bg-green-400 block" />
-                          <span className="text-[11px] font-mono font-bold text-zinc-500 dark:text-zinc-400 ml-2">diagnostic_report.sh</span>
-                        </div>
-                        {diagStatus !== 'idle' && diagStatus !== 'running' && (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] uppercase font-bold font-mono tracking-wide text-zinc-450">Status:</span>
-                            <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded leading-none ${
-                              diagStatus === 'success' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-400' :
-                              diagStatus === 'warning' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/35 dark:text-amber-400' :
-                              'bg-rose-100 text-rose-800 dark:bg-rose-950/35 dark:text-rose-450'
-                            }`}>
-                              {diagStatus.toUpperCase()}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Monospace Code output */}
-                      <div className="bg-zinc-950 p-4 max-h-72 overflow-y-auto font-mono text-xs space-y-1.5">
-                        {diagLogs.map((log, idx) => (
-                          <div 
-                            key={idx} 
-                            className={`leading-relaxed whitespace-pre-wrap ${
-                              log.type === 'error' ? 'text-red-450 font-semibold' :
-                              log.type === 'warn' ? 'text-amber-300 font-semibold' :
-                              log.type === 'success' ? 'text-emerald-400 font-semibold' :
-                              'text-zinc-400'
-                            }`}
-                          >
-                            <span className="text-zinc-650 inline-block mr-2 select-none">[{log.timestamp}]</span>
-                            {log.message}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Informative troubleshooting guide depending on connection problems */}
-                  <div className="p-4 rounded-xl bg-indigo-55/50 dark:bg-indigo-950/15 border border-indigo-100 dark:border-indigo-900/40 text-xs space-y-2">
-                    <h5 className="font-bold flex items-center gap-1.5 text-zinc-900 dark:text-zinc-200">
-                      <AlertTriangle className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                      Troubleshooting TIMED_OUT (CORS / Network) guides:
-                    </h5>
-                    <ul className="list-disc pl-4 space-y-1 ml-1 leading-normal text-zinc-600 dark:text-zinc-350">
-                      <li>
-                        <strong>Verify Project Pause Status</strong>: If you haven't accessed your database for over a week, Supabase may automatically pause your project container. Visit your <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="underline font-semibold text-indigo-600 dark:text-indigo-450 hover:opacity-85">Supabase Dashboard</a> and hit "Restore Project".
-                      </li>
-                      <li>
-                        <strong>Configure CORS Origins</strong>: Supabase requires all domains to be explicitly registered to secure REST and Auth connections from clients. Copy your launcher hostname below and add it to "Settings -&gt; API -&gt; Allowed Web Origins" in the Supabase Portal:
-                      </li>
-                    </ul>
-                    <div className="flex items-center gap-2 mt-2 bg-indigo-100/60 dark:bg-indigo-950/45 border border-indigo-250 dark:border-indigo-900 py-1 px-2.5 rounded-lg">
-                      <span className="font-mono text-[10px] text-zinc-600 dark:text-zinc-300 select-all truncate flex-1 block">
-                        {window.location.origin}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleCopy(window.location.origin, 'Origin Domain')}
-                        className="p-1 hover:bg-zinc-200 dark:hover:bg-indigo-900 rounded font-semibold text-indigo-650"
-                      >
-                        Copy Origin
-                      </button>
-                    </div>
-                  </div>
-
-                </CardContent>
-              </Card>
+            <CardTitle className="text-xl mb-2 font-bold font-sans text-zinc-900 dark:text-white">Authorized Developers Only</CardTitle>
+            <CardDescription className="text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed mb-6 font-sans">
+              This panel is restricted to systems administration and authorized developer roles. Please sign in via the standard login screen with a dev-supported profile.
+            </CardDescription>
+            <div className="flex flex-col gap-2">
+              <Link to="/login">
+                <Button className="w-full h-11 font-semibold text-sm">
+                  Sign In as Developer
+                </Button>
+              </Link>
+              <Link to="/">
+                <Button variant="outline" className="w-full h-11 font-semibold text-sm">
+                  Return to Home
+                </Button>
+              </Link>
             </div>
-
-          </div>
+          </Card>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-foreground flex flex-col">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-foreground flex flex-col font-sans">
       <nav className="w-full border-b bg-background px-6 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <ShieldCheck className="w-6 h-6 text-primary" />
@@ -505,7 +316,7 @@ export default function DeveloperPanel() {
         </div>
         <div className="flex items-center space-x-4">
           <ThemeToggle />
-          <Button variant="ghost" onClick={() => setIsAuthenticated(false)}>
+          <Button variant="ghost" onClick={() => { localStorage.removeItem('isPreviewMode'); signOut(); navigate('/login'); }}>
             <LogOut className="w-4 h-4 mr-2" /> Sign Out
           </Button>
         </div>

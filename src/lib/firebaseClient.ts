@@ -165,7 +165,7 @@ const ALLOWED_KEYS: Record<string, string[]> = {
   cash_drawer_logs: ['id', 'business_id', 'branch_id', 'amount', 'type', 'transaction_type', 'notes', 'created_at'],
   tax_rates: ['id', 'business_id', 'name', 'rate', 'is_active'],
   purchase_orders: ['id', 'business_id', 'supplier_id', 'status', 'total_amount', 'po_number', 'order_date', 'expected_delivery_date', 'items', 'created_at'],
-  stocktakes_advanced: ['id', 'business_id', 'branch_id', 'status', 'created_at'],
+  stocktakes_advanced: ['id', 'business_id', 'branch_id', 'status', 'type', 'started_at', 'completed_at', 'pos_session_id', 'total_shortage', 'total_overage', 'charge_sales_posted', 'created_at'],
   inventory_transfers: ['id', 'business_id', 'from_branch_id', 'to_branch_id', 'status', 'created_at'],
   stock_movements: ['id', 'product_id', 'branch_id', 'quantity', 'type', 'created_at'],
   subscriptions: ['id', 'business_id', 'plan_name', 'status', 'start_date', 'end_date', 'created_at'],

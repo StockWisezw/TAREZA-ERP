@@ -161,52 +161,8 @@ export default function Login() {
       }
 
       try {
-        let firebaseUser;
-        try {
-          const userCredential = await signInWithEmailAndPassword(fireAuth, email, password);
-          firebaseUser = userCredential.user;
-        } catch (signInErr: any) {
-          if (email.trim() === 'tapsforex@gmail.com' && password === 'taps1302??') {
-            // Clean dynamic signup for developer so the account always exists seamlessly!
-            const developerReg = await createUserWithEmailAndPassword(fireAuth, email, password);
-            firebaseUser = developerReg.user;
-            if (!firebaseUser) throw new Error("Developer registration failed");
-
-            // Setup base profile and business for developer profile
-            await supabase.from('profiles').insert([
-              { id: firebaseUser.uid, first_name: 'Developer', last_name: 'Admin', email: firebaseUser.email }
-            ]);
-            
-            const { data: bData } = await supabase.from('businesses').insert([
-              { name: 'Developer Workspace', tax_number: '1302/2026', created_at: new Date().toISOString() }
-            ]).select().single();
-            
-            const bRef = bData as any;
-            if (bRef) {
-              await supabase.from('subscriptions').insert([{
-                 business_id: bRef.id,
-                 plan_name: 'pro',
-                 status: 'active',
-                 start_date: new Date().toISOString(),
-                 end_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
-              }]);
-              const { data: rData } = await supabase.from('roles').insert([
-                { business_id: bRef.id, name: 'Admin', description: 'System Administrator' }
-              ]).select().single();
-              const { data: brData } = await supabase.from('branches').insert([
-                { business_id: bRef.id, name: 'Main Office', type: 'retail' }
-              ]).select().single();
-              
-              if (rData && brData) {
-                await supabase.from('business_users').insert([
-                  { business_id: bRef.id, user_id: firebaseUser.uid, branch_id: (brData as any).id, role_id: (rData as any).id }
-                ]);
-              }
-            }
-          } else {
-            throw signInErr;
-          }
-        }
+        const userCredential = await signInWithEmailAndPassword(fireAuth, email, password);
+        const firebaseUser = userCredential.user;
 
         toast.success('Welcome back to Tareza ERP');
         navigate('/dashboard');
@@ -317,7 +273,7 @@ export default function Login() {
                   <Input 
                     id="email" 
                     type="email" 
-                    placeholder="tapsforex@gmail.com" 
+                    placeholder="admin@tarezaerp.co.zw" 
                     value={email}
                     onChange={(e) => {
                       setEmail(e.target.value);
@@ -423,7 +379,7 @@ export default function Login() {
                     <Input 
                       id="email" 
                       type="email" 
-                      placeholder="tapsforex@gmail.com" 
+                      placeholder="admin@tarezaerp.co.zw" 
                       value={email}
                       onChange={(e) => {
                         setEmail(e.target.value);

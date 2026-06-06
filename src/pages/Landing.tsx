@@ -1,11 +1,40 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/button';
-import { Store, TrendingUp, ShieldCheck, Zap, Package, Key, Building2, ArrowRight, CheckCircle2, Calculator, Users, BarChart3, Receipt, ShoppingCart, Activity, Mail, Phone, MessageCircle } from 'lucide-react';
+import { Store, TrendingUp, ShieldCheck, Zap, Package, Key, Building2, ArrowRight, CheckCircle2, Calculator, Users, BarChart3, Receipt, ShoppingCart, Activity, Mail, Phone, MessageCircle, Facebook, Youtube, Globe, ClipboardList, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { TarezaLogo } from '../components/ui/Logo';
 
 export default function Landing() {
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
+
+  const faqs = [
+    {
+      question: "What is Tareza ERP, and how does it dominate your product ecosystem?",
+      answer: "Tareza ERP is our flagship, next-generation Point of Sale (POS) and inventory control cloud ledger platform designed for modern business operations. It acts as the core brain of our software services, ensuring reliable multi-branch tracking, secure real-time bookkeeping, and live remote management. Any supplementary service we offer exists to feed, audit, or strengthen this dominant product."
+    },
+    {
+      question: "What other complementary services do you offer beyond the software itself?",
+      answer: "To ensure your business succeeds in both the offline and online worlds, we provide valuable creative and physical services. This includes Enterprise Website Development to help setup a stunning web portal for your company, as well as On-Site Physical Stocktakes & Audits conducted by our experienced product verification team."
+    },
+    {
+      question: "Is there an offline-ready POS feature, and how does synchronization work?",
+      answer: "Yes, our web application dominates because it is highly designed to support modern hybrid operations. The POS terminal saves sales transactions locally if the connection is cut, and automatically syncs to active cloud records as soon as internet connectivity returns."
+    },
+    {
+      question: "How are physical on-site stocktakes and custom websites priced?",
+      answer: "We offer highly transparent, budget-friendly companion service packages:\n• On-site Stocktakes: Typically priced from a once-off fee of just $15, depending entirely on the database complexity and number of catalog items (SKU lines).\n• Website Development: Custom built, fast, SEO-optimized web setups priced competitively for the Zimbabwe (Zim) corporate and retail market to fit local cash flow expectations."
+    },
+    {
+      question: "Where can we follow your online updates and learn how to use Tareza ERP?",
+      answer: "To help onboard your cashiers and manage your stock, we are launching an active YouTube Channel containing thorough walk-through video tutorials, and we maintain an official Facebook Page for product updates, announcements, and local POS hardware tips."
+    },
+    {
+      question: "How do we receive technical and billing support?",
+      answer: "We prioritize our clients' success. You can email support@tarezaerp.co.zw for help desk tickets or billing updates, and call our direct hotlines at +263 784553570 and +263 776699950 for immediate support. Starter, Pro, and Enterprise tiers include dedicated support options suited to your enterprise scale."
+    }
+  ];
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center overflow-x-hidden">
       {/* Contact Top Bar */}
@@ -35,6 +64,20 @@ export default function Landing() {
               </span>
               WhatsApp Us
             </a>
+            <div className="w-px h-4 bg-zinc-800" />
+            <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="flex items-center text-zinc-300 hover:text-white transition-colors group" title="Follow us on Facebook">
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-zinc-800 group-hover:bg-[#1877F2]/20 text-zinc-400 group-hover:text-[#1877F2] mr-2 transition-colors">
+                <Facebook className="w-3 h-3" />
+              </span>
+              Facebook
+            </a>
+            <div className="w-px h-4 bg-zinc-800" />
+            <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="flex items-center text-zinc-300 hover:text-white transition-colors group" title="Subscribe to our YouTube Channel">
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-zinc-800 group-hover:bg-[#FF0000]/20 text-zinc-400 group-hover:text-[#FF0000] mr-2 transition-colors">
+                <Youtube className="w-3 h-3" />
+              </span>
+              YouTube
+            </a>
           </div>
         </div>
       </div>
@@ -49,7 +92,6 @@ export default function Landing() {
           <a href="#features" className="hover:text-primary transition-colors">Features</a>
           <a href="#solution" className="hover:text-primary transition-colors">Solutions</a>
           <a href="#pricing" className="hover:text-primary transition-colors">Pricing</a>
-          <Link to="/dev-portal" className="text-zinc-400 hover:text-primary transition-colors">Admin Panel</Link>
         </div>
         
         <div className="flex items-center space-x-4">
@@ -212,7 +254,95 @@ export default function Landing() {
           </div>
         </div>
       </section>
-      
+
+      {/* Companion Technical & Auditing Services */}
+      <section id="services" className="w-full py-24 bg-background border-b border-border/50 relative overflow-hidden">
+        {/* Subtle Grid Background */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:30px_30px] opacity-30 dark:opacity-20 pointer-events-none"></div>
+        <div className="max-w-7xl mx-auto px-6 relative z-10">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-16 gap-6">
+            <div className="space-y-3">
+              <div className="inline-flex items-center space-x-2 bg-primary/10 border border-primary/20 rounded-full px-3 py-1 text-xs font-semibold text-primary uppercase tracking-wider">
+                Digital & Practical Solutions
+              </div>
+              <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+                Companion Services We Offer
+              </h2>
+              <p className="text-zinc-550 dark:text-zinc-400 max-w-2xl text-base leading-relaxed">
+                Unlock full-scale digital success with our professional companion services. While <strong className="text-primary">Tareza ERP</strong> is our flagship cloud platform that dominates your daily routine, we provide essential physical and creative operations to maximize your business potential.
+              </p>
+            </div>
+            
+            {/* Social Connection Hub */}
+            <div className="flex flex-col gap-2.5 bg-zinc-50 dark:bg-zinc-900/60 border border-border/60 p-4 rounded-2xl shadow-sm shrink-0 w-full md:w-auto">
+              <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest text-center md:text-left">Connect With Us Online</span>
+              <div className="flex items-center gap-3 justify-center md:justify-start">
+                <a 
+                  href="https://facebook.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-50 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-border shadow-sm text-[#1877F2] text-xs font-semibold transition-all hover:scale-105"
+                  title="Follow our Facebook Page"
+                >
+                  <Facebook className="w-4 h-4" /> Facebook Page
+                </a>
+                <a 
+                  href="https://youtube.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-50 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-border shadow-sm text-[#FF0000] text-xs font-semibold transition-all hover:scale-105"
+                  title="Subscribe on YouTube"
+                >
+                  <Youtube className="w-4 h-4" /> YouTube Channel
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8 lg:gap-12">
+            {/* Website Development Service Card */}
+            <div className="bg-card hover:bg-card/70 transition-all duration-300 p-8 md:p-10 rounded-3xl border border-border shadow-sm flex flex-col justify-between group relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-40 h-40 bg-blue-500/5 rounded-full blur-[50px] group-hover:bg-blue-500/10 transition-colors duration-500"></div>
+              <div>
+                <div className="bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 w-14 h-14 rounded-2xl flex items-center justify-center mb-8 shadow-inner border border-blue-100 dark:border-blue-900">
+                  <Globe className="w-7 h-7" />
+                </div>
+                <h3 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50 mb-4 tracking-tight">Enterprise Website Development</h3>
+                <p className="text-zinc-600 dark:text-zinc-350 leading-relaxed text-sm mb-8">
+                  Establish an unmissable digital footprint. We craft gorgeous, responsive, custom-coded websites, ecommerce digital storefronts, and business landing pages starting with next-gen speed optimization and clean modern styling. We deliver competitive, highly professional prices tailored specifically for the Zimbabwe (Zim) corporate and retail market, giving local brands premium global presence on a local budget.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border-t border-border/80 pt-6 mt-auto">
+                <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Custom Code / SEO Optimized</span>
+                <span className="text-xs font-bold px-3 py-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 rounded-full border border-blue-200/50 dark:border-blue-900/50">
+                  Zim Market Friendly Rates
+                </span>
+              </div>
+            </div>
+
+            {/* Custom On-Site Stocktaking Service Card */}
+            <div className="bg-card hover:bg-card/70 transition-all duration-300 p-8 md:p-10 rounded-3xl border border-border shadow-sm flex flex-col justify-between group relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/5 rounded-full blur-[50px] group-hover:bg-emerald-500/10 transition-colors duration-500"></div>
+              <div>
+                <div className="bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 w-14 h-14 rounded-2xl flex items-center justify-center mb-8 shadow-inner border border-emerald-100 dark:border-emerald-900">
+                  <ClipboardList className="w-7 h-7" />
+                </div>
+                <h3 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50 mb-4 tracking-tight">Professional Stocktakes & Audits</h3>
+                <p className="text-zinc-600 dark:text-zinc-350 leading-relaxed text-sm mb-8">
+                  Banish discrepancy anxiety and streamline your inventory. Our highly trained precision verification auditors perform swift, on-site physical count services using advanced digital inventory equipment. Typically priced starting from a once-off rate of just <span className="font-extrabold text-zinc-900 dark:text-zinc-100 text-lg">$15 once-off</span> depending entirely on the total number of lines, warehouse layout, and database catalog complexity.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border-t border-border/80 pt-6 mt-auto">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Accurate Scanning & Audit Logs</span>
+                <span className="text-xs font-bold px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 rounded-full border border-emerald-200/50 dark:border-emerald-900/50">
+                  From $15 Once-Off
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Pricing Section */}
       <section id="pricing" className="w-full py-24 bg-zinc-50 dark:bg-zinc-900/50">
         <div className="max-w-7xl mx-auto px-6">
@@ -303,6 +433,79 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Interactive FAQ Accordion Section */}
+      <section id="faq" className="w-full py-24 bg-background border-t border-border/50 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(#80808008_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none opacity-50"></div>
+        
+        <div className="max-w-4xl mx-auto px-6 relative z-10">
+          <div className="text-center space-y-4 mb-16">
+            <div className="inline-flex items-center space-x-2 bg-primary/10 border border-primary/20 rounded-full px-3 py-1 text-xs font-semibold text-primary uppercase tracking-wider">
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>Got Questions? We Have Answers</span>
+            </div>
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+              Frequently Asked Questions
+            </h2>
+            <p className="text-zinc-550 dark:text-zinc-400 max-w-2xl mx-auto text-base">
+              Learn more about Tareza ERP's software capabilities, pricing models, dedicated customer support services, and companion solutions.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {faqs.map((faq, index) => {
+              const isOpen = openFaqIndex === index;
+              return (
+                <div 
+                  key={index} 
+                  className={`bg-card rounded-2xl border transition-all duration-300 ${
+                    isOpen 
+                      ? 'border-primary/40 shadow-md shadow-primary/5 bg-primary/[0.01]' 
+                      : 'border-border/80 hover:border-zinc-300 dark:hover:border-zinc-700 shadow-sm'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaqIndex(isOpen ? null : index)}
+                    className="w-full text-left p-6 flex items-center justify-between gap-4 select-none focus:outline-none"
+                  >
+                    <span className={`text-base font-bold transition-colors ${isOpen ? 'text-primary' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                      {faq.question}
+                    </span>
+                    <span className={`p-1.5 rounded-lg bg-secondary text-secondary-foreground shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180 text-primary bg-primary/10' : ''}`}>
+                      <ChevronDown className="w-4 h-4" />
+                    </span>
+                  </button>
+
+                  <div 
+                    className={`grid transition-[grid-template-rows,opacity,padding] duration-300 ease-in-out ${
+                      isOpen ? 'grid-rows-[1fr] opacity-100 pb-6 px-6' : 'grid-rows-[0fr] opacity-0 overflow-hidden'
+                    }`}
+                  >
+                    <div className="overflow-hidden text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed whitespace-pre-line border-t border-border/40 pt-4">
+                      {faq.answer}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Further Inquiries Call-out */}
+          <div className="mt-12 text-center p-6 bg-zinc-50 dark:bg-zinc-900/30 border border-border/60 rounded-2xl">
+            <span className="text-sm text-zinc-550 dark:text-zinc-400">
+              Still have questions about our retail solutions or website consultation rates?{" "}
+              <a href="mailto:support@tarezaerp.co.zw" className="text-primary hover:underline font-bold">
+                Email our Help Desk
+              </a>{" "}
+              or message us directly on{" "}
+              <a href="https://wa.me/263776699950" className="text-emerald-600 hover:underline font-bold inline-flex items-center">
+                WhatsApp Us
+              </a>
+            </span>
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
       <footer className="w-full border-t border-border/50 py-12 bg-secondary text-secondary-foreground">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center text-sm">
@@ -312,7 +515,15 @@ export default function Landing() {
            <div className="flex flex-col md:flex-row items-center gap-4 text-zinc-400 mb-4 md:mb-0">
              <a href="mailto:support@tarezaerp.co.zw" className="hover:text-primary transition-colors">Support: support@tarezaerp.co.zw</a>
              <a href="mailto:admin@tarezaerp.co.zw" className="hover:text-primary transition-colors">Billing: admin@tarezaerp.co.zw</a>
-             <Link to="/dev-portal" className="hover:text-primary transition-colors text-zinc-500 text-xs">Developer Portal</Link>
+             <div className="flex items-center gap-3">
+               <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#1877F2] transition-colors flex items-center">
+                 <Facebook className="w-4 h-4 mr-1" /> Facebook
+               </a>
+               <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#FF0000] transition-colors flex items-center">
+                 <Youtube className="w-4 h-4 mr-1" /> YouTube
+               </a>
+             </div>
+             
              <div className="flex gap-2">
                <a href="tel:+263784553570" className="hover:text-primary transition-colors">Phone 1: +263 784553570</a> |
                <a href="tel:+263776699950" className="hover:text-primary transition-colors">Phone 2: +263 776699950</a>

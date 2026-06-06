@@ -28,12 +28,7 @@ interface AIMessage {
 
 export function AIAssistant() {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'messenger' | 'ai' | 'hotline'>('messenger');
-  
-  // Realtime P2P Staff Messenger State
-  const [messengerMessages, setMessengerMessages] = useState<ChatMessage[]>([]);
-  const [messengerInputText, setMessengerInputText] = useState('');
-  const [isMessengerLoading, setIsMessengerLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'ai' | 'hotline'>('ai');
   
   // AI support state connected with Developer diagnostics
   const [aiMessages, setAiMessages] = useState<AIMessage[]>([
@@ -50,7 +45,6 @@ export function AIAssistant() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentBranchName, setCurrentBranchName] = useState('Harare Head Office');
   
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const aiMessagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch current user details & branch on mount
@@ -85,67 +79,11 @@ export function AIAssistant() {
     });
   }, []);
 
-  // Firestore Real-Time snapshots for P2P Staff Messenger
-  useEffect(() => {
-    if (!isOpen || activeTab !== 'messenger') return;
-
-    setIsMessengerLoading(true);
-    const messagesQuery = query(
-      collection(db, 'messenger_messages'),
-      orderBy('created_at', 'asc'),
-      limit(100)
-    );
-
-    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-      const msgs: ChatMessage[] = [];
-      snapshot.forEach((doc) => {
-        msgs.push({ id: doc.id, ...doc.data() } as ChatMessage);
-      });
-      setMessengerMessages(msgs);
-      setIsMessengerLoading(false);
-    }, (error) => {
-      console.error('[Firestore Snapshots] Messenger subscription failed:', error);
-      setIsMessengerLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [isOpen, activeTab]);
-
-  // Keep scrollbars pinned to the bottom dynamically
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messengerMessages, activeTab]);
-
   useEffect(() => {
     if (aiMessagesEndRef.current) {
       aiMessagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [aiMessages, activeTab]);
-
-  // Handle P2P text dispatch
-  const handleSendMessengerMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!messengerInputText.trim()) return;
-
-    const textToSend = messengerInputText.trim();
-    setMessengerInputText('');
-
-    try {
-      await addDoc(collection(db, 'messenger_messages'), {
-        sender_id: currentUser?.id || 'anonymous',
-        sender_email: currentUser?.email || 'anonymous@tareza.co.zw',
-        sender_name: currentUser?.email?.split('@')[0] || 'Staff Member',
-        text: textToSend,
-        created_at: new Date().toISOString(),
-        branch_name: currentBranchName
-      });
-    } catch (err) {
-      console.error('[Firestore Snapshots] Dispatch error:', err);
-      toast.error('Failed to send message over Firestore backend.');
-    }
-  };
 
   // Compile local developer-mode diagnostic details
   const compileDiagnostics = () => {
@@ -247,7 +185,7 @@ Live Context:
 - Pending Sales in Sync/Offline memory Queue: ${diag.pendingSales} sales
 - Active Page View Path: ${diag.activeRoute}
 - Current Active Cart Count: ${diag.cartCount} items
-- Superadmin address: tapsforex@gmail.com
+- Superadmin address: admin@tarezaerp.co.zw
 - User current physical Branch location: ${currentBranchName}
 
 User asked: ${userPrompt}
@@ -333,17 +271,6 @@ Keep response highly brief, actionable, technical, styled with bulleted points, 
             {/* Navigation Tabs */}
             <div className="flex bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 text-xs font-bold font-sans">
               <button
-                onClick={() => setActiveTab('messenger')}
-                className={`flex-1 py-3 text-center flex items-center justify-center gap-1 transition-all ${
-                  activeTab === 'messenger'
-                    ? 'border-b-2 border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-zinc-900/50'
-                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                Staff Messenger
-              </button>
-              <button
                 onClick={() => setActiveTab('ai')}
                 className={`flex-1 py-3 text-center flex items-center justify-center gap-1 transition-all ${
                   activeTab === 'ai'
@@ -369,61 +296,6 @@ Keep response highly brief, actionable, technical, styled with bulleted points, 
 
             {/* Scrolling Messaging Panels */}
             <div className="flex-1 overflow-y-auto p-3 flex flex-col min-h-0 bg-zinc-50/50 dark:bg-zinc-950/20">
-              
-              {/* Tab 1: P2P Staff Messenger */}
-              {activeTab === 'messenger' && (
-                <>
-                  {isMessengerLoading && messengerMessages.length === 0 ? (
-                    <div className="flex-1 flex items-center justify-center text-zinc-400">
-                      <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
-                    </div>
-                  ) : messengerMessages.length === 0 ? (
-                    <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-zinc-400 dark:text-zinc-500">
-                      <Users className="h-10 w-10 mb-2 stroke-[1.5] text-zinc-300" />
-                      <p className="text-xs font-semibold">Instant Staff Room</p>
-                      <p className="text-[10px] mt-1 max-w-[210px] leading-normal">
-                        Communication workspace synchronized in real-time via Firestore snapshots across Harare, Bulawayo & Gweru.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2.5 flex-1 overflow-y-auto pr-1">
-                      {messengerMessages.map((msg) => {
-                        const isMe = msg.sender_id === (currentUser?.id || 'anonymous');
-                        return (
-                          <div
-                            key={msg.id}
-                            className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
-                          >
-                            <div className="flex items-center gap-1 px-1 mb-0.5">
-                              <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-bold">
-                                {msg.sender_name}
-                              </span>
-                              {msg.branch_name && (
-                                <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-500 text-center">
-                                  {msg.branch_name}
-                                </span>
-                              )}
-                            </div>
-                            <div
-                              className={`max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed shadow-sm whitespace-pre-wrap break-words ${
-                                isMe
-                                  ? 'bg-zinc-900 text-white dark:bg-indigo-600 dark:text-white'
-                                  : 'bg-white text-zinc-950 dark:bg-zinc-800 dark:text-white border border-zinc-200/50 dark:border-zinc-700/50'
-                              }`}
-                            >
-                              <p>{msg.text}</p>
-                            </div>
-                            <span className="text-[8px] text-zinc-400 px-1 mt-0.5 font-mono">
-                              {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      <div ref={messagesEndRef} />
-                    </div>
-                  )}
-                </>
-              )}
 
               {/* Tab 2: AI Diagnostic Support */}
               {activeTab === 'ai' && (
@@ -502,28 +374,6 @@ Keep response highly brief, actionable, technical, styled with bulleted points, 
             </div>
 
             {/* Input Bar Footer (conditional based on active chat tabs) */}
-            {activeTab === 'messenger' && (
-              <form 
-                onSubmit={handleSendMessengerMessage}
-                className="p-3 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 flex gap-2 shrink-0"
-              >
-                <input
-                  type="text"
-                  value={messengerInputText}
-                  onChange={(e) => setMessengerInputText(e.target.value)}
-                  placeholder="Dispatch unified message/update..."
-                  className="flex-1 bg-zinc-100 dark:bg-zinc-950 text-xs px-3.5 py-2.5 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 dark:text-white border border-transparent dark:focus:ring-indigo-400"
-                />
-                <button
-                  type="submit"
-                  disabled={!messengerInputText.trim()}
-                  className="h-9 w-9 rounded-xl bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 flex items-center justify-center hover:opacity-90 active:scale-95 transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer border-0"
-                >
-                  <Send className="h-4 w-4" />
-                </button>
-              </form>
-            )}
-
             {activeTab === 'ai' && (
               <form 
                 onSubmit={handleSendAIQuestion}

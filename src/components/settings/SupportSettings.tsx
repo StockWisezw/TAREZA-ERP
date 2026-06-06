@@ -38,7 +38,7 @@ export function SupportSettings() {
                 <div>
                   <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Billing Email</p>
                   <a href="mailto:admin@tarezaerp.co.zw" className="text-sm font-bold text-zinc-900 hover:text-primary transition-colors">
-                    admin@tarezaerp.33mail.com
+                    admin@tarezaerp.co.zw
                   </a>
                 </div>
               </div>
@@ -48,7 +48,7 @@ export function SupportSettings() {
               </div>
             </div>
             
-            <Button className="w-full" onClick={() => window.location.href = 'mailto:admin@tarezaerp.33mail.com?subject=Payment Request - Tareza ERP'}>
+            <Button className="w-full" onClick={() => window.location.href = 'mailto:admin@tarezaerp.co.zw?subject=Payment Request - Tareza ERP'}>
               Email Billing Team
             </Button>
           </CardContent>
@@ -80,8 +80,8 @@ export function SupportSettings() {
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Support Email</p>
-                    <a href="mailto:support@tarezaerp.33mail.com" className="text-sm font-bold text-zinc-900 hover:text-indigo-600 transition-colors">
-                      support@tarezaerp.33mail.com
+                    <a href="mailto:support@tarezaerp.co.zw" className="text-sm font-bold text-zinc-900 hover:text-indigo-600 transition-colors">
+                      support@tarezaerp.co.zw
                     </a>
                   </div>
                 </div>
@@ -105,7 +105,7 @@ export function SupportSettings() {
               </div>
             </div>
             
-            <Button variant="outline" className="w-full border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700" onClick={() => window.location.href = 'mailto:support@tarezaerp.33mail.com?subject=Technical Support - Tareza ERP'}>
+            <Button variant="outline" className="w-full border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700" onClick={() => window.location.href = 'mailto:support@tarezaerp.co.zw?subject=Technical Support - Tareza ERP'}>
               Open Support Ticket
             </Button>
           </CardContent>

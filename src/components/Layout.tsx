@@ -1,5 +1,5 @@
 import React from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   ShoppingCart, 
@@ -17,7 +17,8 @@ import {
   DollarSign,
   FileText,
   Lock,
-  BookOpen
+  BookOpen,
+  MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from './ui/button';
@@ -42,6 +43,7 @@ const navigation = [
   { name: 'Tareza CRM', href: '/customers', icon: Users },
   { name: 'Tareza Suppliers', href: '/suppliers', icon: Truck },
   { name: 'Reports', href: '/reports', icon: FileText },
+  { name: 'Staff Messenger', href: '/messenger', icon: MessageSquare },
   { name: 'Tareza Settings', href: '/settings', icon: Settings },
 ];
 
@@ -49,7 +51,7 @@ function SubscriptionBanner() {
   const { user } = useAuth();
   
   // Superadmin account has no expiration and unlimited functions
-  const isSuperadmin = user?.email === 'tapsforex@gmail.com';
+  const isSuperadmin = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw';
   const subscriptionStatus: string = isSuperadmin ? 'ACTIVE' : 'GRACE_PERIOD';
   
   const expiresAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // Expired 2 days ago
@@ -84,6 +86,8 @@ function SubscriptionBanner() {
 export default function Layout() {
   const { signOut, user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+  const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw';
   const [isLocked, setIsLocked] = React.useState(false);
   const [unlockPin, setUnlockPin] = React.useState('');
   const [pinError, setPinError] = React.useState(false);
@@ -222,10 +226,20 @@ export default function Layout() {
             <NavLinks />
           </div>
           <div className="p-4 flex flex-col gap-2">
-            {user?.email === 'tapiwagahadza54@gmail.com' && (
+            {(user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw') && (
               <div className="px-3 py-1.5 bg-blue-500/10 rounded-full text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase text-center tracking-widest mx-2 mb-2">
                 Superadmin
               </div>
+            )}
+            {isDeveloper && (
+              <Button 
+                variant="ghost" 
+                className="w-full justify-start text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/20 rounded-full px-4 mb-1"
+                onClick={() => navigate('/dev-portal')}
+              >
+                <Lock className="mr-3 h-[18px] w-[18px]" />
+                Developer Portal
+              </Button>
             )}
             <Button variant="ghost" className="w-full justify-start text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50 rounded-full px-4" onClick={handleSignOut}>
               <LogOut className="mr-3 h-[18px] w-[18px]" />
@@ -304,6 +318,11 @@ export default function Layout() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem className="py-2 cursor-pointer">Profile Settings</DropdownMenuItem>
                   <DropdownMenuItem className="py-2 cursor-pointer">Branch Setup</DropdownMenuItem>
+                  {isDeveloper && (
+                    <DropdownMenuItem onClick={() => navigate('/dev-portal')} className="py-2 font-semibold text-blue-600 dark:text-blue-400 cursor-pointer">
+                      <Lock className="w-4 h-4 mr-2" /> Developer Portal
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setIsLocked(true)} className="py-2 font-medium text-amber-600 dark:text-amber-500 cursor-pointer">
                     <Lock className="w-4 h-4 mr-2" /> Lock Terminal
