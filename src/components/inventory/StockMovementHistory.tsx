@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 export function StockMovementHistory() {
   const [movements, setMovements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchMovements();
@@ -93,9 +94,13 @@ export function StockMovementHistory() {
         <div className="p-4 border-b border-zinc-200 flex flex-col sm:flex-row gap-4 justify-between items-center bg-zinc-50/50 rounded-t-xl">
           <div className="relative w-full sm:max-w-md">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500" />
-            <Input placeholder="Search movements..." className="pl-9 bg-white" />
+            <Input 
+              placeholder="Search movements..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 bg-white" 
+            />
           </div>
-          <Button variant="outline" className="bg-white"><Filter className="mr-2 h-4 w-4" /> Filter Advanced</Button>
         </div>
         
         <Table>
@@ -114,11 +119,25 @@ export function StockMovementHistory() {
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8 text-zinc-500">Loading movements...</TableCell>
               </TableRow>
-            ) : movements.length === 0 ? (
+            ) : movements.filter((mv) => {
+              const q = searchQuery.toLowerCase();
+              const name = (mv.products?.name || '').toLowerCase();
+              const sku = (mv.products?.sku || '').toLowerCase();
+              const type = (mv.type || '').toLowerCase();
+              const notes = (mv.notes || '').toLowerCase();
+              return name.includes(q) || sku.includes(q) || type.includes(q) || notes.includes(q);
+            }).length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8 text-zinc-500">No stock movements found.</TableCell>
               </TableRow>
-            ) : movements.map((movement) => (
+            ) : movements.filter((mv) => {
+              const q = searchQuery.toLowerCase();
+              const name = (mv.products?.name || '').toLowerCase();
+              const sku = (mv.products?.sku || '').toLowerCase();
+              const type = (mv.type || '').toLowerCase();
+              const notes = (mv.notes || '').toLowerCase();
+              return name.includes(q) || sku.includes(q) || type.includes(q) || notes.includes(q);
+            }).map((movement) => (
               <TableRow key={movement.id}>
                 <TableCell className="font-mono text-xs text-zinc-500">{movement.id?.substring(0, 8)}...</TableCell>
                 <TableCell className="text-zinc-600 whitespace-nowrap">

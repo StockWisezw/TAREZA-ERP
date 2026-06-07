@@ -14,6 +14,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '../lib/supabaseClient';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { usePOSStore } from '../store/posStore';
 
 interface CashLog {
   id: string;
@@ -197,13 +198,31 @@ export default function CashManagement() {
         salesQuery = salesQuery.eq('business_id', busId);
       }
       
-      const { data: salesData } = await salesQuery;
+      const { data: salesDocs } = await salesQuery;
+      const salesData = [...(salesDocs || [])];
+
+      // Merge local sales from the POS store to support offline status and robust shift totals
+      const localSales = usePOSStore.getState().localSales || [];
+      localSales.forEach((localSale: any) => {
+        const localTime = new Date(localSale.timestamp || localSale.created_at || new Date()).toISOString();
+        if (localTime >= startBoundary) {
+          const exists = salesData.some(s => s.receiptNumber === localSale.receiptNumber || s.id === localSale.id || s.receipt_number === localSale.receiptNumber);
+          if (!exists) {
+            salesData.push({
+              ...localSale,
+              created_at: localSale.timestamp || localSale.created_at,
+              status: localSale.status || 'COMPLETED'
+            });
+          }
+        }
+      });
       
       let totalCashSales = 0;
       if (salesData && salesData.length > 0) {
         salesData.forEach((s: any) => {
           const stat = String(s.status || '').toUpperCase();
-          if (stat !== 'COMPLETED' && stat !== 'PAID') return;
+          const allowedStatuses = ['COMPLETED', 'PAID', 'SYNCED', 'OFFLINE_PENDING'];
+          if (!allowedStatuses.includes(stat)) return;
 
           let paymentsArray: any[] = [];
           

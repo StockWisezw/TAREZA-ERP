@@ -164,7 +164,7 @@ const ALLOWED_KEYS: Record<string, string[]> = {
   products: ['id', 'business_id', 'category_id', 'name', 'description', 'sku', 'barcode', 'retail_price', 'wholesale_price', 'cost_price', 'price', 'tax_class', 'tax_rate_id', 'is_active', 'created_at'],
   inventory: ['id', 'business_id', 'branch_id', 'product_id', 'quantity', 'reorder_level', 'created_at', 'updated_at'],
   customers: ['id', 'business_id', 'name', 'email', 'phone', 'address', 'vat_number', 'customer_type', 'balance', 'credit_limit', 'created_at'],
-  suppliers: ['id', 'business_id', 'name', 'contact_person', 'email', 'phone', 'address', 'created_at'],
+  suppliers: ['id', 'business_id', 'name', 'contact_person', 'contact_name', 'email', 'phone', 'address', 'payment_terms', 'balance', 'status', 'tax_number', 'created_at'],
   sales: ['id', 'business_id', 'branch_id', 'user_id', 'customer_id', 'customerId', 'customerName', 'receiptNumber', 'items', 'payments', 'subtotal', 'vat_total', 'vatTotal', 'discount_total', 'discountTotal', 'total', 'total_amount', 'total_tax_amount', 'payment_method', 'status', 'timestamp', 'created_at'],
   sale_items: ['id', 'sale_id', 'product_id', 'quantity', 'price', 'unit_price', 'line_total', 'vat_amount'],
   expense_categories: ['id', 'business_id', 'name', 'description', 'created_at'],
@@ -212,18 +212,16 @@ function normalizeOutput(id: string, data: any, table: string): any {
   if (!data) return null;
   const copy = { ...data, id, $id: id };
 
-  if (table === 'sales') {
-    if (typeof copy.items === 'string') {
-      try { copy.items = JSON.parse(copy.items); } catch (e) {}
-    }
-    if (typeof copy.payments === 'string') {
-      try { copy.payments = JSON.parse(copy.payments); } catch (e) {}
-    }
-  } else if (table === 'role_permissions') {
-    if (typeof copy.permissions === 'string') {
-      try { copy.permissions = JSON.parse(copy.permissions); } catch (e) {}
-    }
+  if (typeof copy.items === 'string') {
+    try { copy.items = JSON.parse(copy.items); } catch (e) {}
   }
+  if (typeof copy.payments === 'string') {
+    try { copy.payments = JSON.parse(copy.payments); } catch (e) {}
+  }
+  if (typeof copy.permissions === 'string') {
+    try { copy.permissions = JSON.parse(copy.permissions); } catch (e) {}
+  }
+
   return copy;
 }
 

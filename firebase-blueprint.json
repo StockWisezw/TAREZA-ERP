@@ -171,6 +171,45 @@
         "updated_at": { "type": "string" }
       },
       "required": ["id", "user_id", "subject", "description"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Represents a vendor/supplier in the business directory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "business_id": { "type": "string" },
+        "name": { "type": "string" },
+        "contact_person": { "type": "string" },
+        "contact_name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "payment_terms": { "type": "string" },
+        "balance": { "type": "number" },
+        "status": { "type": "string" },
+        "tax_number": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "business_id", "name"]
+    },
+    "PurchaseOrder": {
+      "title": "PurchaseOrder",
+      "description": "Represents a procurement purchase order placed with a supplier",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "business_id": { "type": "string" },
+        "supplier_id": { "type": "string" },
+        "status": { "type": "string" },
+        "total_amount": { "type": "number" },
+        "po_number": { "type": "string" },
+        "order_date": { "type": "string" },
+        "expected_delivery_date": { "type": "string" },
+        "items": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "business_id", "supplier_id"]
     }
   },
   "firestore": {
@@ -209,6 +248,14 @@
     "/cash_drawer_logs/{logId}": {
       "schema": "CashDrawerLog",
       "description": "Cash movement logs"
+    },
+    "/suppliers/{supplierId}": {
+      "schema": "Supplier",
+      "description": "Vendor directory profile"
+    },
+    "/purchase_orders/{poId}": {
+      "schema": "PurchaseOrder",
+      "description": "Procurement purchase orders"
     },
     "/support_tickets/{ticketId}": {
       "schema": "SupportTicket",

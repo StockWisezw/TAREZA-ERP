@@ -602,8 +602,12 @@ export default function ReceiptHistory() {
       if (!businessId) businessId = 'default_business';
       if (!branchId) branchId = 'default_branch';
 
-      // 2. Fetch sale record
-      const { data: sale, error: saleFetchError } = await supabase.from('sales').select('*').eq('id', id).maybeSingle();
+      // 2. Fetch sale record with related items
+      const { data: sale, error: saleFetchError } = await supabase.from('sales')
+        .select('*, sale_items(*, products(*))')
+        .eq('id', id)
+        .maybeSingle();
+
       if (saleFetchError || !sale) {
         throw new Error(saleFetchError?.message || 'Could not find the sale record.');
       }
@@ -620,9 +624,39 @@ export default function ReceiptHistory() {
 
       if (updateError) throw updateError;
 
+      // Extract and normalize items list from both potential fields
+      let itemsList = sale.items;
+      if (typeof itemsList === 'string') {
+        try { itemsList = JSON.parse(itemsList); } catch (e) {}
+      }
+      if (!itemsList || !Array.isArray(itemsList) || itemsList.length === 0) {
+        itemsList = (sale.sale_items || []).map((si: any) => ({
+          id: si.id,
+          product: {
+            id: si.product_id,
+            name: si.products?.name || 'Unnamed Item',
+            retailPrice: si.unit_price,
+            wholesalePrice: si.unit_price,
+            sku: si.products?.sku || ''
+          },
+          quantity: si.quantity,
+          price: si.unit_price,
+          unitPrice: si.unit_price,
+          subtotal: si.line_total,
+          vatAmount: si.vat_amount
+        }));
+      }
+
+      // Extract and normalize payments
+      let paymentsList = sale.payments;
+      if (typeof paymentsList === 'string') {
+        try { paymentsList = JSON.parse(paymentsList); } catch (e) {}
+      }
+      const finalPayments = Array.isArray(paymentsList) ? paymentsList : [];
+
       // 4. Re-credit stock to inventory for each item (positive quantity change)
-      if (sale.items && Array.isArray(sale.items)) {
-        for (const item of sale.items) {
+      if (itemsList && Array.isArray(itemsList)) {
+        for (const item of itemsList) {
           const isWholesale = item.tier === 'wholesale' || item.pricing_tier === 'wholesale';
           const multiplier = isWholesale ? getPackSize(item.product?.sku) : 1;
           const qtyToReturn = Math.abs(Number(item.quantity || 0)) * multiplier;
@@ -645,7 +679,7 @@ export default function ReceiptHistory() {
       // 5. Post reverse double-entry accounting journal entries
       try {
         const saleTotal = Number(sale.total || sale.total_amount || 0);
-        const creditPayment = (sale.payments || []).find((p: any) => p.method === 'credit' || p.method === 'invoice');
+        const creditPayment = finalPayments.find((p: any) => p.method === 'credit' || p.method === 'invoice');
         const isCredit = !!creditPayment || sale.payment_method === 'Invoice' || sale.status === 'UNPAID';
         const targetAssetAccount = isCredit ? '1100' : '1000'; // AR vs Till
 
@@ -668,7 +702,7 @@ export default function ReceiptHistory() {
 
       // 6. Adjust Customer balance if credit sale
       try {
-        const isCredit = sale.payment_method === 'Invoice' || sale.status === 'UNPAID' || (sale.payments || []).some((p: any) => p.method === 'credit');
+        const isCredit = sale.payment_method === 'Invoice' || sale.status === 'UNPAID' || finalPayments.some((p: any) => p.method === 'credit');
         const customerId = sale.customer_id || sale.customerId;
         if (isCredit && customerId) {
           const { data: custData } = await supabase.from('customers').select('*').eq('id', customerId).single();
@@ -737,12 +771,16 @@ export default function ReceiptHistory() {
     }
 
     try {
+      // Delete linked sale items first
+      await supabase.from('sale_items').delete().eq('sale_id', id);
+
+      // Now delete the sale record
       const { error } = await supabase.from('sales')
         .delete()
         .eq('id', id);
 
       if (error) throw error;
-      toast.success(`Transaction record ${refNum} deleted`);
+      toast.success(`Transaction record ${refNum} deleted beautifully along with dependent item logs`);
       fetchData();
     } catch (err: any) {
       console.error(err);

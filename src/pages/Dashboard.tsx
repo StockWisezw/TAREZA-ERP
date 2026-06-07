@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
-import { Activity, CreditCard, DollarSign, Package, Sparkles, Clock, Lock, Unlock, Play, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Activity, CreditCard, DollarSign, Package, Sparkles, Clock, Lock, Unlock, Play, RefreshCw, AlertTriangle, CheckCircle2, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, Legend, PieChart, Pie } from 'recharts';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { toast } from 'sonner';
@@ -27,6 +27,9 @@ export default function Dashboard() {
   const [profileName, setProfileName] = useState<string>('');
   const [chartData, setChartData] = useState<{name: string, sales: number}[]>([]);
   const [stats, setStats] = useState({ totalSales: 0, transactions: 0, lowStock: 0, activeBranches: 0 });
+  const [branchSalesData, setBranchSalesData] = useState<{ name: string; sales: number; transactions: number }[]>([]);
+  const [branchStockData, setBranchStockData] = useState<{ name: string; stock: number }[]>([]);
+  const [branchesList, setBranchesList] = useState<{ id: string; name: string }[]>([]);
 
   const [activeSession, setActiveSession] = useState<any>(null);
   const [sessionDuration, setSessionDuration] = useState<string>('00h 00m');
@@ -182,14 +185,40 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function loadStats() {
+      if (!businessContext?.business_id) return;
       try {
-        const { data: salesInfo } = await supabase.from('sales').select('total, created_at');
-        const { count: branchesCount } = await supabase.from('branches').select('*', { count: 'exact', head: true });
-        
-        // Fetch active products and their inventory stock levels to determine true low stock counts
-        const { data: activeProducts } = await supabase.from('products').select('id').eq('is_active', true);
-        const { data: inventoryData } = await supabase.from('inventory').select('product_id, quantity, reorder_level');
+        const bizId = businessContext.business_id;
 
+        // Fetch branches
+        const { data: branchesData } = await supabase
+          .from('branches')
+          .select('id, name')
+          .eq('business_id', bizId);
+
+        const branches = branchesData || [];
+        setBranchesList(branches);
+
+        // Fetch sales
+        const { data: salesInfo } = await supabase
+          .from('sales')
+          .select('total, branch_id, created_at')
+          .eq('business_id', bizId);
+
+        // Fetch active products
+        const { data: activeProducts } = await supabase
+          .from('products')
+          .select('id')
+          .eq('business_id', bizId)
+          .eq('is_active', true);
+
+        // Fetch inventory
+        const { data: inventoryData } = await supabase
+          .from('inventory')
+          .select('product_id, quantity, reorder_level, branch_id')
+          .eq('business_id', bizId);
+
+        const branchesCount = branches.length;
+        
         const activeProductIds = new Set(activeProducts?.map((p: any) => p.id) || []);
         const lowStockCount = (inventoryData || []).filter((inv: any) => {
           return activeProductIds.has(inv.product_id) && Number(inv.quantity || 0) <= Number(inv.reorder_level || 0);
@@ -224,16 +253,81 @@ export default function Dashboard() {
         setStats({
           totalSales: realSales,
           transactions: salesInfo?.length || 0,
-          lowStock: lowStockCount || 0, // placeholder
-          activeBranches: branchesCount || 0
+          lowStock: lowStockCount || 0,
+          activeBranches: branchesCount
         });
+
+        // Compute Branch Sales Performance Data
+        const branchesMap: Record<string, string> = {};
+        branches.forEach((b: any) => {
+          branchesMap[b.id] = b.name;
+        });
+
+        const salesByBranch: Record<string, number> = {};
+        const transactionsByBranch: Record<string, number> = {};
+        branches.forEach((b: any) => {
+          salesByBranch[b.id] = 0;
+          transactionsByBranch[b.id] = 0;
+        });
+
+        let unassignedSales = 0;
+        let unassignedTx = 0;
+
+        (salesInfo || []).forEach((sale: any) => {
+          const bId = sale.branch_id;
+          if (bId && salesByBranch[bId] !== undefined) {
+            salesByBranch[bId] += Number(sale.total || 0);
+            transactionsByBranch[bId] += 1;
+          } else {
+            unassignedSales += Number(sale.total || 0);
+            unassignedTx += 1;
+          }
+        });
+
+        const salesChart = branches.map((b: any) => ({
+          name: b.name,
+          sales: salesByBranch[b.id] || 0,
+          transactions: transactionsByBranch[b.id] || 0
+        }));
+
+        if (unassignedSales > 0) {
+          salesChart.push({ name: 'Unassigned', sales: unassignedSales, transactions: unassignedTx });
+        }
+        setBranchSalesData(salesChart);
+
+        // Compute Branch Stock Distribution Data
+        const stockByBranch: Record<string, number> = {};
+        branches.forEach((b: any) => {
+          stockByBranch[b.id] = 0;
+        });
+
+        let unassignedStock = 0;
+
+        (inventoryData || []).forEach((inv: any) => {
+          const bId = inv.branch_id;
+          if (bId && stockByBranch[bId] !== undefined) {
+            stockByBranch[bId] += Number(inv.quantity || 0);
+          } else {
+            unassignedStock += Number(inv.quantity || 0);
+          }
+        });
+
+        const stockChart = branches.map((b: any) => ({
+          name: b.name,
+          stock: stockByBranch[b.id] || 0
+        }));
+
+        if (unassignedStock > 0) {
+          stockChart.push({ name: 'Unassigned', stock: unassignedStock });
+        }
+        setBranchStockData(stockChart);
 
       } catch (err) {
         console.error(err);
       }
     }
     loadStats();
-  }, []);
+  }, [businessContext]);
 
   useEffect(() => {
     async function ensureBusinessProfile() {
@@ -773,6 +867,123 @@ export default function Dashboard() {
                   </button>
                 </a>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 📊 Multi-Branch Performance & Inventory Diagnostics */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Branch Sales Performance Comparison */}
+        <Card className="border-border/60 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              <span>Branch Sales Performance</span>
+            </CardTitle>
+            <CardDescription>Comparative gross revenue ($ USD) and receipts across active branches.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[280px] w-full mt-2">
+              {branchSalesData.length === 0 ? (
+                <div className="h-full flex flex-col justify-center items-center text-zinc-400 text-xs">
+                  <p>No sales records registered across branches yet.</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={branchSalesData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? "#27272a" : "#E5E7EB"} />
+                    <XAxis 
+                      dataKey="name" 
+                      stroke={isDark ? "#a1a1aa" : "#6B7280"}
+                      fontSize={11}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      stroke={isDark ? "#a1a1aa" : "#6B7280"}
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `$${value}`}
+                      className="font-mono"
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: '12px', 
+                        border: isDark ? '1px solid #27272a' : '1px solid #E5E7EB', 
+                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+                        backgroundColor: isDark ? '#18181b' : '#FFFFFF',
+                        color: isDark ? '#f4f4f5' : '#18181b'
+                      }}
+                      formatter={(val: any, name: any) => {
+                        if (name === 'sales') return [`$${Number(val).toFixed(2)}`, 'Gross Sales'];
+                        if (name === 'transactions') return [val, 'Receipts'];
+                        return [val, name];
+                      }}
+                    />
+                    <Bar dataKey="sales" name="sales" fill={isDark ? "#c084fc" : "#7c3aed"} radius={[4, 4, 0, 0]}>
+                      {branchSalesData.map((entry, index) => {
+                        const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'];
+                        const color = colors[index % colors.length];
+                        return <Cell key={`cell-${index}`} fill={color} />;
+                      })}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Branch Stock Distribution */}
+        <Card className="border-border/60 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <PieChartIcon className="h-5 w-5 text-emerald-500" />
+              <span>Stock Distribution by Branch</span>
+            </CardTitle>
+            <CardDescription>Physical layout of total product quantities across branches & warehouses.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[280px] w-full mt-2">
+              {branchStockData.length === 0 || branchStockData.every(b => b.stock === 0) ? (
+                <div className="h-full flex flex-col justify-center items-center text-zinc-400 text-xs">
+                  <p>No stock quantities registered across warehouses yet.</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={branchStockData}
+                      cx="50%"
+                      cy="45%"
+                      innerRadius={60}
+                      outerRadius={85}
+                      paddingAngle={4}
+                      dataKey="stock"
+                      nameKey="name"
+                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                    >
+                      {branchStockData.map((entry, index) => {
+                        const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'];
+                        const color = colors[index % colors.length];
+                        return <Cell key={`cell-${index}`} fill={color} />;
+                      })}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: '12px', 
+                        border: isDark ? '1px solid #27272a' : '1px solid #E5E7EB', 
+                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+                        backgroundColor: isDark ? '#18181b' : '#FFFFFF',
+                        color: isDark ? '#f4f4f5' : '#18181b'
+                      }}
+                      formatter={(val: any) => [`${Number(val).toLocaleString()} Units`, 'Stock Quantity']}
+                    />
+                    <Legend iconType="circle" layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </CardContent>
         </Card>
