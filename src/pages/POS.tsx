@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Trash2, CreditCard, Receipt, Barcode, ShoppingCart, Package, ArrowRightLeft, UserPlus, Pause, Play, Tag, HelpCircle, X, ChevronDown, Check, Coins, User } from 'lucide-react';
+import { Search, Trash2, CreditCard, Receipt, Barcode, ShoppingCart, Package, ArrowRightLeft, UserPlus, Pause, Play, Tag, HelpCircle, X, ChevronDown, Check, Coins, User, Mic, MicOff } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -61,6 +61,176 @@ export default function POS() {
   const [lastSale, setLastSale] = useState<SaleRecord | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const shouldPrintRef = useRef(false);
+
+  // Web Speech API states and logic for voice item search & control
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      setSpeechSupported(true);
+    }
+  }, []);
+
+  const speakStatus = (text: string) => {
+    if ('speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.05;
+        window.speechSynthesis.speak(utterance);
+      } catch (e) {
+        console.warn('[POS Voice] SpeechSynthesis fail:', e);
+      }
+    }
+  };
+
+  const startVoiceSearch = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error('Web Speech Not Supported', {
+        description: 'Voice search requires Chrome, Edge, or Safari browsers.'
+      });
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      speakStatus('Listening');
+      toast.info('Voice POS Assistant Active', {
+        description: 'Speak item name ("chips", "bread") or action ("checkout", "clear cart")...'
+      });
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error', event.error);
+      setIsListening(false);
+      if (event.error === 'not-allowed') {
+        toast.error('Permission Denied', {
+          description: 'Please grant microphone access in your browser settings.'
+        });
+        speakStatus('Microphone permission denied');
+      } else {
+        toast.error('Voice recognition stopped', {
+          description: `Error: ${event.error}`
+        });
+      }
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.onresult = (event: any) => {
+      const speechToText = event.results[0][0].transcript;
+      const confidence = event.results[0][0].confidence;
+      console.log('Voice recognized text:', speechToText, 'Confidence:', confidence);
+      
+      const cleanText = speechToText.trim().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "");
+      const lowerText = cleanText.toLowerCase();
+
+      // Custom voice command mappings
+      if (lowerText === 'clear search' || lowerText === 'reset search') {
+        setSearchTerm('');
+        speakStatus('Search cleared');
+        toast.success('Search terms cleared');
+        return;
+      }
+
+      if (lowerText === 'clear cart' || lowerText === 'reset cart' || lowerText === 'empty cart') {
+        clearCart();
+        speakStatus('Cart cleared');
+        toast.success('Shopping cart cleared');
+        return;
+      }
+
+      if (lowerText === 'checkout' || lowerText === 'pay' || lowerText === 'start checkout') {
+        if (cart.length > 0) {
+          setShowPayment(true);
+          speakStatus('Showing checkout screen');
+          toast.info('Initiating payment checkout...');
+        } else {
+          speakStatus('Your cart is empty');
+          toast.warning('Cannot checkout with empty cart.');
+        }
+        return;
+      }
+
+      if (lowerText === 'park' || lowerText === 'park sale') {
+        if (cart.length > 0) {
+          parkSale();
+          speakStatus('Sale parked');
+          toast.success('Sale parked');
+        } else {
+          speakStatus('Cart is empty, nothing to park');
+          toast.warning('Cart empty, nothing to park.');
+        }
+        return;
+      }
+
+      // Voice control: Add product command e.g. "add Rice", "add battery"
+      if (lowerText.startsWith('add ')) {
+        const itemQuery = lowerText.substring(4).trim().toLowerCase();
+        if (itemQuery.length > 0) {
+          const exactMatch = products.find(p => p.name.toLowerCase() === itemQuery || p.sku.toLowerCase() === itemQuery);
+          if (exactMatch) {
+            addToCart(exactMatch);
+            speakStatus(`Added ${exactMatch.name}`);
+            toast.success(`Voice Added: ${exactMatch.name}`);
+            return;
+          }
+
+          const partialMatches = products.filter(p => p.name.toLowerCase().includes(itemQuery));
+          if (partialMatches.length === 1) {
+            addToCart(partialMatches[0]);
+            speakStatus(`Added ${partialMatches[0].name}`);
+            toast.success(`Voice Added: ${partialMatches[0].name}`);
+            return;
+          } else if (partialMatches.length > 1) {
+            setSearchTerm(itemQuery);
+            speakStatus(`Found ${partialMatches.length} matching items, please select one`);
+            toast.info(`Multiple matches for: "${itemQuery}"`);
+            return;
+          } else {
+            speakStatus(`Product ${itemQuery} not found`);
+            toast.error(`No products found matching: "${itemQuery}"`);
+            return;
+          }
+        }
+      }
+
+      // Voice control: Category filters command e.g. "show Beverages"
+      if (lowerText.startsWith('show ') || lowerText.startsWith('category ')) {
+        const catQuery = lowerText.split(' ').slice(1).join(' ').trim().toLowerCase();
+        const matchedCat = categories.find(c => c.name.toLowerCase().includes(catQuery));
+        if (matchedCat) {
+          setActiveCategory(matchedCat.id);
+          speakStatus(`Showing ${matchedCat.name}`);
+          toast.success(`Category: ${matchedCat.name}`);
+          return;
+        }
+      }
+
+      // Fallback: regular product name/SKU search
+      setSearchTerm(cleanText);
+      speakStatus(`Searching for ${cleanText}`);
+      toast.info(`Voice Search: "${cleanText}"`);
+    };
+
+    try {
+      recognition.start();
+    } catch (e: any) {
+      console.error(e);
+      setIsListening(false);
+    }
+  };
   
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -1140,11 +1310,29 @@ export default function POS() {
               <Search className="absolute left-3.5 top-2.5 h-4.5 w-4.5 text-zinc-400 group-focus-within:text-primary transition-colors" />
               <Input 
                 ref={searchInputRef}
-                placeholder="Search products by name, SKU, or scan barcode (F2)..." 
-                className="pl-10 h-10 text-sm shadow-sm font-sans border-zinc-200 focus-visible:ring-primary focus-visible:border-primary rounded-xl transition-all bg-white"
+                placeholder="Voice search or SKU scan (F2)..." 
+                className="pl-10 pr-24 h-10 text-sm shadow-sm font-sans border-zinc-200 focus-visible:ring-primary focus-visible:border-primary rounded-xl transition-all bg-white"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
+              <Button 
+                type="button"
+                onClick={startVoiceSearch} 
+                size="icon" 
+                variant="ghost" 
+                className={`absolute right-11 top-0.5 h-9 w-9 rounded-lg transition-all ${
+                  isListening 
+                  ? 'text-rose-500 bg-rose-50 dark:bg-rose-950/20 animate-pulse' 
+                  : 'text-zinc-400 hover:text-zinc-650 hover:bg-zinc-50'
+                }`}
+                title="Search or run commands by voice"
+              >
+                {isListening ? (
+                  <Mic className="h-4.5 w-4.5 text-rose-500" />
+                ) : (
+                  <MicOff className="h-4.5 w-4.5 text-zinc-400" />
+                )}
+              </Button>
               <Button size="icon" variant="ghost" className="absolute right-1.5 top-0.5 h-9 w-9 text-zinc-400 hover:text-zinc-650">
                 <Barcode className="h-4 w-4" />
               </Button>

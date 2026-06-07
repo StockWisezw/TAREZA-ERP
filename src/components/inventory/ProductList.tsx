@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Filter, Download, MoreHorizontal, Settings2, ArrowUpDown, Printer, Edit3, Check, RotateCcw, Loader2, Tag } from 'lucide-react';
+import { Search, Plus, Filter, Download, MoreHorizontal, Settings2, ArrowUpDown, Printer, Edit3, Check, RotateCcw, Loader2, Tag, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -44,13 +44,14 @@ export function ProductList({ onImportClick }: ProductListProps) {
 
   // Inline editing state
   const [isInlineEditMode, setIsInlineEditMode] = useState(false);
-  const [editedFields, setEditedFields] = useState<Record<string, { retail_price: string; wholesale_price: string; stock: string }>>({});
+  const [editedFields, setEditedFields] = useState<Record<string, { retail_price: string; wholesale_price: string; cost_price: string; stock: string }>>({});
   const [isSavingInline, setIsSavingInline] = useState<Record<string, boolean>>({});
   
   // Add Product Form State
   const [newProductName, setNewProductName] = useState('');
   const [newProductSKU, setNewProductSKU] = useState('');
   const [newProductPrice, setNewProductPrice] = useState('');
+  const [newProductCostPrice, setNewProductCostPrice] = useState('');
   const [newProductStock, setNewProductStock] = useState('0');
   const [newReorderLevel, setNewReorderLevel] = useState('10');
   
@@ -80,6 +81,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
   const [editCategory, setEditCategory] = useState('');
   const [editRetailPrice, setEditRetailPrice] = useState('');
   const [editWholesalePrice, setEditWholesalePrice] = useState('');
+  const [editCostPrice, setEditCostPrice] = useState('');
   const [editReorderLevel, setEditReorderLevel] = useState('10');
 
   // Adjust Product Stock Dialog Form State
@@ -212,6 +214,34 @@ export function ProductList({ onImportClick }: ProductListProps) {
     }
   };
 
+  const handleBatchDelete = async () => {
+    if (selectedProductIds.length === 0) return;
+    
+    const count = selectedProductIds.length;
+    if (!window.confirm(`Are you sure you want to delete the ${count} selected product(s)?`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      const updatePromises = selectedProductIds.map(id => 
+        supabase.from('products').update({ is_active: false }).eq('id', id)
+      );
+      
+      await Promise.all(updatePromises);
+
+      toast.success(`Successfully deleted ${count} product(s)`);
+      setSelectedProductIds([]);
+      await fetchProducts();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Failed to batch delete products");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAddBundleToNew = () => {
     if (!newBundleName.trim() || !newBundleSize || !newBundlePrice) {
       toast.error("Please fill in Bundle Name, Pack Size, and Price!");
@@ -293,6 +323,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
          sku: finalSku,
          retail_price: price,
          wholesale_price: isPack ? parseFloat(wholesalePrice) : (price * 0.9),
+          cost_price: parseFloat(newProductCostPrice || "0") || 0,
          bundles: bundles,
          is_active: true
        }).select().single();
@@ -327,6 +358,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
        setBundles([]);
        setNewProductName('');
        setNewProductPrice('');
+        setNewProductCostPrice('');
        setNewProductSKU('');
        setNewProductStock('0');
        setIsPack(false);
@@ -364,6 +396,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
           barcode: editBarcode || null,
           retail_price: retail,
           wholesale_price: isNaN(wholesale) ? (retail * 0.9) : wholesale,
+          cost_price: parseFloat(editCostPrice || "0") || 0,
           category_id: editCategory || null,
           bundles: editBundles,
           updated_at: new Date().toISOString()
@@ -555,10 +588,11 @@ export function ProductList({ onImportClick }: ProductListProps) {
     // Parse values
     const newRetail = parseFloat(rowEdit.retail_price);
     const newWholesale = parseFloat(rowEdit.wholesale_price);
+    const newCost = parseFloat(rowEdit.cost_price || "0") || 0;
     const newStock = parseFloat(rowEdit.stock);
 
-    if (isNaN(newRetail) || isNaN(newWholesale) || isNaN(newStock)) {
-      toast.error("Please enter valid numeric values for prices and stock");
+    if (isNaN(newRetail) || isNaN(newWholesale) || isNaN(newCost) || isNaN(newStock)) {
+      toast.error("Please enter valid numeric values for prices, cost, and stock");
       return;
     }
 
@@ -571,6 +605,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
         .update({
           retail_price: newRetail,
           wholesale_price: newWholesale,
+          cost_price: newCost,
           updated_at: new Date().toISOString()
         })
         .eq('id', item.id);
@@ -753,6 +788,16 @@ export function ProductList({ onImportClick }: ProductListProps) {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+          {selectedProductIds.length > 0 && (
+            <Button
+              variant="outline"
+              className="shadow-sm border-red-200 text-red-700 bg-red-50 hover:bg-red-100/85 hover:text-red-800 transition-all font-semibold h-9 text-xs"
+              onClick={handleBatchDelete}
+            >
+              <Trash2 className="mr-1.5 h-4 w-4 text-red-650" />
+              Delete Selection ({selectedProductIds.length})
+            </Button>
+          )}
           <Button 
             variant={isInlineEditMode ? "default" : "outline"} 
             className={`shadow-sm ${isInlineEditMode ? 'bg-indigo-600 hover:bg-indigo-700 text-white border-transparent' : 'bg-white'}`}
@@ -811,10 +856,14 @@ export function ProductList({ onImportClick }: ProductListProps) {
                   <Label>Product Name *</Label>
                   <Input value={newProductName} onChange={e => setNewProductName(e.target.value)} placeholder="e.g. Mazoe Blackberry 2L" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-2">
                     <Label>SKU</Label>
                     <Input value={newProductSKU} onChange={e => setNewProductSKU(e.target.value)} placeholder="e.g. BV-MZB-2L" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Cost Price ($)</Label>
+                    <Input type="number" step="0.01" value={newProductCostPrice} onChange={e => setNewProductCostPrice(e.target.value)} placeholder="0.00" />
                   </div>
                   <div className="space-y-2">
                     <Label>Retail Price ($) *</Label>
@@ -961,11 +1010,14 @@ export function ProductList({ onImportClick }: ProductListProps) {
                 <TableHead className="w-[80px]">Image</TableHead>
                 <TableHead className="w-[120px]">SKU/Barcode</TableHead>
                 <TableHead>Product</TableHead>
-                <TableHead className="w-[140px]">Category</TableHead>
-                <TableHead className="text-right w-[100px]">Stock</TableHead>
-                <TableHead className="text-right w-[120px]">Retail</TableHead>
-                <TableHead className="text-right w-[120px]">Wholesale</TableHead>
-                <TableHead className="w-[120px]">Status</TableHead>
+                <TableHead className="w-[120px]">Category</TableHead>
+                <TableHead className="text-right w-[90px]">Stock</TableHead>
+                <TableHead className="text-right w-[110px]">Cost</TableHead>
+                <TableHead className="text-right w-[110px]">Retail</TableHead>
+                <TableHead className="text-right w-[110px]">Wholesale</TableHead>
+                <TableHead className="text-right w-[90px]">Margin</TableHead>
+                <TableHead className="text-right w-[120px]">Potential Profit</TableHead>
+                <TableHead className="w-[110px]">Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -979,13 +1031,21 @@ export function ProductList({ onImportClick }: ProductListProps) {
                 const rowEdit = editedFields[item.id] || {
                   retail_price: item.retail_price?.toString() || '0',
                   wholesale_price: item.wholesale_price?.toString() || '0',
+                  cost_price: item.cost_price?.toString() || '0',
                   stock: stock.toString()
                 };
 
                 const isDirty = 
                   parseFloat(rowEdit.retail_price) !== item.retail_price ||
                   parseFloat(rowEdit.wholesale_price) !== item.wholesale_price ||
+                  parseFloat(rowEdit.cost_price || '0') !== (item.cost_price || 0) ||
                   parseFloat(rowEdit.stock) !== stock;
+
+                const retailVal = isInlineEditMode ? parseFloat(rowEdit.retail_price || "0") : (item.retail_price || 0);
+                const costVal = isInlineEditMode ? parseFloat(rowEdit.cost_price || "0") : (item.cost_price || 0);
+                const marginPercent = retailVal > 0 ? ((retailVal - costVal) / retailVal) * 100 : 0;
+                const currentStock = isInlineEditMode ? parseFloat(rowEdit.stock || "0") : stock;
+                const potentialProfit = (retailVal - costVal) * currentStock;
 
                 const isChecked = selectedProductIds.includes(item.id);
 
@@ -1073,6 +1133,32 @@ export function ProductList({ onImportClick }: ProductListProps) {
                     )}
                   </TableCell>
 
+                  {/* Cost Column */}
+                  <TableCell className="text-right font-mono text-zinc-600">
+                    {isInlineEditMode ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <span className="text-zinc-400 text-xs">$</span>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={rowEdit.cost_price}
+                          onChange={(e) => {
+                            setEditedFields((prev) => ({
+                              ...prev,
+                              [item.id]: {
+                                ...rowEdit,
+                                cost_price: e.target.value
+                              }
+                            }));
+                          }}
+                          className="w-20 text-right font-mono text-xs h-8 px-2 border-zinc-200 bg-white"
+                        />
+                      </div>
+                    ) : (
+                      `$${(item.cost_price || 0).toFixed(2)}`
+                    )}
+                  </TableCell>
+
                   {/* Retail Column */}
                   <TableCell className="text-right font-mono">
                     {isInlineEditMode ? (
@@ -1123,6 +1209,20 @@ export function ProductList({ onImportClick }: ProductListProps) {
                     ) : (
                       `$${item.wholesale_price?.toFixed(2)}`
                     )}
+                  </TableCell>
+
+                  {/* Margin Column */}
+                  <TableCell className="text-right font-mono">
+                    <span className={`text-xs font-semibold ${marginPercent > 0 ? 'text-emerald-600' : marginPercent < 0 ? 'text-red-500' : 'text-zinc-500'}`}>
+                      {marginPercent.toFixed(1)}%
+                    </span>
+                  </TableCell>
+
+                  {/* Potential Profit Column */}
+                  <TableCell className="text-right font-mono font-semibold text-zinc-900">
+                    <span className={potentialProfit > 0 ? 'text-emerald-700' : potentialProfit < 0 ? 'text-red-500' : 'text-zinc-400'}>
+                      ${(potentialProfit > 0 ? potentialProfit : 0).toFixed(2)}
+                    </span>
                   </TableCell>
 
                   <TableCell>
@@ -1189,6 +1289,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
                               setEditCategory(item.category_id || '');
                               setEditRetailPrice(item.retail_price?.toString() || '0');
                               setEditWholesalePrice(item.wholesale_price?.toString() || '0');
+                              setEditCostPrice(item.cost_price?.toString() || '0');
                               setEditBundles(item.bundles ? JSON.parse(JSON.stringify(item.bundles)) : []);
                               const stockRec = selectedBranchId 
                                 ? item.inventory?.find((i: any) => i.branch_id === selectedBranchId)
@@ -1269,7 +1370,11 @@ export function ProductList({ onImportClick }: ProductListProps) {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-zinc-600">Cost Price ($)</Label>
+                <Input type="number" step="0.01" value={editCostPrice} onChange={e => setEditCostPrice(e.target.value)} placeholder="0.00" className="bg-white border-zinc-200 font-mono" />
+              </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-zinc-600">Retail Price ($) *</Label>
                 <Input type="number" step="0.01" value={editRetailPrice} onChange={e => setEditRetailPrice(e.target.value)} placeholder="0.00" className="bg-white border-zinc-200 font-mono" />

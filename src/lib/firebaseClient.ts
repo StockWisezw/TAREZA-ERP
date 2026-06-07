@@ -70,6 +70,12 @@ let firebaseCurrentUser: any = null;
 
 onAuthStateChanged(fireAuth, (user) => {
   firebaseCurrentUser = user;
+  if (!user) {
+    setActiveBusinessId(null);
+  } else {
+    // Prefetch active business ID
+    getActiveBusinessId();
+  }
 });
 
 export const auth = {
@@ -166,7 +172,7 @@ const ALLOWED_KEYS: Record<string, string[]> = {
   tax_rates: ['id', 'business_id', 'name', 'rate', 'is_active'],
   purchase_orders: ['id', 'business_id', 'supplier_id', 'status', 'total_amount', 'po_number', 'order_date', 'expected_delivery_date', 'items', 'created_at'],
   stocktakes_advanced: ['id', 'business_id', 'branch_id', 'status', 'type', 'started_at', 'completed_at', 'pos_session_id', 'total_shortage', 'total_overage', 'charge_sales_posted', 'created_at'],
-  inventory_transfers: ['id', 'business_id', 'from_branch_id', 'to_branch_id', 'status', 'created_at'],
+  inventory_transfers: ['id', 'business_id', 'from_branch_id', 'to_branch_id', 'status', 'created_at', 'items', 'notes'],
   stock_movements: ['id', 'product_id', 'branch_id', 'quantity', 'type', 'created_at'],
   subscriptions: ['id', 'business_id', 'plan_name', 'status', 'start_date', 'end_date', 'created_at'],
   accounts: ['id', 'business_id', 'code', 'name', 'type', 'balance', 'is_system', 'created_at'],
@@ -324,6 +330,48 @@ export async function getDocs(queryObj: any) {
   }
 }
 
+// Active business ID cache & auto-resolving mechanism
+let cachedBusinessId: string | null = null;
+
+export function setActiveBusinessId(id: string | null) {
+  cachedBusinessId = id;
+  if (id) {
+    localStorage.setItem('tareza_active_business_id', id);
+  } else {
+    localStorage.removeItem('tareza_active_business_id');
+  }
+}
+
+export async function getActiveBusinessId(): Promise<string | null> {
+  if (cachedBusinessId) return cachedBusinessId;
+
+  const localId = localStorage.getItem('tareza_active_business_id');
+  if (localId) {
+    cachedBusinessId = localId;
+    return localId;
+  }
+
+  const user = fireAuth.currentUser;
+  if (!user) return null;
+
+  try {
+    const qSnap = await fireGetDocs(fireQuery(
+      fireCollection(db, 'business_users'),
+      fireWhere('user_id', '==', user.uid)
+    ));
+    if (!qSnap.empty) {
+      const bizId = qSnap.docs[0].data()?.business_id;
+      if (bizId) {
+        setActiveBusinessId(bizId);
+        return bizId;
+      }
+    }
+  } catch (err) {
+    console.error('[Firebase] Error auto-resolving active business ID:', err);
+  }
+  return null;
+}
+
 // Low-level query emulator on top of Firestore collections
 class SupabaseQueryBuilder {
   table: string;
@@ -402,10 +450,22 @@ class SupabaseQueryBuilder {
 
   async execute() {
     try {
+      const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id');
+      const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
+
       if (this.isInsert) {
         const itemsToInsert = this.payload.map((item: any) => {
-          const docId = item.id || item.$id || uuidv4();
+          let docId = item.id || item.$id;
+          if (this.table === 'business_users' && item.user_id) {
+            docId = item.user_id;
+          } else if (!docId) {
+            docId = uuidv4();
+          }
+
           const cleanItem = normalizeInput(item, this.table);
+          if (requiresBusinessScope && activeBizId) {
+            cleanItem.business_id = activeBizId;
+          }
           return { id: docId, ...cleanItem };
         });
 
@@ -421,14 +481,23 @@ class SupabaseQueryBuilder {
       
       if (this.isUpdate) {
         if (this.targetId) {
+          if (this.table === 'businesses' && activeBizId && this.targetId !== activeBizId) {
+            throw new Error(`Permission denied: Cannot update other business profile`);
+          }
           const docRef = fireDoc(db, this.table, this.targetId);
           const cleanItem = normalizeInput(this.payload, this.table);
+          if (requiresBusinessScope && activeBizId) {
+            cleanItem.business_id = activeBizId;
+          }
           await fireUpdateDoc(docRef, cleanItem);
           const updatedDoc = { id: this.targetId, ...cleanItem };
           return { data: [normalizeOutput(this.targetId, updatedDoc, this.table)], count: 1, error: null };
         } else {
           const results = await this.getFilteredDocs();
           const cleanItem = normalizeInput(this.payload, this.table);
+          if (requiresBusinessScope && activeBizId) {
+            cleanItem.business_id = activeBizId;
+          }
           for (const docSnap of results) {
             const docRef = fireDoc(db, this.table, docSnap.id);
             await fireUpdateDoc(docRef, cleanItem);
@@ -439,6 +508,13 @@ class SupabaseQueryBuilder {
 
       if (this.isDelete) {
         if (this.targetId) {
+          if (requiresBusinessScope && activeBizId) {
+            const docRef = fireDoc(db, this.table, this.targetId);
+            const snap = await fireGetDoc(docRef);
+            if (snap.exists() && snap.data()?.business_id !== activeBizId) {
+              throw new Error(`Permission denied: Cannot delete document belonging to another business.`);
+            }
+          }
           const docRef = fireDoc(db, this.table, this.targetId);
           await fireDeleteDoc(docRef);
         } else {
@@ -468,6 +544,29 @@ class SupabaseQueryBuilder {
   async getFilteredDocs() {
     const colRef = fireCollection(db, this.table);
     let q: any = colRef;
+
+    const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id');
+    const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
+
+    if (requiresBusinessScope && activeBizId) {
+      const hasBizIdFilter = this.eqFilters.some(f => f.col === 'business_id');
+      if (!hasBizIdFilter) {
+        this.eqFilters.push({ col: 'business_id', val: activeBizId });
+      } else {
+        this.eqFilters = this.eqFilters.map(f => f.col === 'business_id' ? { col: 'business_id', val: activeBizId } : f);
+      }
+    } else if (this.table === 'businesses' && activeBizId) {
+      if (this.targetId) {
+        this.targetId = activeBizId;
+      } else {
+        const hasIdFilter = this.eqFilters.some(f => f.col === 'id');
+        if (!hasIdFilter) {
+          this.eqFilters.push({ col: 'id', val: activeBizId });
+        } else {
+          this.eqFilters = this.eqFilters.map(f => f.col === 'id' ? { col: 'id', val: activeBizId } : f);
+        }
+      }
+    }
 
     const constraints: any[] = [];
     for (const filter of this.eqFilters) {
@@ -647,6 +746,7 @@ export const supabase = {
       try {
         await fireSignOut(fireAuth);
         firebaseCurrentUser = null;
+        setActiveBusinessId(null);
         return { error: null };
       } catch (error) {
         return { error };

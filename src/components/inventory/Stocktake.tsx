@@ -192,13 +192,15 @@ export function Stocktake() {
         : null;
       const systemQty = branchInventory ? branchInventory.quantity : (item.product?.inventory?.[0]?.quantity || 0);
       const countedQty = Number(item.counted_qty || 0);
-      const retailPrice = Number(item.product?.retail_price || 0);
+      const price = reconciliationValuation === 'cost'
+        ? Number(item.product?.cost_price || item.product?.wholesale_price || 0)
+        : Number(item.product?.retail_price || 0);
       const variance = countedQty - systemQty;
 
       if (variance < 0) {
-        shortageAmount += Math.abs(variance) * retailPrice;
+        shortageAmount += Math.abs(variance) * price;
       } else if (variance > 0) {
-        overageAmount += variance * retailPrice;
+        overageAmount += variance * price;
       }
     });
 
@@ -212,7 +214,7 @@ export function Stocktake() {
   const fetchProducts = async () => {
     try {
       const [productsRes, inventoryRes] = await Promise.all([
-        supabase.from('products').select('id, name, sku, barcode, retail_price, wholesale_price, is_active').eq('is_active', true).order('name'),
+        supabase.from('products').select('id, name, sku, barcode, retail_price, wholesale_price, cost_price, is_active').eq('is_active', true).order('name'),
         supabase.from('inventory').select('id, product_id, branch_id, quantity')
       ]);
 
@@ -347,6 +349,7 @@ export function Stocktake() {
             barcode,
             retail_price,
             wholesale_price,
+            cost_price,
             inventory ( quantity, branch_id )
           )
         `)
@@ -1042,7 +1045,7 @@ export function Stocktake() {
                 const systemQty = branchInventory ? branchInventory.quantity : (item.product?.inventory?.[0]?.quantity || 0);
                 const countedQty = Number(item.counted_qty || 0);
                 const price = reconciliationValuation === 'cost' 
-                  ? Number(item.product?.wholesale_price || 0) 
+                  ? Number(item.product?.cost_price || item.product?.wholesale_price || 0) 
                   : Number(item.product?.retail_price || 0);
                 return {
                   expected: acc.expected + (systemQty * price),
@@ -1065,7 +1068,7 @@ export function Stocktake() {
                             : 'text-zinc-600 hover:text-zinc-900'
                         }`}
                       >
-                        Cost (Wholesale)
+                        Cost Price
                       </button>
                       <button
                         type="button"
@@ -1129,7 +1132,7 @@ export function Stocktake() {
                       const countedQty = Number(item.counted_qty || 0);
                       const variance = countedQty - systemQty;
                       const price = reconciliationValuation === 'cost' 
-                        ? Number(item.product?.wholesale_price || 0) 
+                        ? Number(item.product?.cost_price || item.product?.wholesale_price || 0) 
                         : Number(item.product?.retail_price || 0);
                       const varValue = variance * price;
 
@@ -1711,7 +1714,7 @@ export function Stocktake() {
                           : 'text-zinc-500 hover:text-zinc-805'
                       }`}
                     >
-                      Cost
+                      Cost Price
                     </button>
                     <button
                       type="button"
@@ -1722,7 +1725,7 @@ export function Stocktake() {
                           : 'text-zinc-500 hover:text-zinc-805'
                       }`}
                     >
-                      Sales
+                      Retail Price
                     </button>
                   </div>
                 </div>
@@ -1766,7 +1769,7 @@ export function Stocktake() {
                         const countedQty = Number(item.counted_qty || 0);
                         const variance = countedQty - systemExpected;
                         const price = reconciliationValuation === 'cost' 
-                          ? Number(item.product?.wholesale_price || 0) 
+                          ? Number(item.product?.cost_price || item.product?.wholesale_price || 0) 
                           : Number(item.product?.retail_price || 0);
                         const varVal = variance * price;
                         

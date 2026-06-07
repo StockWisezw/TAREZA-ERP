@@ -77,6 +77,37 @@ Get started today and streamline your retail business. #TarezaERP #POS #Zimbabwe
     tags: ['social-ad', 'square', 'promotional'],
   },
   {
+    id: 'facebook-cover',
+    name: 'Tareza ERP Facebook Page Cover Banner',
+    type: 'Facebook & Instagram',
+    format: 'Facebook Cover (820x312 aspect landscape)',
+    imageUrl: '/facebook_cover.png',
+    caption: `✨ Welcome to the official page of Tareza ERP. We are Zimbabwe's #1 offline-first cloud POS & retail ecosystem. Streamline your retail operations, monitor in-stock quantity with high-contrast precision, set wholesale/retail prices, configure multiple bundle sizes, handle multiple cashier drawers risk-free, and track daily sales from any device. Streamlined, simple, secure! Get started with Tareza today at tareza-pos.co.zw`,
+    tags: ['cover', 'landscape', 'branding'],
+  },
+  {
+    id: 'first-advert-retail',
+    name: 'Tareza ERP Grand Launch Advert (Wholesale & Retail Bundle)',
+    type: 'Facebook & Instagram',
+    format: '1:1 Square (Ad Flyer)',
+    imageUrl: '/facebook_ad.png',
+    caption: `💥 REVOLUTIONIZE YOUR SHOP WITH TAREZA ERP! 💥
+
+Are you struggling with daily cash drawer shortages, slow lines, or wholesale/retail price mismatches? Tareza ERP is finally here to lift the weight off Zimbabwe retail merchant and wholesaler shoulders!
+
+💡 Manage single items AND custom packs (six-packs, bulk cartons, individual bottles) seamlessly with Tareza's built-in Multi-Bundle Pricing engine!
+
+🌟 Features designed for our merchants:
+🔹 Dual Pricing: Set Retail & Wholesale tier rates automatically!
+🔹 Cashier Control: Monitor cashier sign-ins and separate float levels.
+🔹 Local Backup: Seamlessly continues selling even without electricity or network connectivity!
+🔹 Automatic Exchange Rates: Keep pricing aligned with EcoCash, InnBucks, USD, and ZiG instantly!
+
+👇 Download the applet or log in today to claim your free 14-day trial!
+#TarezaERP #ZimbabweMerchants #POSSystem #RetailTech #WholesaleMakers #EcoCash`,
+    tags: ['social-ad', 'square', 'grand-launch', 'first-advert'],
+  },
+  {
     id: 'youtube-ad',
     name: 'Tareza ERP Cashier Onboarding Masterclass Thumbnail',
     type: 'YouTube & Video',
@@ -91,6 +122,33 @@ Subscribe to our channel to make sure your workforce operates on maximum accurac
 📺 Watch: https://www.youtube.com/@tarezaerp
 #TarezaERP #CashierTraining #OnboardingMasterclass #ZimbabwePOS #InventoryManagement`,
     tags: ['thumbnail', 'landscape', 'tutorial'],
+  },
+  {
+    id: 'youtube-cover',
+    name: 'Tareza ERP YouTube Channel Art Banner',
+    type: 'YouTube & Video',
+    format: 'YouTube Channel Header (2560x1440 ratio)',
+    imageUrl: '/youtube_cover.png',
+    caption: `🎥 Welcome to the Tareza ERP training and resource hub. Here you will find extensive cashier onboarding video playlists, POS configurations, custom bundle guidelines, and live merchant webinars. Watch or subscribe for a series of masterclasses about hardware printers, multi-branch reporting, and secure offline drawer workflows. Tareza ERP: Zimbabwe's Smart POS made simple.`,
+    tags: ['cover', 'landscape', 'branding'],
+  },
+  {
+    id: 'first-advert-whatsapp',
+    name: 'Cashier Speed Promo WhatsApp Banner',
+    type: 'Banner',
+    format: 'Standard Landscape Banner',
+    imageUrl: '/youtube_ad.png',
+    caption: `⚡ SPEED UP THE CHECKOUT LINE BY 300% ⚡
+
+Tired of manually computing pack sizes and calculating change? Streamline cashier flow with Tareza ERP POS!
+
+No more guessing. No more pen-and-paper. Scan or type SKU, select bundle, check out cash and mobile drawer payments, and print high-contrast receipts instantly.
+
+Keep your cashier workspace 100% transparent and leak-proof. Set up Tareza ERP on any smartphone, tablet, or web browser in under 5 minutes!
+
+Get Tareza POS: https://tareza-pos.co.zw
+#TarezaPOS #ZimbabweRetail #PointOfSale #EasyPOS #OfflinePOS`,
+    tags: ['whatsapp', 'banner', 'cashier-promo', 'first-advert'],
   }
 ];
 

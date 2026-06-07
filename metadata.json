@@ -1,6 +1,6 @@
 {
   "name": "Tareza ERP",
   "description": "Tareza ERP. Ultimate global cloud POS, dynamic multi-branch inventory management, real-time double-entry ledger bookkeeping, and smart business operating system designed for modern, high-growth retail enterprises scaled globally.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
