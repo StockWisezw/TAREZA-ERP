@@ -503,7 +503,9 @@ export function Procurement() {
                 <label className="text-xs font-semibold text-zinc-600">Supplier</label>
                 <Select value={selectedSupplierId} onValueChange={setSelectedSupplierId}>
                   <SelectTrigger className="bg-white border-zinc-200">
-                    <SelectValue placeholder="Select Supplier" />
+                    <SelectValue placeholder="Select Supplier">
+                      {suppliers.find(s => s.id === selectedSupplierId)?.name || 'Select Supplier'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-white">
                     {suppliers.map(s => (
@@ -551,7 +553,12 @@ export function Procurement() {
                     }
                   }}>
                     <SelectTrigger className="bg-white h-9 text-xs">
-                      <SelectValue placeholder="Pick Product" />
+                      <SelectValue placeholder="Pick Product">
+                        {(() => {
+                          const matched = products.find(p => p.id === tempProductId);
+                          return matched ? `${matched.name} ($${Number(matched.cost_price || matched.retail_price || 0).toFixed(2)})` : 'Pick Product';
+                        })()}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent className="bg-white">
                       {products.map(p => (
@@ -618,7 +625,9 @@ export function Procurement() {
                 <label className="text-xs font-semibold text-zinc-600">Status</label>
                 <Select value={poStatus} onValueChange={setPoStatus}>
                   <SelectTrigger className="bg-white border-zinc-200">
-                    <SelectValue />
+                    <SelectValue>
+                      {poStatus === 'DRAFT' ? 'Draft' : poStatus === 'PENDING_APPROVAL' ? 'Pending Approval' : poStatus === 'APPROVED' ? 'Approved / Sent' : poStatus === 'RECEIVED' ? 'Fully Received' : poStatus}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-white">
                     <SelectItem value="DRAFT">Draft</SelectItem>
@@ -660,7 +669,9 @@ export function Procurement() {
                 <label className="text-xs font-semibold text-zinc-600">Supplier</label>
                 <Select value={selectedSupplierId} onValueChange={setSelectedSupplierId}>
                   <SelectTrigger className="bg-white border-zinc-200">
-                    <SelectValue placeholder="Select Supplier" />
+                    <SelectValue placeholder="Select Supplier">
+                      {suppliers.find(s => s.id === selectedSupplierId)?.name || 'Select Supplier'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-white">
                     {suppliers.map(s => (
@@ -705,7 +716,12 @@ export function Procurement() {
                     }
                   }}>
                     <SelectTrigger className="bg-white h-9 text-xs">
-                      <SelectValue placeholder="Pick Product" />
+                      <SelectValue placeholder="Pick Product">
+                        {(() => {
+                          const matched = products.find(p => p.id === tempProductId);
+                          return matched ? `${matched.name} ($${Number(matched.cost_price || matched.retail_price || 0).toFixed(2)})` : 'Pick Product';
+                        })()}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent className="bg-white">
                       {products.map(p => (
@@ -770,8 +786,10 @@ export function Procurement() {
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-zinc-650">Status</label>
                 <Select value={poStatus} onValueChange={setPoStatus}>
-                  <SelectTrigger className="bg-white border-zinc-200">
-                    <SelectValue />
+                  <SelectTrigger className="bg-white border-zinc-203">
+                    <SelectValue>
+                      {poStatus === 'DRAFT' ? 'Draft' : poStatus === 'PENDING_APPROVAL' ? 'Pending Approval' : poStatus === 'APPROVED' ? 'Approved / Sent' : poStatus === 'RECEIVED' ? 'Fully Received' : poStatus}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-white">
                     <SelectItem value="DRAFT">Draft</SelectItem>

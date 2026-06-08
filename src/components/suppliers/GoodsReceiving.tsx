@@ -298,7 +298,14 @@ export default function GoodsReceiving() {
               <label className="text-xs font-semibold text-zinc-650">Select Purchase Order</label>
               <Select value={selectedPOId} onValueChange={setSelectedPOId}>
                 <SelectTrigger className="bg-white border-zinc-200">
-                  <SelectValue placeholder="Select PO Reference" />
+                  <SelectValue placeholder="Select PO Reference">
+                    {(() => {
+                      const matched = purchaseOrders.find(po => po.id === selectedPOId);
+                      if (!matched) return 'Select PO Reference';
+                      const sup = suppliers.find(s => s.id === matched.supplier_id);
+                      return `${matched.po_number || 'PO'} - ${sup ? sup.name : 'Supplier'} ($${matched.total_amount?.toFixed(2)})`;
+                    })()}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="bg-white">
                   {purchaseOrders.map(po => {
@@ -338,7 +345,9 @@ export default function GoodsReceiving() {
                 <label className="text-xs font-semibold text-zinc-650">Item Received</label>
                 <Select value={selectedProductId} onValueChange={handleProductChange}>
                   <SelectTrigger className="bg-white border-zinc-200">
-                    <SelectValue placeholder="Product" />
+                    <SelectValue placeholder="Product">
+                      {filteredProducts.find(p => p.id === selectedProductId)?.name || 'Product'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-white">
                     {filteredProducts.map(p => (
@@ -355,7 +364,9 @@ export default function GoodsReceiving() {
                 <label className="text-xs font-semibold text-zinc-650">Target Warehouse Branch</label>
                 <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
                   <SelectTrigger className="bg-white border-zinc-200">
-                    <SelectValue placeholder="Destination Location" />
+                    <SelectValue placeholder="Destination Location">
+                      {branches.find(b => b.id === selectedBranchId)?.name || 'Destination Location'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-white">
                     {branches.map(b => (

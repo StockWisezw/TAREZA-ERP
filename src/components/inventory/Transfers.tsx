@@ -562,7 +562,9 @@ export function Transfers() {
                 }}
               >
                 <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="Select Origin Warehouse" />
+                  <SelectValue placeholder="Select Origin Warehouse">
+                    {branches.find(b => b.id === fromBranchId)?.name || 'Select Origin Warehouse'}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {branches.map(b => (
@@ -576,7 +578,9 @@ export function Transfers() {
               <Label className="text-zinc-700 font-bold text-xs mb-1.5 block">Destination Branch (To)</Label>
               <Select value={toBranchId} onValueChange={setToBranchId}>
                 <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="Select Destination Warehouse" />
+                  <SelectValue placeholder="Select Destination Warehouse">
+                    {branches.find(b => b.id === toBranchId)?.name || 'Select Destination Warehouse'}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {branches.map(b => (
@@ -611,7 +615,14 @@ export function Transfers() {
                 <Label className="text-[11px] font-bold text-zinc-650 block mb-1">Pick Product to Relocate</Label>
                 <Select value={tempProductId} onValueChange={setTempProductId}>
                   <SelectTrigger className="bg-white">
-                    <SelectValue placeholder={fromBranchId ? "Select Product" : "Select Origin Branch first"} />
+                    <SelectValue placeholder={fromBranchId ? "Select Product" : "Select Origin Branch first"}>
+                      {(() => {
+                        const matched = products.find(p => p.id === tempProductId);
+                        if (!matched) return fromBranchId ? "Select Product" : "Select Origin Branch first";
+                        const originStock = getProductStockAtBranch(matched.id, fromBranchId);
+                        return `${matched.name} (SKU: ${matched.sku || 'N/A'}) — In Stock: ${originStock}`;
+                      })()}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {products.map(p => {

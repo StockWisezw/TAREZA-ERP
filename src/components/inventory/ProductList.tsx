@@ -830,7 +830,9 @@ export function ProductList({ onImportClick }: ProductListProps) {
             <div className="w-full sm:w-48">
               <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
                 <SelectTrigger className="bg-white shadow-sm border-zinc-200 w-full">
-                  <SelectValue placeholder="Select Branch" />
+                  <SelectValue placeholder="Select Branch">
+                    {branches.find(b => b.id === selectedBranchId)?.name || 'Select Branch'}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="bg-white">
                   {branches.map(b => (
@@ -1441,7 +1443,9 @@ export function ProductList({ onImportClick }: ProductListProps) {
               <Label className="text-xs font-semibold text-zinc-600">Inventory Category</Label>
               <Select value={editCategory} onValueChange={setEditCategory}>
                 <SelectTrigger className="bg-white border-zinc-200">
-                  <SelectValue placeholder="Select Category" />
+                  <SelectValue placeholder="Select Category">
+                    {editCategory === 'none_clear' ? 'Uncategorized / General Catalog' : (categories.find((c: any) => c.id === editCategory)?.name || 'Select Category')}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="bg-white">
                   <SelectItem value="none_clear">Uncategorized / General Catalog</SelectItem>

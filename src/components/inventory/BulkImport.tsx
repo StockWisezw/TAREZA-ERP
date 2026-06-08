@@ -599,8 +599,13 @@ export function BulkImport() {
           <Label className="text-xs text-zinc-500 uppercase font-bold tracking-wider">Assign Initial Inventory Stock to Branch</Label>
           {branches.length > 0 ? (
             <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
-              <SelectTrigger className="bg-white shadow-xs border-zinc-200 mt-1 h-11 rounded-xl">
-                <SelectValue placeholder="Choose target warehouse/branch" />
+              <SelectTrigger className="bg-white shadow-xs border-zinc-200 mt-1 h-11 rounded-xl w-full">
+                <SelectValue placeholder="Choose target warehouse/branch">
+                  {(() => {
+                    const matched = branches.find(b => b.id === selectedBranchId);
+                    return matched ? `${matched.name} (${matched.address || 'No Address'})` : 'Choose target warehouse/branch';
+                  })()}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className="bg-white">
                 {branches.map(b => (
