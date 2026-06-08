@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from '../ui/badge';
 import { Plus, ArrowRightLeft, TrendingUp, RefreshCcw, Save, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { rawSupabase, supabase } from '../../lib/supabaseClient';
+import { rawSupabase, supabase } from '../../lib/firebaseClient';
 import { syncRBZExchangeRates, Currency } from '../../services/currencyService';
 import { logAuditEvent } from '../../services/ledgerService';
 

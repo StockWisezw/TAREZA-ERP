@@ -33,21 +33,23 @@ import { toast } from 'sonner';
 import { ThemeToggle } from './ThemeToggle';
 import { SyncManager } from './pos/SyncManager';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
+import { OfflineStatusBadge } from './OfflineStatusBadge';
 import { TarezaLogo } from './ui/Logo';
 import { AIAssistant } from './AIAssistant';
+import { supabase } from '../lib/firebaseClient';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Tareza POS', href: '/pos', icon: ShoppingCart },
+  { name: 'POS Terminal', href: '/pos', icon: ShoppingCart },
   { name: 'Cash Management', href: '/cash', icon: DollarSign },
   { name: 'Accounting Ledger', href: '/accounting', icon: BookOpen },
   { name: 'Sales History', href: '/receipts', icon: Receipt },
-  { name: 'Tareza Inventory', href: '/inventory', icon: Package },
-  { name: 'Tareza CRM', href: '/customers', icon: Users },
-  { name: 'Tareza Suppliers', href: '/suppliers', icon: Truck },
+  { name: 'Inventory Control', href: '/inventory', icon: Package },
+  { name: 'Customer CRM', href: '/customers', icon: Users },
+  { name: 'Suppliers', href: '/suppliers', icon: Truck },
   { name: 'Reports', href: '/reports', icon: FileText },
   { name: 'Staff Messenger', href: '/messenger', icon: MessageSquare },
-  { name: 'Tareza Settings', href: '/settings', icon: Settings },
+  { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
 function SubscriptionBanner() {
@@ -103,6 +105,39 @@ export default function Layout() {
   const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw' || user?.email === 'dev@tarezaerp.co.zw';
   const [isLocked, setIsLocked] = React.useState(false);
   const [unlockPin, setUnlockPin] = React.useState('');
+  const [businessName, setBusinessName] = React.useState<string>('');
+
+  React.useEffect(() => {
+    async function fetchBusinessName() {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData?.user?.id;
+        if (!userId) return;
+
+        const { data: businessData } = await supabase
+          .from('business_users')
+          .select('business_id')
+          .eq('user_id', userId)
+          .limit(1)
+          .maybeSingle();
+
+        if (businessData?.business_id) {
+          const { data: bData } = await supabase
+            .from('businesses')
+            .select('name')
+            .eq('id', businessData.business_id)
+            .limit(1)
+            .maybeSingle();
+          if (bData?.name) {
+            setBusinessName(bData.name);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching business name in layout:', err);
+      }
+    }
+    fetchBusinessName();
+  }, [user]);
   
   const [notifications, setNotifications] = React.useState<NotificationItem[]>(() => {
     const cached = localStorage.getItem('erp_notifications');
@@ -181,20 +216,6 @@ export default function Layout() {
     }
   };
   const [pinError, setPinError] = React.useState(false);
-  const [isOnline, setIsOnline] = React.useState(typeof window !== 'undefined' ? navigator.onLine : true);
-
-  React.useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
 
   React.useEffect(() => {
     let timeoutId: NodeJS.Timeout;
@@ -309,8 +330,17 @@ export default function Layout() {
         
         {/* Desktop Sidebar */}
         <aside className="hidden md:flex w-[260px] flex-col bg-zinc-50 dark:bg-[#18181b] border-r border-zinc-200 dark:border-zinc-800/80 overflow-hidden shrink-0">
-          <div className="h-16 px-5 flex items-center">
-            <TarezaLogo size="sm" showSubtitle={false} />
+          <div className="h-16 px-5 flex items-center border-b border-zinc-150 dark:border-zinc-800/80 bg-zinc-100/20 dark:bg-zinc-900/10">
+            {businessName ? (
+              <div className="flex items-center gap-2 select-none overflow-hidden pr-2">
+                <Store className="h-4.5 w-4.5 text-zinc-700 dark:text-zinc-300 shrink-0" />
+                <span className="font-extrabold text-[15px] tracking-tight bg-gradient-to-r from-zinc-800 to-zinc-600 dark:from-white dark:to-zinc-300 bg-clip-text text-transparent truncate">
+                  {businessName}
+                </span>
+              </div>
+            ) : (
+              <TarezaLogo size="sm" showSubtitle={false} />
+            )}
           </div>
           <div className="flex-1 overflow-auto py-4">
             <NavLinks />
@@ -350,7 +380,16 @@ export default function Layout() {
                 </SheetTrigger>
                 <SheetContent side="left" className="w-[260px] p-0 bg-zinc-50 dark:bg-[#18181b]">
                   <div className="h-16 px-5 flex items-center border-b border-zinc-200 dark:border-zinc-800/80">
-                    <TarezaLogo size="sm" showSubtitle={false} />
+                    {businessName ? (
+                      <div className="flex items-center gap-2 select-none overflow-hidden pr-2">
+                        <Store className="h-4.5 w-4.5 text-zinc-700 dark:text-zinc-300 shrink-0" />
+                        <span className="font-extrabold text-[15px] tracking-tight bg-gradient-to-r from-zinc-800 to-zinc-600 dark:from-white dark:to-zinc-300 bg-clip-text text-transparent truncate">
+                          {businessName}
+                        </span>
+                      </div>
+                    ) : (
+                      <TarezaLogo size="sm" showSubtitle={false} />
+                    )}
                   </div>
                   <div className="py-4">
                     <NavLinks mobile />
@@ -369,17 +408,7 @@ export default function Layout() {
             </div>
 
             <div className="flex items-center space-x-2 sm:space-x-3">
-              {isOnline ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Online
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20 animate-bounce">
-                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping" />
-                  Offline
-                </span>
-              )}
+              <OfflineStatusBadge />
               <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block mx-1" />
               <SyncStatusIndicator />
               <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block mx-1" />

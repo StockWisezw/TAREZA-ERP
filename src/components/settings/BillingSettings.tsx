@@ -31,7 +31,7 @@ import {
 } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { supabase, auth } from '../../lib/supabaseClient';
+import { supabase, auth } from '../../lib/firebaseClient';
 import { toast } from 'sonner';
 
 const CYCLES = {

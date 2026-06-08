@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from '../ui/switch';
 import { Globe, Clock, Languages, Save } from 'lucide-react';
 import { toast } from 'sonner';
-import { rawSupabase } from '../../lib/supabaseClient';
+import { rawSupabase } from '../../lib/firebaseClient';
 
 export function LocalizationSettings() {
   const [isSaving, setIsSaving] = useState(false);

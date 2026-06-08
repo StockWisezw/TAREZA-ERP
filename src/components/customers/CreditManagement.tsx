@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { AlertTriangle, TrendingUp, DollarSign, CalendarClock, Download, Bell } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/firebaseClient';
 
 export function CreditManagement() {
   const [customers, setCustomers] = useState<any[]>([]);

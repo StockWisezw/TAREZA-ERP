@@ -17,7 +17,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from '../ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/firebaseClient';
 import { toast } from 'sonner';
 
 export function CustomerDirectory() {
@@ -28,6 +28,19 @@ export function CustomerDirectory() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [customerSales, setCustomerSales] = useState<any[]>([]);
+  
+  // Sorting State
+  const [sortColumn, setSortColumn] = useState<string>('name');
+  const [sortAscending, setSortAscending] = useState<boolean>(true);
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortAscending(!sortAscending);
+    } else {
+      setSortColumn(column);
+      setSortAscending(true);
+    }
+  };
   
   // Fetch real sales history for selected customer
   useEffect(() => {
@@ -240,66 +253,113 @@ export function CustomerDirectory() {
           <ShadcnTable>
             <TableHeader className="bg-zinc-50/80 border-b border-zinc-200">
               <TableRow>
-                <TableHead className="w-[280px]">Customer</TableHead>
-                <TableHead>Contact Details</TableHead>
-                <TableHead>Tier</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead className="w-[280px] cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('name')}>
+                  <div className="flex items-center gap-1 font-semibold text-zinc-700">
+                    Customer {sortColumn === 'name' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('email')}>
+                  <div className="flex items-center gap-1 font-semibold text-zinc-700">
+                    Contact Details {sortColumn === 'email' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('tier')}>
+                  <div className="flex items-center gap-1 font-semibold text-zinc-700">
+                    Tier {sortColumn === 'tier' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="text-right cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('balance')}>
+                  <div className="flex items-center gap-1 justify-end font-semibold text-zinc-700">
+                    Balance {sortColumn === 'balance' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="font-semibold text-zinc-700">Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {customers.filter(c => c.name?.toLowerCase().includes(searchTerm.toLowerCase())).map((cust) => (
-                <TableRow key={cust.id} className="hover:bg-zinc-50/50 cursor-pointer group" onClick={() => openProfile(cust)}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 flex-shrink-0 bg-zinc-100 rounded-full border border-zinc-200 flex items-center justify-center">
-                        {getTypeIcon(cust.customer_type)}
+              {(() => {
+                const term = searchTerm.toLowerCase();
+                const filteredAndSorted = [...customers]
+                  .filter(c => 
+                    c.name?.toLowerCase().includes(term) ||
+                    c.email?.toLowerCase().includes(term) ||
+                    c.phone?.toLowerCase().includes(term)
+                  )
+                  .sort((a, b) => {
+                    let valA = a[sortColumn];
+                    let valB = b[sortColumn];
+                    if (typeof valA === 'string') valA = valA.toLowerCase();
+                    if (typeof valB === 'string') valB = valB.toLowerCase();
+                    if (valA === undefined || valA === null) valA = '';
+                    if (valB === undefined || valB === null) valB = '';
+                    if (valA < valB) return sortAscending ? -1 : 1;
+                    if (valA > valB) return sortAscending ? 1 : -1;
+                    return 0;
+                  });
+
+                if (filteredAndSorted.length === 0) {
+                  return (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-zinc-500">
+                        No customers matches search criteria.
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+
+                return filteredAndSorted.map((cust) => (
+                  <TableRow key={cust.id} className="hover:bg-zinc-50/50 cursor-pointer group" onClick={() => openProfile(cust)}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 flex-shrink-0 bg-zinc-100 rounded-full border border-zinc-200 flex items-center justify-center">
+                          {getTypeIcon(cust.customer_type)}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-zinc-900">{cust.name}</span>
+                          <span className="text-xs text-zinc-500 mt-0.5">{cust.customer_type?.toUpperCase() || 'RETAIL'}</span>
+                        </div>
                       </div>
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-zinc-900">{cust.name}</span>
-                        <span className="text-xs text-zinc-500 mt-0.5">{cust.customer_type?.toUpperCase() || 'RETAIL'}</span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        {cust.phone && (
+                          <span className="text-xs text-zinc-600 flex items-center"><Phone className="w-3 h-3 mr-1.5 text-zinc-400"/>{cust.phone}</span>
+                        )}
+                        {cust.email && (
+                          <span className="text-xs text-zinc-600 flex items-center"><Mail className="w-3 h-3 mr-1.5 text-zinc-400"/>{cust.email}</span>
+                        )}
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      {cust.phone && (
-                        <span className="text-xs text-zinc-600 flex items-center"><Phone className="w-3 h-3 mr-1.5 text-zinc-400"/>{cust.phone}</span>
-                      )}
-                      {cust.email && (
-                        <span className="text-xs text-zinc-600 flex items-center"><Mail className="w-3 h-3 mr-1.5 text-zinc-400"/>{cust.email}</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>{getTierBadge(cust.tier || 'STANDARD')}</TableCell>
-                  <TableCell className="text-right">
-                    <span className={`font-mono font-bold ${(cust.balance || 0) > 0 ? 'text-red-600' : 'text-zinc-900'}`}>
-                      ${(cust.balance || 0).toFixed(2)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="flex items-center text-xs font-medium text-emerald-600">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>Active
-                    </span>
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger 
-                        render={
-                          <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <MoreHorizontal className="h-4 w-4 text-zinc-500" />
-                          </Button>
-                        }
-                      />
-                      <DropdownMenuContent align="end" className="w-48">
+                    </TableCell>
+                    <TableCell>{getTierBadge(cust.tier || 'STANDARD')}</TableCell>
+                    <TableCell className="text-right">
+                      <span className={`font-mono font-bold ${(cust.balance || 0) > 0 ? 'text-red-600' : 'text-zinc-900'}`}>
+                        ${(cust.balance || 0).toFixed(2)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="flex items-center text-xs font-medium text-emerald-600">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>Active
+                      </span>
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger 
+                          render={
+                            <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <MoreHorizontal className="h-4 w-4 text-zinc-500" />
+                            </Button>
+                          }
+                        />
+                        <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem onClick={() => openProfile(cust)}>View Profile</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleDelete(cust.id)} className="text-red-600">Delete Customer</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+              ));
+            })()}
             </TableBody>
           </ShadcnTable>
         </div>

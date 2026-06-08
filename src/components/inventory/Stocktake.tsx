@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { toast } from 'sonner';
-import { supabase, doc, db, getDoc, updateDoc } from '@/lib/supabaseClient';
+import { supabase, doc, db, getDoc, updateDoc } from '@/lib/firebaseClient';
 
 export function Stocktake() {
   const [stocktakes, setStocktakes] = useState<any[]>([]);

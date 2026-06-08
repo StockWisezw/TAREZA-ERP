@@ -17,7 +17,7 @@ import {
 } from '../ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/firebaseClient';
 import { toast } from 'sonner';
 
 const getPackSize = (sku: string | undefined): number => {
@@ -37,6 +37,19 @@ export function ProductList({ onImportClick }: ProductListProps) {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [isLabelsOpen, setIsLabelsOpen] = useState(false);
+  
+  // Sorting State
+  const [sortColumn, setSortColumn] = useState<string>('name');
+  const [sortAscending, setSortAscending] = useState<boolean>(true);
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortAscending(!sortAscending);
+    } else {
+      setSortColumn(column);
+      setSortAscending(true);
+    }
+  };
   
   // Branch configuration states
   const [branches, setBranches] = useState<any[]>([]);
@@ -755,6 +768,34 @@ export function ProductList({ onImportClick }: ProductListProps) {
       (item.barcode || '').toLowerCase().includes(sTerm) ||
       (item.code || '').toLowerCase().includes(sTerm)
     );
+  }).sort((a, b) => {
+    let valA: any = a[sortColumn];
+    let valB: any = b[sortColumn];
+
+    // Handle special computed properties like stock and category
+    if (sortColumn === 'stock') {
+      const stockA = selectedBranchId 
+        ? a.inventory?.find((i: any) => i.branch_id === selectedBranchId)?.quantity || 0
+        : a.inventory?.[0]?.quantity || 0;
+      const stockB = selectedBranchId 
+        ? b.inventory?.find((i: any) => i.branch_id === selectedBranchId)?.quantity || 0
+        : b.inventory?.[0]?.quantity || 0;
+      valA = stockA;
+      valB = stockB;
+    } else if (sortColumn === 'category') {
+      valA = a.categories?.name || '';
+      valB = b.categories?.name || '';
+    }
+
+    if (typeof valA === 'string') valA = valA.toLowerCase();
+    if (typeof valB === 'string') valB = valB.toLowerCase();
+
+    if (valA === undefined || valA === null) valA = '';
+    if (valB === undefined || valB === null) valB = '';
+
+    if (valA < valB) return sortAscending ? -1 : 1;
+    if (valA > valB) return sortAscending ? 1 : -1;
+    return 0;
   });
 
   return (
@@ -1008,16 +1049,44 @@ export function ProductList({ onImportClick }: ProductListProps) {
                   />
                 </TableHead>
                 <TableHead className="w-[80px]">Image</TableHead>
-                <TableHead className="w-[120px]">SKU/Barcode</TableHead>
-                <TableHead>Product</TableHead>
-                <TableHead className="w-[120px]">Category</TableHead>
-                <TableHead className="text-right w-[90px]">Stock</TableHead>
-                <TableHead className="text-right w-[110px]">Cost</TableHead>
-                <TableHead className="text-right w-[110px]">Retail</TableHead>
-                <TableHead className="text-right w-[110px]">Wholesale</TableHead>
-                <TableHead className="text-right w-[90px]">Margin</TableHead>
-                <TableHead className="text-right w-[120px]">Potential Profit</TableHead>
-                <TableHead className="w-[110px]">Status</TableHead>
+                <TableHead className="w-[140px] cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('sku')}>
+                  <div className="flex items-center gap-1 font-semibold text-zinc-700">
+                    SKU/Barcode {sortColumn === 'sku' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('name')}>
+                  <div className="flex items-center gap-1 font-semibold text-zinc-700">
+                    Product {sortColumn === 'name' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="w-[120px] cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('category')}>
+                  <div className="flex items-center gap-1 font-semibold text-zinc-700">
+                    Category {sortColumn === 'category' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="text-right w-[95px] cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('stock')}>
+                  <div className="flex items-center gap-1 justify-end font-semibold text-zinc-700">
+                    Stock {sortColumn === 'stock' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="text-right w-[110px] cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('cost_price')}>
+                  <div className="flex items-center gap-1 justify-end font-semibold text-zinc-700">
+                    Cost {sortColumn === 'cost_price' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="text-right w-[110px] cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('retail_price')}>
+                  <div className="flex items-center gap-1 justify-end font-semibold text-zinc-700">
+                    Retail {sortColumn === 'retail_price' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="text-right w-[110px] cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('wholesale_price')}>
+                  <div className="flex items-center gap-1 justify-end font-semibold text-zinc-700">
+                    Wholesale {sortColumn === 'wholesale_price' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="text-right w-[90px] font-semibold text-zinc-700">Margin</TableHead>
+                <TableHead className="text-right w-[120px] font-semibold text-zinc-700">Potential Profit</TableHead>
+                <TableHead className="w-[110px] font-semibold text-zinc-700">Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>

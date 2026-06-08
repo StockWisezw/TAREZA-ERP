@@ -30,7 +30,7 @@ async function startServer() {
   }
 
   const firebaseApp = initializeApp(firebaseConfig);
-  const firestoreDb = getFirestore(firebaseApp);
+  const firestoreDb = getFirestore(firebaseApp, (firebaseConfig as any).firestoreDatabaseId);
 
   // 1. Paynow Initiation Endpoint
   app.post("/api/paynow/initiate", async (req, res) => {

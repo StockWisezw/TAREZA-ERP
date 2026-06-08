@@ -5,7 +5,7 @@ import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
 import { ShoppingCart, Printer, ShieldCheck, Save, MonitorPlay, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
-import { rawSupabase } from '../../lib/supabaseClient';
+import { rawSupabase } from '../../lib/firebaseClient';
 
 export function PosSettings() {
   const [isSaving, setIsSaving] = useState(false);

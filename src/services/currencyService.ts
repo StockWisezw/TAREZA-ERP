@@ -1,4 +1,4 @@
-import { supabase, auth } from '../lib/supabaseClient';
+import { supabase, auth } from '../lib/firebaseClient';
 import { logAuditEvent } from './ledgerService';
 
 export interface Currency {

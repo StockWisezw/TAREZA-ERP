@@ -5,7 +5,7 @@ import { Search, Filter, ArrowUpRight, ArrowDownRight, RefreshCw, AlertCircle } 
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/firebaseClient';
 import { toast } from 'sonner';
 
 export function StockMovementHistory() {

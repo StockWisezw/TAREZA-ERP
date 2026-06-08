@@ -31,17 +31,52 @@ import firebaseConfigPlaceholder from '../../firebase-applet-config.json';
 
 // Use environment variables if present (especially useful for deploying and linking with Vercel),
 // otherwise fall back seamlessly to the local firebase-applet-config.json
-const resolvedConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigPlaceholder.apiKey,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigPlaceholder.authDomain,
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || (firebaseConfigPlaceholder as any).databaseURL,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfigPlaceholder.projectId,
-  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || firebaseConfigPlaceholder.firestoreDatabaseId,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigPlaceholder.storageBucket,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigPlaceholder.messagingSenderId,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigPlaceholder.appId,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || firebaseConfigPlaceholder.measurementId,
-};
+function isPlaceholderOrEmpty(val: string | undefined): boolean {
+  if (!val) return true;
+  const lower = val.toLowerCase();
+  return (
+    lower.includes('placeholder') ||
+    lower.includes('yourapikeyhere') ||
+    lower.includes('your-project') ||
+    lower.includes('your-sender-id') ||
+    lower.includes('your-app-id') ||
+    lower.includes('your-measurement-id')
+  );
+}
+
+const resolvedConfig = { ...firebaseConfigPlaceholder };
+
+if (import.meta.env.VITE_FIREBASE_API_KEY && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_API_KEY)) {
+  resolvedConfig.apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
+}
+if (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN)) {
+  resolvedConfig.authDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN;
+}
+if (import.meta.env.VITE_FIREBASE_DATABASE_URL && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_DATABASE_URL)) {
+  (resolvedConfig as any).databaseURL = import.meta.env.VITE_FIREBASE_DATABASE_URL;
+}
+if (import.meta.env.VITE_FIREBASE_PROJECT_ID && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_PROJECT_ID)) {
+  resolvedConfig.projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+}
+if (
+  import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID &&
+  import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID !== '(default)' &&
+  !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID)
+) {
+  resolvedConfig.firestoreDatabaseId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID;
+}
+if (import.meta.env.VITE_FIREBASE_STORAGE_BUCKET && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET)) {
+  resolvedConfig.storageBucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET;
+}
+if (import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID)) {
+  resolvedConfig.messagingSenderId = import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID;
+}
+if (import.meta.env.VITE_FIREBASE_APP_ID && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_APP_ID)) {
+  resolvedConfig.appId = import.meta.env.VITE_FIREBASE_APP_ID;
+}
+if (import.meta.env.VITE_FIREBASE_MEASUREMENT_ID && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID)) {
+  resolvedConfig.measurementId = import.meta.env.VITE_FIREBASE_MEASUREMENT_ID;
+}
 
 export const firebaseConfig = resolvedConfig;
 

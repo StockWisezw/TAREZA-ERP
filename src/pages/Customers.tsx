@@ -16,10 +16,6 @@ export default function Customers() {
           <h2 className="text-3xl font-bold tracking-tight text-zinc-900">Customers (CRM)</h2>
           <p className="text-zinc-500 mt-1">Manage relationships, credit accounts, and loyalty programs.</p>
         </div>
-        <div className="flex space-x-2 w-full sm:w-auto">
-          <Button variant="outline" className="w-full sm:w-auto"><Download className="mr-2 h-4 w-4" /> Export</Button>
-          <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> Add Customer</Button>
-        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

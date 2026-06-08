@@ -32,7 +32,7 @@ import {
   Type
 } from 'lucide-react';
 import { TarezaLogo } from '../ui/Logo';
-import { db } from '../../lib/supabaseClient';
+import { db } from '../../lib/firebaseClient';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { useAuth } from '../../hooks/useAuth';
 

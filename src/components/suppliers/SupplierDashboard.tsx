@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui
 import { ShoppingCart, PackageOpen, TrendingDown, Clock, Building, Truck, Activity, Loader2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { Button } from '../ui/button';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/firebaseClient';
 
 export function SupplierDashboard() {
   const [loading, setLoading] = useState(true);

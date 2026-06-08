@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { ShoppingBag, CreditCard, FileSpreadsheet, Key, Play } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
-import { rawSupabase } from '../../lib/supabaseClient';
+import { rawSupabase } from '../../lib/firebaseClient';
 
 export function IntegrationSettings() {
   const [isConnecting, setIsConnecting] = useState<string | null>(null);

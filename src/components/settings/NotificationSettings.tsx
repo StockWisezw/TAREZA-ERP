@@ -5,7 +5,7 @@ import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { Bell, Mail, MessageSquare, Save, AlertTriangle, UserPlus, FileText } from 'lucide-react';
 import { toast } from 'sonner';
-import { rawSupabase } from '../../lib/supabaseClient';
+import { rawSupabase } from '../../lib/firebaseClient';
 
 export function NotificationSettings() {
   const [isSaving, setIsSaving] = useState(false);

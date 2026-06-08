@@ -20,7 +20,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/firebaseClient';
 import { toast } from 'sonner';
 
 interface ProductImportCandidate {
@@ -37,6 +37,7 @@ interface ProductImportCandidate {
 
 export function BulkImport() {
   const [activeSubTab, setActiveSubTab] = useState<'csv' | 'manual'>('csv');
+  const [importStrategy, setImportStrategy] = useState<'create' | 'update' | 'merge'>('create');
   const [businessId, setBusinessId] = useState<string>('');
   const [branches, setBranches] = useState<any[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
@@ -324,12 +325,51 @@ export function BulkImport() {
       setIsSaving(true);
       setSaveProgress({ current: 0, total: validItems.length });
 
+      // Fetch all existing products to check for duplicates by SKU (case-insensitive)
+      const { data: existingProducts, error: extProdsErr } = await supabase
+        .from('products')
+        .select('*')
+        .eq('business_id', businessId);
+      
+      if (extProdsErr) {
+        console.error("Error retrieving existing products:", extProdsErr);
+      }
+
+      const skuToProductMap = new Map<string, any>();
+      if (existingProducts) {
+        existingProducts.forEach(p => {
+          if (p.sku) {
+            skuToProductMap.set(p.sku.trim().toUpperCase(), p);
+          }
+        });
+      }
+
+      // Fetch existing inventory for checking stock updates
+      const { data: existingInventory, error: extInvErr } = await supabase
+        .from('inventory')
+        .select('*')
+        .eq('business_id', businessId)
+        .eq('branch_id', selectedBranchId);
+
+      if (extInvErr) {
+        console.error("Error retrieving existing inventory:", extInvErr);
+      }
+
+      const productIdToInventoryMap = new Map<string, any>();
+      if (existingInventory) {
+        existingInventory.forEach(inv => {
+          productIdToInventoryMap.set(inv.product_id, inv);
+        });
+      }
+
       // Build or fetch category mapping cache
       const categoryMapCache: Record<string, string> = {};
       const localCategories = [...existingCategories];
 
-      // To store created entries count
+      // Counters
       let productsAddedCount = 0;
+      let productsUpdatedCount = 0;
+      let productsSkippedCount = 0;
       let inventoryUpdatedCount = 0;
 
       for (let k = 0; k < validItems.length; k++) {
@@ -370,40 +410,99 @@ export function BulkImport() {
           }
         }
 
-        // 2. Insert Product
+        const derivedSku = (item.sku || `SKU-${normCategoryName.substring(0,2).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`).trim();
         const rPrice = parseFloat(item.retailPrice) || 0;
         const wPrice = item.wholesalePrice ? parseFloat(item.wholesalePrice) : (rPrice * 0.9);
         const cPrice = item.costPrice ? parseFloat(item.costPrice) : (rPrice * 0.7);
-        const derivedSku = item.sku || `SKU-${normCategoryName.substring(0,2).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
+        const stockQty = parseFloat(item.stock) || 0;
 
-        const prodId = crypto.randomUUID();
-        const { error: prodErr } = await supabase.from('products').insert({
-          id: prodId,
-          business_id: businessId,
-          name: item.name.trim(),
-          sku: derivedSku,
-          barcode: item.barcode.trim() || null,
-          category_id: finalCategoryId,
-          retail_price: rPrice,
-          wholesale_price: wPrice,
-          cost_price: cPrice,
-          is_active: true,
-          created_at: new Date().toISOString()
-        });
+        // Check if SKU already exists
+        const existingProd = skuToProductMap.get(derivedSku.toUpperCase());
+        let prodId = '';
 
-        if (prodErr) {
-          console.error(`Failed to insert product "${item.name}":`, prodErr);
-          continue;
+        if (existingProd) {
+          if (importStrategy === 'create') {
+            productsSkippedCount++;
+            continue;
+          }
+
+          // Update/Merge details of existing product
+          prodId = existingProd.id;
+          const { error: updateErr } = await supabase.from('products').update({
+            name: item.name.trim(),
+            barcode: item.barcode.trim() || null,
+            category_id: finalCategoryId,
+            retail_price: rPrice,
+            wholesale_price: wPrice,
+            cost_price: cPrice,
+            is_active: true
+          }).eq('id', prodId);
+
+          if (updateErr) {
+            console.error(`Failed to update product "${item.name}":`, updateErr);
+            continue;
+          }
+          productsUpdatedCount++;
+        } else {
+          // Insert new product
+          prodId = crypto.randomUUID();
+          const { error: prodErr } = await supabase.from('products').insert({
+            id: prodId,
+            business_id: businessId,
+            name: item.name.trim(),
+            sku: derivedSku,
+            barcode: item.barcode.trim() || null,
+            category_id: finalCategoryId,
+            retail_price: rPrice,
+            wholesale_price: wPrice,
+            cost_price: cPrice,
+            is_active: true,
+            created_at: new Date().toISOString()
+          });
+
+          if (prodErr) {
+            console.error(`Failed to insert product "${item.name}":`, prodErr);
+            continue;
+          }
+          productsAddedCount++;
         }
 
-        productsAddedCount++;
+        // Manage inventory stock & stock movement records
+        const existingInv = productIdToInventoryMap.get(prodId);
 
-        // 3. Insert Stock Inventory & Stock Movement if quantity > 0
-        const stockQty = parseFloat(item.stock) || 0;
-        if (stockQty > 0) {
-          const invId = crypto.randomUUID();
+        if (existingInv) {
+          let newQty = stockQty;
+          if (importStrategy === 'merge') {
+            newQty = (existingInv.quantity || 0) + stockQty;
+          }
+
+          const { error: invErr } = await supabase.from('inventory').update({
+            quantity: newQty,
+            updated_at: new Date().toISOString()
+          }).eq('id', existingInv.id);
+
+          if (!invErr) {
+            inventoryUpdatedCount++;
+
+            // Insert stock movement tracking if value adjusted
+            const diff = newQty - (existingInv.quantity || 0);
+            if (diff !== 0) {
+              await supabase.from('stock_movements').insert({
+                id: crypto.randomUUID(),
+                product_id: prodId,
+                branch_id: selectedBranchId,
+                quantity: diff,
+                type: importStrategy === 'merge' ? 'STOCK_ADJUSTMENT' : 'STOCK_CONSOLIDATION',
+                created_at: new Date().toISOString()
+              });
+            }
+          } else {
+            console.error(`Failed to update inventory for product "${item.name}":`, invErr);
+          }
+        } else {
+          // No current stock record for this branch; create it
           const { error: invErr } = await supabase.from('inventory').insert({
-            id: invId,
+            id: crypto.randomUUID(),
             business_id: businessId,
             branch_id: selectedBranchId,
             product_id: prodId,
@@ -415,25 +514,31 @@ export function BulkImport() {
 
           if (!invErr) {
             inventoryUpdatedCount++;
-            
-            // Insert audit tracking stock movement record
-            const moveId = crypto.randomUUID();
-            await supabase.from('stock_movements').insert({
-              id: moveId,
-              product_id: prodId,
-              branch_id: selectedBranchId,
-              quantity: stockQty,
-              type: 'STOCK_CONSOLIDATION',
-              created_at: new Date().toISOString()
-            });
+
+            if (stockQty > 0) {
+              await supabase.from('stock_movements').insert({
+                id: crypto.randomUUID(),
+                product_id: prodId,
+                branch_id: selectedBranchId,
+                quantity: stockQty,
+                type: 'STOCK_CONSOLIDATION',
+                created_at: new Date().toISOString()
+              });
+            }
           } else {
-            console.error(`Failed to initialize inventory for product "${item.name}":`, invErr);
+            console.error(`Failed to create inventory for product "${item.name}":`, invErr);
           }
         }
       }
 
-      // Final summary callback
-      toast.success(`Success! Imported ${productsAddedCount} products and created initial warehouse stock records for ${inventoryUpdatedCount} items.`);
+      // Build informative Toast
+      let msg = `Bulk upload complete! `;
+      if (productsAddedCount > 0) msg += `Created ${productsAddedCount} new products. `;
+      if (productsUpdatedCount > 0) msg += `Updated/Merged ${productsUpdatedCount} existing products. `;
+      if (productsSkippedCount > 0) msg += `Skipped ${productsSkippedCount} duplicates. `;
+      msg += `Adjusted initial warehouse stock records for ${inventoryUpdatedCount} items.`;
+      
+      toast.success(msg);
       
       // Reset state based on tabs
       if (activeSubTab === 'csv') {
@@ -489,12 +594,12 @@ export function BulkImport() {
       </div>
 
       {/* Configuration context */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-zinc-50 p-4 rounded-xl border border-zinc-200/50">
-        <div className="space-y-1">
-          <Label className="text-xs text-zinc-500 uppercase font-semibold">Assign Initial Inventory Stock to Branch</Label>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-zinc-50 p-5 rounded-2xl border border-zinc-200/60 shadow-xs">
+        <div className="space-y-2">
+          <Label className="text-xs text-zinc-500 uppercase font-bold tracking-wider">Assign Initial Inventory Stock to Branch</Label>
           {branches.length > 0 ? (
             <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
-              <SelectTrigger className="bg-white shadow-sm border-zinc-200 mt-1">
+              <SelectTrigger className="bg-white shadow-xs border-zinc-200 mt-1 h-11 rounded-xl">
                 <SelectValue placeholder="Choose target warehouse/branch" />
               </SelectTrigger>
               <SelectContent className="bg-white">
@@ -507,13 +612,71 @@ export function BulkImport() {
             <p className="text-xs text-red-500 mt-1 font-semibold">⚠️ No active business branches detected. Please create a branch in settings before importing catalog stock.</p>
           )}
         </div>
-        <div className="text-xs text-zinc-500 flex flex-col justify-center">
-          <div className="flex items-start gap-2 bg-white/60 p-2.5 rounded-lg border border-zinc-200/40">
-            <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-            <p>
-              When opening stock quantities are assigned, the ERP engine will automatically populate warehouse store levels at your chosen destination branch and index immediate historical stock entries.
-            </p>
+        
+        <div className="space-y-2">
+          <Label className="text-xs text-zinc-500 uppercase font-bold tracking-wider">Import Action & Duplicate SKU Strategy</Label>
+          <div className="grid grid-cols-3 gap-2 mt-1">
+            <button
+              type="button"
+              onClick={() => setImportStrategy('create')}
+              className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all cursor-pointer h-16 ${
+                importStrategy === 'create'
+                  ? 'border-indigo-650 bg-indigo-50/50 ring-1 ring-indigo-500 text-indigo-950 font-bold'
+                  : 'bg-white border-zinc-200 hover:bg-zinc-50/50 text-zinc-650'
+              }`}
+            >
+              <span className="text-xs font-semibold">Skip Duplicates</span>
+              <span className="text-[9px] text-zinc-400 mt-0.5">Create only</span>
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => setImportStrategy('update')}
+              className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all cursor-pointer h-16 ${
+                importStrategy === 'update'
+                  ? 'border-indigo-650 bg-indigo-50/50 ring-1 ring-indigo-500 text-indigo-950 font-bold'
+                  : 'bg-white border-zinc-200 hover:bg-zinc-50/50 text-zinc-650'
+              }`}
+            >
+              <span className="text-xs font-semibold">Update details</span>
+              <span className="text-[9px] text-zinc-400 mt-0.5">Overwrite stock</span>
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => setImportStrategy('merge')}
+              className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all cursor-pointer h-16 ${
+                importStrategy === 'merge'
+                  ? 'border-indigo-650 bg-indigo-50/50 ring-1 ring-indigo-500 text-indigo-950 font-bold'
+                  : 'bg-white border-zinc-200 hover:bg-zinc-50/50 text-zinc-650'
+              }`}
+            >
+              <span className="text-xs font-semibold">Merge details</span>
+              <span className="text-[9px] text-zinc-400 mt-0.5">Add stock</span>
+            </button>
           </div>
+        </div>
+      </div>
+
+      {/* Dynamic strategy description */}
+      <div className="text-xs text-zinc-500 flex flex-col md:flex-row md:items-start gap-2.5 bg-zinc-50 p-4 rounded-xl border border-zinc-200/50">
+        <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+        <div>
+          {importStrategy === 'create' && (
+            <p>
+              <strong>Skip Duplicates Strategy:</strong> For existing matching SKUs, no details are overwritten and no stock is updated. Great for safely adding only net-new items.
+            </p>
+          )}
+          {importStrategy === 'update' && (
+            <p>
+              <strong>Update Details & Overwrite Stock Strategy:</strong> Updates prices, name, and barcode for matching SKUs. Stock levels at the chosen branch will be <strong>replaced/overwritten</strong> with the imported stock.
+            </p>
+          )}
+          {importStrategy === 'merge' && (
+            <p>
+              <strong>Merge Details & Add Stock Strategy:</strong> Updates product details for matching SKUs, and <strong>adds/integrates</strong> the imported stock quantity directly into your existing store levels.
+            </p>
+          )}
         </div>
       </div>
 

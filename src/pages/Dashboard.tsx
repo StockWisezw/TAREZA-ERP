@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Activity, CreditCard, DollarSign, Package, Sparkles, Clock, Lock, Unlock, Play, RefreshCw, AlertTriangle, CheckCircle2, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, Legend, PieChart, Pie } from 'recharts';
 import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '../lib/firebaseClient';
 import { toast } from 'sonner';
 import { useTheme } from 'next-themes';
 import { Button } from '../components/ui/button';
@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(true);
   const [profileName, setProfileName] = useState<string>('');
+  const [businessName, setBusinessName] = useState<string>('');
   const [chartData, setChartData] = useState<{name: string, sales: number}[]>([]);
   const [stats, setStats] = useState({ totalSales: 0, transactions: 0, lowStock: 0, activeBranches: 0 });
   const [branchSalesData, setBranchSalesData] = useState<{ name: string; sales: number; transactions: number }[]>([]);
@@ -412,6 +413,10 @@ export default function Dashboard() {
         setBusinessContext(context);
         if (context.business_id) {
           fetchOpenSession(context.business_id);
+          const { data: bData } = await supabase.from('businesses').select('name').eq('id', context.business_id).limit(1).maybeSingle();
+          if (bData?.name) {
+            setBusinessName(bData.name);
+          }
         }
       } catch (err) {
         console.error("Error ensuring business profile:", err);
@@ -427,12 +432,25 @@ export default function Dashboard() {
      return <div className="p-8 text-center text-zinc-500">Checking business profile...</div>;
   }
 
+  const getGreeting = () => {
+    const isProfileNameDefault = !profileName || profileName.toLowerCase() === 'default';
+    if (!isProfileNameDefault && businessName) {
+      return `Welcome back, ${profileName} (${businessName})`;
+    } else if (!isProfileNameDefault) {
+      return `Welcome back, ${profileName}`;
+    } else if (businessName) {
+      return `Welcome back, ${businessName}`;
+    } else {
+      return 'Welcome back to your workspace';
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex flex-col sm:flex-row sm:items-end gap-2">
-            <span>Welcome back{profileName ? `, ${profileName}` : ''}!</span>
+            <span>{getGreeting()}!</span>
           </h2>
           <p className="text-zinc-500 font-medium mt-1">
             {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} — Your business performance overview.

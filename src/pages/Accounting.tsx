@@ -24,7 +24,7 @@ import { ScrollArea } from '../components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '../components/ui/dialog';
 import { toast } from 'sonner';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '../lib/firebaseClient';
 import { 
   initializeChartOfAccounts, 
   postJournalEntry, 
@@ -601,7 +601,9 @@ export default function Accounting() {
   const totalExpenseVal = accounts.filter(a => a.type === 'Expense').reduce((sum, a) => sum + a.balance, 0);
 
   // Profit and Loss Analysis
-  const grossProfitPL = totalRevenueVal; 
+  const cogsVal = accounts.filter(a => a.code === '5000').reduce((sum, a) => sum + a.balance, 0);
+  const opexVal = accounts.filter(a => a.code === '6000').reduce((sum, a) => sum + a.balance, 0);
+  const grossProfitPL = totalRevenueVal - cogsVal; 
   const netEarningsPL = totalRevenueVal - totalExpenseVal;
 
   // Trial Balance debits vs credits check
@@ -940,108 +942,135 @@ export default function Accounting() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-[350px]">
               
               {/* Profit and Loss widget */}
-              <Card className="border border-zinc-205 flex flex-col h-full">
-                <CardHeader className="bg-zinc-50/50 py-3 border-b border-zinc-150">
-                  <CardTitle className="text-sm font-bold flex items-center justify-between">
-                    <span>Profit & Loss Statement (P&L)</span>
-                    <span className="text-[9px] bg-emerald-100 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-bold font-mono uppercase tracking-wider">Operational Realtime</span>
-                  </CardTitle>
+              <Card className="border border-zinc-200 flex flex-col h-full bg-white shadow-sm">
+                <CardHeader className="bg-zinc-50/50 py-4 border-b border-zinc-150">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardDescription className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest font-mono">Statement of Operations</CardDescription>
+                      <CardTitle className="text-lg font-bold text-zinc-900 mt-0.5">Profit & Loss Statement (P&L)</CardTitle>
+                    </div>
+                    <span className="text-[9px] bg-emerald-105 border border-emerald-200 text-emerald-850 px-2 py-0.5 rounded font-bold font-mono uppercase tracking-wider">REALTIME ACCRUED</span>
+                  </div>
                 </CardHeader>
-                <CardContent className="p-5 flex-1 space-y-4 font-mono text-sm">
-                  <div className="space-y-2">
-                    <div className="flex justify-between font-bold border-b border-zinc-100 pb-1 text-zinc-600 text-xs">
-                      <span>Account</span>
-                      <span>Adjusted Ledger Balance</span>
+                <CardContent className="p-6 flex-1 flex flex-col justify-between space-y-6 font-mono text-xs">
+                  <div className="space-y-3">
+                    <div className="flex justify-between font-bold border-b-2 border-zinc-900 pb-1.5 text-zinc-600 text-xxs uppercase tracking-wider">
+                      <span>GL Account Code & Description</span>
+                      <span className="text-right">Balance (USD)</span>
                     </div>
-                    <div className="flex justify-between text-zinc-800">
-                      <span>Sales Operating Revenues (4000)</span>
-                      <span>${totalRevenueVal.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-zinc-500 border-b border-dashed border-zinc-100 pb-2">
-                      <span>Cost of Goods Sold (COGS) (5000)</span>
-                      <span className="text-red-700">(${totalExpenseVal.toFixed(2)})</span>
-                    </div>
-                  </div>
 
-                  <div className="flex justify-between font-bold py-1 bg-zinc-50 rounded px-2.5">
-                    <span>Gross Core Cash Margin</span>
-                    <span className="text-zinc-900">${grossProfitPL.toFixed(2)}</span>
-                  </div>
+                    {/* Revenue Section */}
+                    <div className="space-y-1">
+                      <div className="font-bold text-zinc-800 uppercase text-xxs text-zinc-400 tracking-wider">Operating Revenue</div>
+                      <div className="flex justify-between text-zinc-700 pl-2">
+                        <span>Sales Operating Revenues (4000)</span>
+                        <span className="font-bold text-zinc-900">${totalRevenueVal.toFixed(2)}</span>
+                      </div>
+                    </div>
 
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-zinc-500">
-                      <span>Adjusted General Expenses (6000)</span>
-                      <span>$0.00</span>
+                    {/* Cost of Goods Sold Section */}
+                    <div className="space-y-1 pt-1.5">
+                      <div className="font-bold text-zinc-800 uppercase text-xxs text-zinc-400 tracking-wider">Cost of Sales</div>
+                      <div className="flex justify-between text-zinc-750 pl-2 border-b border-dashed border-zinc-100 pb-1.5">
+                        <span>Cost of Goods Sold (COGS) (5000)</span>
+                        <span className="text-red-650 font-bold">(${cogsVal.toFixed(2)})</span>
+                      </div>
                     </div>
                   </div>
 
-                  <Separator />
+                  <div className="flex justify-between font-bold py-2 bg-zinc-50 rounded-lg px-3 border border-zinc-100">
+                    <span className="uppercase text-xxs tracking-wider text-zinc-600">Gross Core Margin</span>
+                    <span className="text-zinc-900 text-sm font-bold">${grossProfitPL.toFixed(2)}</span>
+                  </div>
 
-                  <div className="flex justify-between font-bold text-base bg-emerald-50/50 border border-emerald-100 text-emerald-800 rounded px-3 py-2">
-                    <span>Net Operating Profit Earnings</span>
-                    <span>${netEarningsPL.toFixed(2)}</span>
+                  <div className="space-y-3">
+                    {/* Operating Expenses Section */}
+                    <div className="space-y-1">
+                      <div className="font-bold text-zinc-800 uppercase text-xxs text-zinc-400 tracking-wider font-semibold">Operating Expenses</div>
+                      <div className="flex justify-between pl-2 text-zinc-750 border-b border-dashed border-zinc-100 pb-1.5">
+                        <span>Operating and Cash Expenses (6000)</span>
+                        <span className="text-red-650 font-medium">${opexVal.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Profit total bottom divider (traditional double ledger border) */}
+                  <div className="border-t border-zinc-200 pt-3">
+                    <div className="flex justify-between font-bold text-sm bg-emerald-50 text-emerald-900 border border-emerald-100/50 rounded-lg px-4 py-3 shadow-inner">
+                      <span className="uppercase tracking-wider text-xxs flex items-center">Net Operating Cash Balance</span>
+                      <span className="text-base font-bold border-b-4 border-double border-emerald-800 pb-1">${netEarningsPL.toFixed(2)}</span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
 
               {/* Balance Sheet widget */}
-              <Card className="border border-zinc-205 flex flex-col h-full">
-                <CardHeader className="bg-zinc-50/50 py-3 border-b border-zinc-150">
-                  <CardTitle className="text-sm font-bold flex items-center justify-between">
-                    <span>Balance Sheet Statement</span>
-                    <span className="text-[9px] bg-blue-100 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-bold font-mono">A = L + E Check</span>
-                  </CardTitle>
+              <Card className="border border-zinc-200 flex flex-col h-full bg-white shadow-sm">
+                <CardHeader className="bg-zinc-50/50 py-4 border-b border-zinc-150">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardDescription className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest font-mono">Statement of Financial Position</CardDescription>
+                      <CardTitle className="text-lg font-bold text-zinc-900 mt-0.5">Balance Sheet Statement</CardTitle>
+                    </div>
+                    <span className="text-[9px] bg-blue-105 border border-blue-200 text-blue-805 px-2 py-0.5 rounded font-bold font-mono">A = L + E STATEMENT</span>
+                  </div>
                 </CardHeader>
-                <CardContent className="p-5 flex-1 space-y-4 font-mono text-sm">
+                <CardContent className="p-6 flex-1 flex flex-col justify-between space-y-6 font-mono text-xs">
                   
                   {/* Current Assets */}
-                  <div className="space-y-1.5">
-                    <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest font-mono border-b border-zinc-100 pb-0.5 mb-1">Operating Assets</h4>
-                    {accounts.filter(a => a.type === 'Asset').map(a => (
-                      <div key={a.id} className="flex justify-between text-zinc-700">
-                        <span>{a.name} ({a.code})</span>
-                        <span>${a.balance.toFixed(2)}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between font-semibold text-zinc-900 border-t border-dashed border-zinc-200 pt-1">
-                      <span>Aggregate Current Assets Total</span>
-                      <span>${totalAssetsVal.toFixed(2)}</span>
+                  <div className="space-y-2">
+                    <h4 className="text-xxs font-bold text-zinc-400 uppercase tracking-widest border-b-2 border-zinc-900 pb-1.5 mb-1.5">Operating Assets</h4>
+                    <div className="space-y-1.5 max-h-[120px] overflow-y-auto pr-1">
+                      {accounts.filter(a => a.type === 'Asset').map(a => (
+                        <div key={a.id} className="flex justify-between text-zinc-700">
+                          <span>{a.name} ({a.code})</span>
+                          <span className="text-zinc-900 font-medium">${a.balance.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between font-bold text-zinc-900 border-t border-dashed border-zinc-300 pt-2 bg-zinc-50/45 px-2 py-1 rounded">
+                      <span className="uppercase text-xxs text-zinc-500 tracking-wider">Total Cumulative Assets</span>
+                      <span className="border-b-2 border-zinc-900 font-bold">${totalAssetsVal.toFixed(2)}</span>
                     </div>
                   </div>
 
                   {/* Liabilities and Equity */}
-                  <div className="space-y-1.5 pt-1.5">
-                    <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest font-mono border-b border-zinc-100 pb-0.5 mb-1">Operational Liabilities & Equity</h4>
-                    <div className="flex justify-between text-zinc-700">
-                      <span>Accounts Payable (2000)</span>
-                      <span>${totalLiabilitiesVal.toFixed(2)}</span>
+                  <div className="space-y-2 pt-1 border-t border-zinc-100">
+                    <h4 className="text-xxs font-bold text-zinc-400 uppercase tracking-widest border-b-2 border-zinc-900 pb-1.5 mb-1.5 font-semibold">Liabilities & Shareholder Equity</h4>
+                    
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-zinc-700">
+                        <span>Accounts Payable (2000)</span>
+                        <span className="text-zinc-900 font-medium">${totalLiabilitiesVal.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-zinc-700">
+                        <span>Shareholders Retained Equity (3000)</span>
+                        <span className="text-zinc-900 font-medium">${totalEquityVal.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-zinc-500 border-b border-dashed border-zinc-100 pb-1.5">
+                        <span>Retained Period Shift Profit</span>
+                        <span className={`font-semibold ${netEarningsPL >= 0 ? 'text-emerald-700' : 'text-red-750'}`}>${netEarningsPL.toFixed(2)}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between text-zinc-700">
-                      <span>Owner Shareholder Retained Equity (3000)</span>
-                      <span>${totalEquityVal.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-zinc-550 border-b border-dashed border-zinc-100 pb-1">
-                      <span>Net Retained Shift Profit Yield</span>
-                      <span className={`${netEarningsPL >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>${netEarningsPL.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between font-semibold text-zinc-900 pt-1">
-                      <span>Total Liabilities & Equity Sum</span>
-                      <span>${(totalLiabilitiesVal + totalEquityVal + netEarningsPL).toFixed(2)}</span>
+
+                    <div className="flex justify-between font-bold text-zinc-900 bg-zinc-50/45 px-2 py-1 rounded">
+                      <span className="uppercase text-xxs text-zinc-500 tracking-wider">Total Liabilities & Equity Sum</span>
+                      <span className="border-b-4 border-double border-zinc-900 font-bold pb-0.5">${(totalLiabilitiesVal + totalEquityVal + netEarningsPL).toFixed(2)}</span>
                     </div>
                   </div>
 
-                  <Separator />
-
                   {/* Mathematical Check indicator block */}
-                  {Math.abs(totalAssetsVal - (totalLiabilitiesVal + totalEquityVal + netEarningsPL)) < 0.05 ? (
-                    <div className="bg-emerald-50/50 border border-emerald-100 rounded p-2 text-emerald-800 text-xs text-center font-bold">
-                      ✓ Balance Check Match verified down to decimal margin. Assets equals Liabilities + Equity.
-                    </div>
-                  ) : (
-                    <div className="bg-amber-50 border border-amber-200 rounded p-2 text-amber-800 text-xs text-center font-bold">
-                      ⚠ Operational drift variance: ${Math.abs(totalAssetsVal - (totalLiabilitiesVal + totalEquityVal + netEarningsPL)).toFixed(2)} pending overnight checkout reconciliation.
-                    </div>
-                  )}
+                  <div className="pt-2">
+                    {Math.abs(totalAssetsVal - (totalLiabilitiesVal + totalEquityVal + netEarningsPL)) < 0.05 ? (
+                      <div className="bg-emerald-50 border border-emerald-100/60 rounded-lg p-2.5 text-emerald-800 text-[10px] text-center font-bold">
+                        ✓ DOUBLE-ENTRY COMPLIANT: Total Assets equal Liabilities + Equity within rounding precision.
+                      </div>
+                    ) : (
+                      <div className="bg-amber-50 border border-amber-100 rounded-lg p-2.5 text-amber-800 text-[10px] text-center font-bold">
+                        ⚠ RECONCILIATION DRIFT: Variance of ${Math.abs(totalAssetsVal - (totalLiabilitiesVal + totalEquityVal + netEarningsPL)).toFixed(2)} is pending checkout balancing.
+                      </div>
+                    )}
+                  </div>
 
                 </CardContent>
               </Card>

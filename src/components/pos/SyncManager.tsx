@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { usePOSStore, getItemPackSize, CartItem } from '../../store/posStore';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/firebaseClient';
 import { recordStockMovement, postJournalEntry, logAuditEvent } from '../../services/ledgerService';
 import { toast } from 'sonner';
 

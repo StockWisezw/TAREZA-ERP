@@ -14,7 +14,7 @@ import { Textarea } from "../ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Camera, Building2, Save } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/firebaseClient';
 
 export function BusinessProfile() {
   const [isSaving, setIsSaving] = useState(false);
@@ -50,8 +50,8 @@ export function BusinessProfile() {
         } else if (data) {
           setBusinessData(data);
           setName(data.name || "");
-          setVatNumber(data.vat_number || "");
-          setRegNumber(data.company_registration_number || "");
+          setVatNumber(data.tax_number || "");
+          setRegNumber(data.tax_number || "");
           setEmail(data.email || "");
           setPhone(data.phone || "");
         }
@@ -73,8 +73,7 @@ export function BusinessProfile() {
           .from("businesses")
           .insert({
             name: name || "My Business",
-            tax_number: vatNumber,
-            company_registration_number: regNumber,
+            tax_number: regNumber,
             email: email,
             phone: phone,
           })
@@ -90,8 +89,7 @@ export function BusinessProfile() {
           .from("businesses")
           .update({
             name,
-            tax_number: vatNumber,
-            company_registration_number: regNumber,
+            tax_number: regNumber,
             email: email,
             phone: phone,
           })
@@ -192,37 +190,24 @@ export function BusinessProfile() {
                   className="h-11 bg-zinc-50/50"
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="vatNumber"
-                    className="font-semibold text-zinc-900"
-                  >
-                    VAT / TIN Number
-                  </Label>
-                  <Input
-                    id="vatNumber"
-                    value={vatNumber}
-                    onChange={(e) => setVatNumber(e.target.value)}
-                    placeholder="e.g. 123456789"
-                    className="h-11"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="regNumber"
-                    className="font-semibold text-zinc-900"
-                  >
-                    Company Registration
-                  </Label>
-                  <Input
-                    id="regNumber"
-                    value={regNumber}
-                    onChange={(e) => setRegNumber(e.target.value)}
-                    placeholder="e.g. 1234/2023"
-                    className="h-11"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="regNumber"
+                  className="font-semibold text-zinc-900"
+                >
+                  Company Registration Number
+                </Label>
+                <Input
+                  id="regNumber"
+                  value={regNumber}
+                  onChange={(e) => {
+                    setRegNumber(e.target.value);
+                    setVatNumber(e.target.value);
+                  }}
+                  placeholder="e.g. TZ-123456/2026"
+                  className="h-11 font-mono font-medium"
+                />
+                <p className="text-[11px] text-zinc-400 font-mono">This unique registration ID identifies your workspace.</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-2">

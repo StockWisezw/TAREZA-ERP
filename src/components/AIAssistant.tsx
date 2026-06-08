@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Send, X, Phone, Terminal, Loader2, Users, Bot, Sparkles } from 'lucide-react';
-import { rawSupabase } from '../lib/supabaseClient';
+import { rawSupabase } from '../lib/firebaseClient';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../lib/firebaseClient';

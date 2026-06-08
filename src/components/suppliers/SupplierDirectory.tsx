@@ -15,7 +15,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/firebaseClient';
 import { toast } from 'sonner';
 
 export function SupplierDirectory() {
@@ -25,6 +25,19 @@ export function SupplierDirectory() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [supplierPOs, setSupplierPOs] = useState<any[]>([]);
+
+  // Sorting State
+  const [sortColumn, setSortColumn] = useState<string>('name');
+  const [sortAscending, setSortAscending] = useState<boolean>(true);
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortAscending(!sortAscending);
+    } else {
+      setSortColumn(column);
+      setSortAscending(true);
+    }
+  };
 
   // Fetch real purchase orders for selected supplier
   useEffect(() => {
@@ -185,12 +198,28 @@ export function SupplierDirectory() {
           <ShadcnTable>
             <TableHeader className="bg-zinc-50/80 border-b border-zinc-200">
               <TableRow>
-                <TableHead className="w-[80px]">Code</TableHead>
-                <TableHead className="w-[250px]">Supplier Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Terms</TableHead>
-                <TableHead className="text-right">Outstanding Bal</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead className="w-[100px] cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('id')}>
+                  <div className="flex items-center gap-1 font-semibold text-zinc-700">
+                    Code {sortColumn === 'id' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="w-[250px] cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('name')}>
+                  <div className="flex items-center gap-1 font-semibold text-zinc-700">
+                    Supplier Name {sortColumn === 'name' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="font-semibold text-zinc-700">Category</TableHead>
+                <TableHead className="cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('payment_terms')}>
+                  <div className="flex items-center gap-1 font-semibold text-zinc-700">
+                    Terms {sortColumn === 'payment_terms' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="text-right cursor-pointer hover:bg-zinc-100/50 select-none transition-colors" onClick={() => handleSort('balance')}>
+                  <div className="flex items-center gap-1 justify-end font-semibold text-zinc-700">
+                    Outstanding Bal {sortColumn === 'balance' ? (sortAscending ? '↑' : '↓') : '↕'}
+                  </div>
+                </TableHead>
+                <TableHead className="font-semibold text-zinc-700">Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -203,39 +232,69 @@ export function SupplierDirectory() {
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-6 text-zinc-500">No suppliers found.</TableCell>
                 </TableRow>
-              ) : suppliers.map((sup) => (
-                <TableRow key={sup.id} className="hover:bg-zinc-50/50 cursor-pointer group" onClick={() => openProfile(sup)}>
-                  <TableCell className="font-mono text-xs text-zinc-500">{sup.id.substring(0, 8)}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-zinc-900">{sup.name}</span>
-                      <span className="text-xs text-zinc-500 mt-0.5">{sup.contact_name} {sup.phone ? `• ${sup.phone}` : ''}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell><Badge variant="secondary" className="font-normal text-xs">{sup.tax_number || 'Standard'}</Badge></TableCell>
-                  <TableCell className="text-sm">{sup.payment_terms || 'Net 30'}</TableCell>
-                  <TableCell className="text-right">
-                    <span className={`font-mono font-bold ${sup.balance > 0 ? 'text-red-600' : 'text-zinc-900'}`}>
-                      ${(sup.balance || 0).toFixed(2)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {sup.status === 'ACTIVE' ? (
-                      <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-0">Active</Badge>
-                    ) : (
-                      <Badge className="bg-zinc-100 text-zinc-600 border-0">Inactive</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger 
-                        render={
-                          <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <MoreHorizontal className="h-4 w-4 text-zinc-500" />
-                          </Button>
-                        } 
-                      />
-                      <DropdownMenuContent align="end" className="w-48">
+              ) : (() => {
+                const term = searchTerm.toLowerCase();
+                const filteredAndSorted = [...suppliers]
+                  .filter(s => 
+                    s.name?.toLowerCase().includes(term) ||
+                    s.id?.toLowerCase().includes(term) ||
+                    s.contact_name?.toLowerCase().includes(term)
+                  )
+                  .sort((a, b) => {
+                    let valA = a[sortColumn];
+                    let valB = b[sortColumn];
+                    if (typeof valA === 'string') valA = valA.toLowerCase();
+                    if (typeof valB === 'string') valB = valB.toLowerCase();
+                    if (valA === undefined || valA === null) valA = '';
+                    if (valB === undefined || valB === null) valB = '';
+                    if (valA < valB) return sortAscending ? -1 : 1;
+                    if (valA > valB) return sortAscending ? 1 : -1;
+                    return 0;
+                  });
+
+                if (filteredAndSorted.length === 0) {
+                  return (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-zinc-500">
+                        No suppliers match search criteria.
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+
+                return filteredAndSorted.map((sup) => (
+                  <TableRow key={sup.id} className="hover:bg-zinc-50/50 cursor-pointer group" onClick={() => openProfile(sup)}>
+                    <TableCell className="font-mono text-xs text-zinc-500">{sup.id.substring(0, 8)}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-zinc-900">{sup.name}</span>
+                        <span className="text-xs text-zinc-500 mt-0.5">{sup.contact_name} {sup.phone ? `• ${sup.phone}` : ''}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell><Badge variant="secondary" className="font-normal text-xs">{sup.tax_number || 'Standard'}</Badge></TableCell>
+                    <TableCell className="text-sm">{sup.payment_terms || 'Net 30'}</TableCell>
+                    <TableCell className="text-right">
+                      <span className={`font-mono font-bold ${sup.balance > 0 ? 'text-red-600' : 'text-zinc-900'}`}>
+                        ${(sup.balance || 0).toFixed(2)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {sup.status === 'ACTIVE' ? (
+                        <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-0">Active</Badge>
+                      ) : (
+                        <Badge className="bg-zinc-100 text-zinc-600 border-0">Inactive</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger 
+                          render={
+                            <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <MoreHorizontal className="h-4 w-4 text-zinc-500" />
+                            </Button>
+                          } 
+                        />
+                        <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem>View Dashboard</DropdownMenuItem>
                         <DropdownMenuItem>Create Purchase Order</DropdownMenuItem>
                         <DropdownMenuItem>Record Payment</DropdownMenuItem>
@@ -244,7 +303,8 @@ export function SupplierDirectory() {
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+              ));
+            })()}
             </TableBody>
           </ShadcnTable>
         </div>

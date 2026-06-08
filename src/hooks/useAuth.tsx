@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect, createContext, useContext } from 'react';
-import { rawSupabase } from '../lib/supabaseClient';
+import { rawSupabase } from '../lib/firebaseClient';
 
 type AuthUser = {
   $id: string;

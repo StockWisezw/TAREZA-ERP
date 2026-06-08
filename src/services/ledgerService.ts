@@ -1,4 +1,4 @@
-import { supabase, db, auth, collection, doc, writeBatch, query, where, getDocs, getDoc } from '../lib/supabaseClient';
+import { supabase, db, auth, collection, doc, writeBatch, query, where, getDocs, getDoc } from '../lib/firebaseClient';
 
 export interface JournalLineInput {
   accountCode: string;

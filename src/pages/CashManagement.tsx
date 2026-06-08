@@ -12,7 +12,7 @@ import {
   Eye, Calendar, Check, RotateCcw, Plus, RefreshCw, Landmark, Sliders
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '../lib/firebaseClient';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { usePOSStore } from '../store/posStore';
 

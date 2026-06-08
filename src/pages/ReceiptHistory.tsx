@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useReactToPrint } from 'react-to-print';
 import { ReceiptPrint } from '../components/pos/ReceiptPrint';
 import { toast } from 'sonner';
-import { supabase, db, doc, getDoc, updateDoc } from '../lib/supabaseClient';
+import { supabase, db, doc, getDoc, updateDoc } from '../lib/firebaseClient';
 import { recordStockMovement, postJournalEntry, logAuditEvent } from '../services/ledgerService';
 import { jsPDF } from 'jspdf';
 

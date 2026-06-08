@@ -39,7 +39,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from '../components/ui/badge';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
-import { supabase, firebaseConfig } from '../lib/supabaseClient';
+import { supabase, firebaseConfig } from '../lib/firebaseClient';
 import { toast } from 'sonner';
 import { MarketingAssets } from '../components/settings/MarketingAssets';
 
@@ -53,6 +53,7 @@ export default function DeveloperPanel() {
   const [businesses, setBusinesses] = useState<any[]>([]);
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [subFilter, setSubFilter] = useState<'active' | 'suspended' | 'no_sub' | 'all'>('active');
 
   // Support tickets state
   const [supportTickets, setSupportTickets] = useState<any[]>([]);
@@ -493,6 +494,47 @@ export default function DeveloperPanel() {
               </Button>
             </CardHeader>
             <CardContent className="pt-4">
+              {/* Premium Subscriptions Filter Segment */}
+              <div className="flex bg-zinc-100 dark:bg-zinc-90 w-full p-1 rounded-lg gap-1 border border-zinc-200/40 dark:border-zinc-800/80 mb-4 text-xs select-none">
+                <button 
+                  type="button"
+                  onClick={() => setSubFilter('active')} 
+                  className={`flex-1 py-1.5 px-3 rounded-md transition-all font-medium text-center cursor-pointer ${subFilter === 'active' ? 'bg-white dark:bg-zinc-800 shadow-xs text-indigo-600 dark:text-indigo-400 font-bold' : 'text-zinc-500 hover:text-zinc-800'}`}
+                >
+                  Active ({businesses.filter(b => {
+                    const status = subscriptions.find(s => s.business_id === b.id)?.status || b.subscription_status?.toLowerCase();
+                    return status === 'active' || (!status && b.subscription_status === 'ACTIVE');
+                  }).length})
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setSubFilter('suspended')} 
+                  className={`flex-1 py-1.5 px-3 rounded-md transition-all font-medium text-center cursor-pointer ${subFilter === 'suspended' ? 'bg-white dark:bg-zinc-800 shadow-xs text-indigo-600 dark:text-indigo-400 font-bold' : 'text-zinc-550 hover:text-zinc-800'}`}
+                >
+                  Suspended ({businesses.filter(b => {
+                    const status = subscriptions.find(s => s.business_id === b.id)?.status || b.subscription_status?.toLowerCase();
+                    return status === 'suspended';
+                  }).length})
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setSubFilter('no_sub')} 
+                  className={`flex-1 py-1.5 px-3 rounded-md transition-all font-medium text-center cursor-pointer ${subFilter === 'no_sub' ? 'bg-white dark:bg-zinc-800 shadow-xs text-indigo-600 dark:text-indigo-400 font-bold' : 'text-zinc-550 hover:text-zinc-800'}`}
+                >
+                  Archive/No Sub ({businesses.filter(b => {
+                    const status = subscriptions.find(s => s.business_id === b.id)?.status || b.subscription_status?.toLowerCase();
+                    return !status || status === 'expired' || status === 'free_trial' || b.subscription_status === 'EXPIRED';
+                  }).length})
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setSubFilter('all')} 
+                  className={`flex-1 py-1.5 px-3 rounded-md transition-all font-medium text-center cursor-pointer ${subFilter === 'all' ? 'bg-white dark:bg-zinc-800 shadow-xs text-indigo-600 dark:text-indigo-400 font-bold' : 'text-zinc-550 hover:text-zinc-800'}`}
+                >
+                  All ({businesses.length})
+                </button>
+              </div>
+
               {loading ? (
                 <div className="py-12 text-center text-xs text-zinc-400">
                   <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-primary" />
@@ -511,14 +553,32 @@ export default function DeveloperPanel() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {businesses.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-zinc-400 text-xs">
-                            No active tenant databases resolved on this workspace.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        businesses.map(b => {
+                      {(() => {
+                        const displayedBusinesses = businesses.filter(b => {
+                          const status = subscriptions.find(s => s.business_id === b.id)?.status || b.subscription_status?.toLowerCase();
+                          if (subFilter === 'active') {
+                            return status === 'active' || (!status && b.subscription_status === 'ACTIVE');
+                          }
+                          if (subFilter === 'suspended') {
+                            return status === 'suspended';
+                          }
+                          if (subFilter === 'no_sub') {
+                            return !status || status === 'expired' || status === 'free_trial' || b.subscription_status === 'EXPIRED';
+                          }
+                          return true;
+                        });
+
+                        if (displayedBusinesses.length === 0) {
+                          return (
+                            <TableRow>
+                              <TableCell colSpan={5} className="text-center py-8 text-zinc-400 text-xs">
+                                No systems match this filter query.
+                              </TableCell>
+                            </TableRow>
+                          );
+                        }
+
+                        return displayedBusinesses.map(b => {
                           const sub = subscriptions.find(s => s.business_id === b.id);
                           const plan = sub?.plan_name || b.subscription_plan || 'free_trial';
                           const status = sub?.status || b.subscription_status?.toLowerCase() || 'active';
@@ -623,8 +683,8 @@ export default function DeveloperPanel() {
                               </TableCell>
                             </TableRow>
                           );
-                        })
-                      )}
+                        });
+                      })()}
                     </TableBody>
                   </Table>
                 </div>

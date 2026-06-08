@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
-import { Plus, Store, Warehouse, MapPin, MoreHorizontal, LayoutGrid, Loader2 } from 'lucide-react';
+import { Plus, Store, Warehouse, MapPin, MoreHorizontal, LayoutGrid, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../lib/firebaseClient';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -20,6 +20,14 @@ export function BranchWarehouseSettings() {
   const [newBranchName, setNewBranchName] = useState('');
   const [newBranchType, setNewBranchType] = useState('branch');
   const [newBranchAddress, setNewBranchAddress] = useState('');
+
+  // Editing branch state
+  const [editingBranch, setEditingBranch] = useState<any>(null);
+  const [editBranchName, setEditBranchName] = useState('');
+  const [editBranchType, setEditBranchType] = useState('branch');
+  const [editBranchAddress, setEditBranchAddress] = useState('');
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const fetchBranches = async (bizId: string) => {
     const { data } = await supabase.from('branches').select('*').eq('business_id', bizId);
@@ -82,6 +90,54 @@ export function BranchWarehouseSettings() {
         toast.error(err.message || "Failed to create branch");
     } finally {
         setIsAdding(false);
+    }
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!businessId || !editingBranch) return;
+    if (!editBranchName) {
+      toast.error("Location name is required");
+      return;
+    }
+    setIsSavingEdit(true);
+    try {
+      const { error } = await supabase
+        .from('branches')
+        .update({
+          name: editBranchName,
+          type: editBranchType,
+          address: editBranchAddress,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingBranch.id);
+
+      if (error) throw error;
+      toast.success("Location updated successfully");
+      setIsEditOpen(false);
+      setEditingBranch(null);
+      await fetchBranches(businessId);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update location");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleDelete = async (branchId: string) => {
+    if (!businessId) return;
+    if (!window.confirm("Are you sure you want to delete this location? All stock and sales linked with this branch will be kept.")) return;
+    try {
+      const { error } = await supabase
+        .from('branches')
+        .delete()
+        .eq('id', branchId);
+
+      if (error) throw error;
+      toast.success("Location deleted successfully");
+      await fetchBranches(businessId);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete location");
     }
   };
 
@@ -211,9 +267,32 @@ export function BranchWarehouseSettings() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                     <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900">
-                        <MoreHorizontal className="w-4 h-4" />
-                     </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-zinc-500 hover:text-primary hover:bg-zinc-100"
+                        title="Edit Location"
+                        onClick={() => {
+                          setEditingBranch(loc);
+                          setEditBranchName(loc.name);
+                          setEditBranchType(loc.type || 'branch');
+                          setEditBranchAddress(loc.address || '');
+                          setIsEditOpen(true);
+                        }}
+                      >
+                         <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-zinc-500 hover:text-red-600 hover:bg-zinc-100"
+                        title="Delete Location"
+                        onClick={() => handleDelete(loc.id)}
+                      >
+                         <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -221,6 +300,50 @@ export function BranchWarehouseSettings() {
           </Table>
         </div>
       </Card>
+
+      {/* Edit Location Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Location</DialogTitle>
+            <DialogDescription>Modify details of this branch or warehouse.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdate} className="space-y-4 pt-4">
+             <div className="space-y-2">
+               <Label htmlFor="edit-b-name">Location Name</Label>
+               <Input 
+                 id="edit-b-name" 
+                 value={editBranchName} 
+                 onChange={e => setEditBranchName(e.target.value)} 
+                 required 
+               />
+             </div>
+             <div className="space-y-2">
+               <Label htmlFor="edit-b-type">Location Type</Label>
+               <select 
+                 id="edit-b-type" 
+                 value={editBranchType} 
+                 onChange={e => setEditBranchType(e.target.value)} 
+                 className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+               >
+                  <option value="branch">Retail Branch</option>
+                  <option value="warehouse">Warehouse</option>
+               </select>
+             </div>
+             <div className="space-y-2">
+               <Label htmlFor="edit-b-addr">Address</Label>
+               <Input 
+                 id="edit-b-addr" 
+                 value={editBranchAddress} 
+                 onChange={e => setEditBranchAddress(e.target.value)} 
+               />
+             </div>
+             <Button type="submit" className="w-full" disabled={isSavingEdit}>
+               {isSavingEdit ? 'Saving...' : 'Save Changes'}
+             </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
 import { Shield, Key, History, Save, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
-import { rawSupabase } from '../../lib/supabaseClient';
+import { rawSupabase } from '../../lib/firebaseClient';
 
 export function SecuritySettings() {
   const [isSaving, setIsSaving] = useState(false);

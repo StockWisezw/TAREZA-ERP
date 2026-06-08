@@ -34,7 +34,7 @@ import {
   logAuditEvent
 } from '../services/ledgerService';
 
-import { db, doc, getDoc, updateDoc } from '../lib/supabaseClient';
+import { db, doc, getDoc, updateDoc } from '../lib/firebaseClient';
 
 export default function POS() {
   const navigate = useNavigate();
@@ -262,7 +262,7 @@ export default function POS() {
 
   const refreshActiveSession = async () => {
     try {
-      const { supabase: appService } = await import('../lib/supabaseClient');
+      const { supabase: appService } = await import('../lib/firebaseClient');
       const { data: userContext } = await appService.auth.getUser();
       if (userContext?.user) {
         const { data: userBusiness } = await appService.from('business_users').select('business_id').eq('user_id', userContext.user.id).limit(1).maybeSingle();
@@ -489,7 +489,7 @@ export default function POS() {
 
         // 1.5 Recover open register session
         try {
-          const { supabase: appService } = await import('../lib/supabaseClient');
+          const { supabase: appService } = await import('../lib/firebaseClient');
           const { data: userContext } = await appService.auth.getUser();
           if (userContext?.user) {
             const { data: userBusiness } = await appService.from('business_users').select('business_id').eq('user_id', userContext.user.id).limit(1).maybeSingle();
@@ -507,7 +507,7 @@ export default function POS() {
         }
 
         // 2. Refresh from Server
-        const { supabase } = await import('../lib/supabaseClient');
+        const { supabase } = await import('../lib/firebaseClient');
         
         let productsData: any[] = [];
         let customersData: any[] = [];
@@ -727,7 +727,7 @@ export default function POS() {
 
       if (!isOffline) {
         try {
-          const { supabase } = await import('../lib/supabaseClient');
+          const { supabase } = await import('../lib/firebaseClient');
 
           const { data: userData } = await supabase.auth.getUser();
           let businessId = activeSession?.business_id || '';
@@ -1002,7 +1002,7 @@ export default function POS() {
         toast.error('Please input a valid opening balance float (non-negative).');
         return;
       }
-      const { supabase: appService } = await import('../lib/supabaseClient');
+      const { supabase: appService } = await import('../lib/firebaseClient');
       const { data: userData } = await appService.auth.getUser();
       if (!userData?.user) {
         toast.error('Session error: Could not verify user authentic token.');
