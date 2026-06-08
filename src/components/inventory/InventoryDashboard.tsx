@@ -62,11 +62,26 @@ export function InventoryDashboard() {
         }
 
         // Fetch products, inventory, movements, and categories
+        let productsQuery = supabase.from('products').select('*').eq('is_active', true);
+        if (businessId) {
+          productsQuery = productsQuery.eq('business_id', businessId);
+        }
+
+        let inventoryQuery = supabase.from('inventory').select('*');
+        if (businessId) {
+          inventoryQuery = inventoryQuery.eq('business_id', businessId);
+        }
+
+        let categoriesQuery = supabase.from('categories').select('*');
+        if (businessId) {
+          categoriesQuery = categoriesQuery.eq('business_id', businessId);
+        }
+
         const [productsRes, inventoryRes, movementsRes, categoriesRes] = await Promise.all([
-          supabase.from('products').select('*').eq('is_active', true),
-          supabase.from('inventory').select('*'),
+          productsQuery,
+          inventoryQuery,
           supabase.from('stock_movements').select('*').order('created_at', { ascending: false }).limit(1000),
-          supabase.from('categories').select('*')
+          categoriesQuery
         ]);
 
         const products = productsRes.data || [];

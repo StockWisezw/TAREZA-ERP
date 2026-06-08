@@ -165,11 +165,8 @@ export default function ReceiptHistory() {
         
       setSalesHistory(mergedSales);
 
-      const { data: custData } = await supabase.from('customers').select('*').order('name');
-      setCustomers(custData || []);
-
-      const { data: prodData } = await supabase.from('products').select('*').eq('is_active', true).order('name');
-      setProducts(prodData || []);
+      let userBusinessId = '';
+      let userBranchId = '';
 
       // Attempt to load current Business and Branch info for professional receipts
       const { data: userData } = await supabase.auth.getUser();
@@ -181,6 +178,9 @@ export default function ReceiptHistory() {
           .maybeSingle();
 
         if (bUser?.business_id) {
+          userBusinessId = bUser.business_id;
+          userBranchId = bUser.branch_id || '';
+
           const { data: bData } = await supabase.from('businesses')
             .select('name, tax_number')
             .eq('id', bUser.business_id)
@@ -201,6 +201,20 @@ export default function ReceiptHistory() {
           }
         }
       }
+
+      let customersQuery = supabase.from('customers').select('*').order('name');
+      if (userBusinessId) {
+        customersQuery = customersQuery.eq('business_id', userBusinessId);
+      }
+      const { data: custData } = await customersQuery;
+      setCustomers(custData || []);
+
+      let productsQuery = supabase.from('products').select('*').eq('is_active', true).order('name');
+      if (userBusinessId) {
+        productsQuery = productsQuery.eq('business_id', userBusinessId);
+      }
+      const { data: prodData } = await productsQuery;
+      setProducts(prodData || []);
 
     } catch (err) {
       console.error('Failed to load transaction history details + business profile:', err);

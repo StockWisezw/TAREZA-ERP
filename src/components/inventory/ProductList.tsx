@@ -122,10 +122,25 @@ export function ProductList({ onImportClick }: ProductListProps) {
         }
       }
 
+      let productsQuery = supabase.from('products').select('*').eq('is_active', true).order('name');
+      if (businessId) {
+        productsQuery = productsQuery.eq('business_id', businessId);
+      }
+
+      let inventoryQuery = supabase.from('inventory').select('*');
+      if (businessId) {
+        inventoryQuery = inventoryQuery.eq('business_id', businessId);
+      }
+
+      let categoriesQuery = supabase.from('categories').select('*');
+      if (businessId) {
+        categoriesQuery = categoriesQuery.eq('business_id', businessId);
+      }
+
       const [productsRes, inventoryRes, categoriesRes, branchesRes] = await Promise.all([
-        supabase.from('products').select('*').eq('is_active', true).order('name'),
-        supabase.from('inventory').select('*'),
-        supabase.from('categories').select('*'),
+        productsQuery,
+        inventoryQuery,
+        categoriesQuery,
         businessId
           ? supabase.from('branches').select('*').eq('business_id', businessId)
           : supabase.from('branches').select('*')

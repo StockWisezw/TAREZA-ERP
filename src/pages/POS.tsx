@@ -508,15 +508,59 @@ export default function POS() {
 
         // 2. Refresh from Server
         const { supabase } = await import('../lib/firebaseClient');
+
+        // A. Fetch current user context
+        const { data: userContext } = await supabase.auth.getUser();
+        let userBusinessId = '';
+        let userBranchId = '';
+
+        if (userContext?.user) {
+          const { data: bUser } = await supabase
+            .from('business_users')
+            .select('business_id, branch_id')
+            .eq('user_id', userContext.user.id)
+            .limit(1)
+            .maybeSingle();
+          if (bUser) {
+            userBusinessId = bUser.business_id || '';
+            userBranchId = bUser.branch_id || '';
+          }
+        }
+
+        // Apply robust fallbacks
+        if (!userBusinessId || userBusinessId === 'default_business') {
+          const { data: fallbackB } = await supabase.from('businesses').select('id').limit(1).maybeSingle();
+          if (fallbackB?.id) {
+            userBusinessId = fallbackB.id;
+          }
+        }
+        if (!userBranchId || userBranchId === 'default_branch') {
+          if (userBusinessId) {
+            const { data: fallbackBr } = await supabase.from('branches').select('id').eq('business_id', userBusinessId).limit(1).maybeSingle();
+            if (fallbackBr?.id) {
+              userBranchId = fallbackBr.id;
+            }
+          }
+        }
         
         let productsData: any[] = [];
         let customersData: any[] = [];
         let catData: any[] = [];
         
         try {
+          let customersQuery = supabase.from('customers').select('*');
+          if (userBusinessId) {
+            customersQuery = customersQuery.eq('business_id', userBusinessId);
+          }
+
+          let categoriesQuery = supabase.from('categories').select('*');
+          if (userBusinessId) {
+            categoriesQuery = categoriesQuery.eq('business_id', userBusinessId);
+          }
+
           const [custRes, catRes] = await Promise.all([
-            supabase.from('customers').select('*'),
-            supabase.from('categories').select('*')
+            customersQuery,
+            categoriesQuery
           ]);
           
           customersData = custRes.data || [];
@@ -533,15 +577,28 @@ export default function POS() {
           }
           
           const refreshPOSProducts = () => {
+             let productsQuery = supabase.from('products').select('*');
+             if (userBusinessId) {
+               productsQuery = productsQuery.eq('business_id', userBusinessId);
+             }
+
+             let inventoryQuery = supabase.from('inventory').select('*');
+             if (userBusinessId) {
+               inventoryQuery = inventoryQuery.eq('business_id', userBusinessId);
+             }
+             if (userBranchId) {
+               inventoryQuery = inventoryQuery.eq('branch_id', userBranchId);
+             }
+
              Promise.all([
-               supabase.from('products').select('*'),
-               Promise.resolve(supabase.from('inventory').select('*')).catch(() => ({ data: [] }))
+               productsQuery,
+               Promise.resolve(inventoryQuery).catch(() => ({ data: [] }))
              ]).then(([pRes, iRes]) => {
                 const data = pRes.data || [];
                 const invData = iRes.data || [];
                 if (data && data.length > 0) {
                    const updatedProducts = data.map(p => {
-                     const productInventory = invData.filter((i: any) => i.product_id === p.id);
+                     const productInventory = invData.filter((i: any) => i.product_id === p.id && (!userBranchId || i.branch_id === userBranchId));
                      const totalStock = productInventory.reduce((acc: number, cur: any) => acc + (cur.quantity || 0), 0);
                      return {
                        id: p.id,
@@ -559,8 +616,8 @@ export default function POS() {
                    setProducts(updatedProducts);
                    saveLocalProducts(updatedProducts);
                 } else {
-                  setProducts([]);
-                  saveLocalProducts([]);
+                   setProducts([]);
+                   saveLocalProducts([]);
                 }
              }).catch(err => {
                 console.error("Failed to refresh POS products dynamically:", err);
@@ -577,10 +634,23 @@ export default function POS() {
              supabase.removeChannel(channel);
           };
 
+          let initProductsQuery = supabase.from('products').select('*');
+          if (userBusinessId) {
+            initProductsQuery = initProductsQuery.eq('business_id', userBusinessId);
+          }
+
+          let initInventoryQuery = supabase.from('inventory').select('*');
+          if (userBusinessId) {
+            initInventoryQuery = initInventoryQuery.eq('business_id', userBusinessId);
+          }
+          if (userBranchId) {
+            initInventoryQuery = initInventoryQuery.eq('branch_id', userBranchId);
+          }
+
           // Initial load from Supabase / local storage resolution
           const [productsRes, inventoryRes] = await Promise.all([
-             supabase.from('products').select('*'),
-             Promise.resolve(supabase.from('inventory').select('*')).catch(() => ({ data: [] }))
+             initProductsQuery,
+             Promise.resolve(initInventoryQuery).catch(() => ({ data: [] }))
           ]);
           
           const initProducts = productsRes.data || [];
@@ -588,7 +658,7 @@ export default function POS() {
           
           if (initProducts && initProducts.length > 0) {
             const processedProducts = initProducts.map(p => {
-              const productInventory = initInventory.filter((i: any) => i.product_id === p.id);
+              const productInventory = initInventory.filter((i: any) => i.product_id === p.id && (!userBranchId || i.branch_id === userBranchId));
               const totalStock = productInventory.reduce((acc: number, cur: any) => acc + (cur.quantity || 0), 0);
               
               return {

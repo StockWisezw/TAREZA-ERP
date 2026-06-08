@@ -433,12 +433,7 @@ export default function Dashboard() {
   }
 
   const getGreeting = () => {
-    const isProfileNameDefault = !profileName || profileName.toLowerCase() === 'default';
-    if (!isProfileNameDefault && businessName) {
-      return `Welcome back, ${profileName} (${businessName})`;
-    } else if (!isProfileNameDefault) {
-      return `Welcome back, ${profileName}`;
-    } else if (businessName) {
+    if (businessName) {
       return `Welcome back, ${businessName}`;
     } else {
       return 'Welcome back to your workspace';

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { SettingsSidebar } from '../components/settings/SettingsSidebar';
 import { BusinessProfile } from '../components/settings/BusinessProfile';
 import { BillingSettings } from '../components/settings/BillingSettings';
@@ -17,7 +18,16 @@ import { SupportSettings } from '../components/settings/SupportSettings';
 import { Separator } from '../components/ui/separator';
 
 export default function Settings() {
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('business');
+
+  useEffect(() => {
+    const queryParams = new URLSearchParams(location.search);
+    const tabParam = queryParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [location.search]);
 
   const renderContent = () => {
     switch (activeTab) {

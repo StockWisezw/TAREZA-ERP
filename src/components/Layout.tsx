@@ -52,38 +52,44 @@ const navigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
-function SubscriptionBanner() {
+function SubscriptionBanner({ status, endDate }: { status: string; endDate: string | null }) {
   const { user } = useAuth();
   
   // Superadmin account has no expiration and unlimited functions
   const isSuperadmin = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw';
-  const subscriptionStatus: string = isSuperadmin ? 'ACTIVE' : 'GRACE_PERIOD';
+  const subscriptionStatus = isSuperadmin ? 'ACTIVE' : status;
   
-  const expiresAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // Expired 2 days ago
-  const gracePeriodEnd = new Date(expiresAt.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days grace
-  const daysLeftInGrace = Math.floor((gracePeriodEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-
   if (subscriptionStatus === 'ACTIVE') return null;
 
-  if (subscriptionStatus === 'EXPIRED') {
+  const expiresAt = endDate ? new Date(endDate) : new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // Fallback to 2 days ago if undefined/not loaded
+  const gracePeriodEnd = new Date(expiresAt.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days grace from expiration
+  let daysLeftInGrace = Math.ceil((gracePeriodEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  
+  // Ensure we don't display negative days if it's already expired but status hasn't moved
+  if (daysLeftInGrace < 0) {
+    daysLeftInGrace = 0;
+  }
+
+  // If status is EXPIRED, or daysLeftInGrace <= 0, we show EXPIRED banner
+  if (subscriptionStatus === 'EXPIRED' || daysLeftInGrace <= 0) {
      return (
-      <div className="bg-red-500 text-white border-b border-red-600 px-4 py-2 flex items-center justify-center text-sm z-50 relative shrink-0">
-        <AlertTriangle className="w-4 h-4 mr-2 shrink-0" />
+      <div className="bg-red-500 text-white border-b border-red-600 px-4 py-2 flex items-center justify-center text-sm z-50 relative shrink-0" id="expired-subscription-banner">
+        <AlertTriangle className="w-4 h-4 mr-2 shrink-0 animate-pulse" />
         <span className="truncate font-medium">Your subscription has expired. Please upgrade or renew your plan to restore access.</span>
-        <Link to="/settings" className="ml-3 font-bold underline hover:text-red-100 shrink-0">Renew Plan</Link>
+        <Link to="/settings?tab=billing" className="ml-3 font-bold underline hover:text-red-100 shrink-0">Renew Plan</Link>
       </div>
     );
   }
 
   return (
-    <div className="bg-amber-100 border-b border-amber-200 px-4 py-2 flex items-center justify-center text-sm text-amber-800 z-50 relative shrink-0">
-      <AlertTriangle className="w-4 h-4 mr-2 shrink-0" />
-      <span className="truncate">
+    <div className="bg-amber-100 border-b border-amber-200 px-4 py-2 flex items-center justify-center text-sm text-amber-800 z-50 relative shrink-0 font-sans" id="grace-period-subscription-banner">
+      <AlertTriangle className="w-4 h-4 mr-2 shrink-0 text-amber-600 animate-bounce" />
+      <span className="truncate font-medium">
         {subscriptionStatus === 'TRIAL' 
-          ? `Your 7-day free trial is active.` 
-          : `Subscription Overdue: You are in a 7-day grace period (${daysLeftInGrace} days left).`}
+          ? `Your free trial is active.` 
+          : `Subscription Overdue: You are in a 7-day grace period (${daysLeftInGrace} day${daysLeftInGrace === 1 ? '' : 's'} left).`}
       </span>
-      <Link to="/settings" className="ml-3 font-semibold underline hover:text-amber-900 shrink-0">Upgrade Plan</Link>
+      <Link to="/settings?tab=billing" className="ml-3 font-semibold underline hover:text-amber-900 shrink-0 select-none">Upgrade Plan</Link>
     </div>
   );
 }
@@ -106,6 +112,8 @@ export default function Layout() {
   const [isLocked, setIsLocked] = React.useState(false);
   const [unlockPin, setUnlockPin] = React.useState('');
   const [businessName, setBusinessName] = React.useState<string>('');
+  const [subStatus, setSubStatus] = React.useState<string>('ACTIVE');
+  const [subEndDate, setSubEndDate] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     async function fetchBusinessName() {
@@ -124,12 +132,20 @@ export default function Layout() {
         if (businessData?.business_id) {
           const { data: bData } = await supabase
             .from('businesses')
-            .select('name')
+            .select('name, subscription_status, subscription_end_date')
             .eq('id', businessData.business_id)
             .limit(1)
             .maybeSingle();
-          if (bData?.name) {
-            setBusinessName(bData.name);
+          if (bData) {
+            if (bData.name) {
+              setBusinessName(bData.name);
+            }
+            if (bData.subscription_status) {
+              setSubStatus(bData.subscription_status);
+            }
+            if (bData.subscription_end_date) {
+              setSubEndDate(bData.subscription_end_date);
+            }
           }
         }
       } catch (err) {
@@ -325,7 +341,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex flex-col bg-white dark:bg-zinc-950 max-h-screen overflow-hidden font-sans text-zinc-900 dark:text-zinc-100">
       <SyncManager />
-      <SubscriptionBanner />
+      <SubscriptionBanner status={subStatus} endDate={subEndDate} />
       <div className="flex flex-1 overflow-hidden">
         
         {/* Desktop Sidebar */}
