@@ -67,55 +67,56 @@ export default function Login() {
             { id: user.id, first_name: demoFirstName, last_name: demoLastName, email: user.email }
           ]);
 
-          // Build Business
+          // Pre-generate IDs to avoid race conditions and secure sequence
+          const newBusinessId = crypto.randomUUID();
+          const newRoleId = crypto.randomUUID();
+          const newBranchId = crypto.randomUUID();
+
+          // Step 1: Establish tenancy link in business_users FIRST
+          await supabase.from('business_users').insert([
+            { id: user.id, business_id: newBusinessId, user_id: user.id, branch_id: newBranchId, role_id: newRoleId, is_active: true }
+          ]);
+
+          // Step 2: Set target active business ID cache
+          const { setActiveBusinessId } = await import('../lib/firebaseClient');
+          setActiveBusinessId(newBusinessId);
+
+          // Step 3: Build Business
           const regNo = role === 'developer' ? 'TZ-999999/DEV' : 'TZ-888888/CLIENT';
-          const { data: bData } = await supabase.from('businesses').insert([
+          await supabase.from('businesses').insert([
             { 
+              id: newBusinessId,
               name: demoBusinessName, 
               tax_number: regNo,
               created_at: new Date().toISOString() 
             }
-          ]).select().single();
+          ]);
 
-          const bRef = bData as any;
+          const endDate = new Date();
+          endDate.setDate(endDate.getDate() + 90); // 90 days access for demo testing
 
-          if (bRef) {
-            const endDate = new Date();
-            endDate.setDate(endDate.getDate() + 90); // 90 days access for demo testing
+          await supabase.from('subscriptions').insert([{
+             business_id: newBusinessId,
+             plan_name: 'pro',
+             status: 'active',
+             start_date: new Date().toISOString(),
+             end_date: endDate.toISOString()
+          }]);
 
-            await supabase.from('subscriptions').insert([{
-               business_id: bRef.id,
-               plan_name: 'pro',
-               status: 'active',
-               start_date: new Date().toISOString(),
-               end_date: endDate.toISOString()
-            }]);
+          await supabase.from('roles').insert([
+            { id: newRoleId, business_id: newBusinessId, name: role === 'developer' ? 'Developer' : 'Admin', description: 'System Administrator Access' }
+          ]);
 
-            const { data: rData } = await supabase.from('roles').insert([
-              { business_id: bRef.id, name: role === 'developer' ? 'Developer' : 'Admin', description: 'System Administrator Access' }
-            ]).select().single();
+          await supabase.from('branches').insert([
+            { id: newBranchId, business_id: newBusinessId, name: role === 'developer' ? 'Testing Lab Alpha' : 'Downtown Branch Store', type: 'retail' }
+          ]);
 
-            const rRef = rData as any;
-
-            const { data: brData } = await supabase.from('branches').insert([
-              { business_id: bRef.id, name: role === 'developer' ? 'Testing Lab Alpha' : 'Downtown Branch Store', type: 'retail' }
-            ]).select().single();
-            
-            const brRef = brData as any;
-
-            if (rRef && brRef) {
-              await supabase.from('business_users').insert([
-                { business_id: bRef.id, user_id: user.id, branch_id: brRef.id, role_id: rRef.id }
-              ]);
-            }
-
-            await supabase.from('categories').insert([
-              { business_id: bRef.id, name: 'General' },
-              { business_id: bRef.id, name: 'Electronics' },
-              { business_id: bRef.id, name: 'Beverages' },
-              { business_id: bRef.id, name: 'Office Supplies' }
-            ]);
-          }
+          await supabase.from('categories').insert([
+            { business_id: newBusinessId, name: 'General' },
+            { business_id: newBusinessId, name: 'Electronics' },
+            { business_id: newBusinessId, name: 'Beverages' },
+            { business_id: newBusinessId, name: 'Office Supplies' }
+          ]);
 
           toast.success(`Demo workspace initialized! Logged in as ${role === 'developer' ? 'System Developer' : 'Business Client'}.`);
           navigate('/dashboard');
@@ -215,47 +216,49 @@ export default function Login() {
            endDate.setDate(endDate.getDate() + 30); // 30-day Pro plan
         }
 
-        const { data: bData } = await supabase.from('businesses').insert([
+        // Pre-generate IDs to avoid race conditions and secure sequence
+        const newBusinessId = crypto.randomUUID();
+        const newRoleId = crypto.randomUUID();
+        const newBranchId = crypto.randomUUID();
+
+        // Step 1: Establish tenancy link in business_users FIRST
+        await supabase.from('business_users').insert([
+          { id: user.id, business_id: newBusinessId, user_id: user.id, branch_id: newBranchId, role_id: newRoleId, is_active: true }
+        ]);
+
+        // Step 2: Set target active business ID cache
+        const { setActiveBusinessId } = await import('../lib/firebaseClient');
+        setActiveBusinessId(newBusinessId);
+
+        // Step 3: Build Business
+        await supabase.from('businesses').insert([
           { 
+            id: newBusinessId,
             name: businessName, 
             tax_number: registrationNumber,
             created_at: new Date().toISOString() 
           }
-        ]).select().single();
+        ]);
 
-        const bRef = bData as any;
+        await supabase.from('subscriptions').insert([{
+           business_id: newBusinessId,
+           plan_name: planChoice === 'TRIAL' ? 'free_trial' : 'pro',
+           status: 'active',
+           start_date: new Date().toISOString(),
+           end_date: endDate.toISOString()
+        }]);
 
-        if (bRef) {
-          await supabase.from('subscriptions').insert([{
-             business_id: bRef.id,
-             plan_name: planChoice === 'TRIAL' ? 'free_trial' : 'pro',
-             status: 'active',
-             start_date: new Date().toISOString(),
-             end_date: endDate.toISOString()
-          }]);
+        await supabase.from('roles').insert([
+          { id: newRoleId, business_id: newBusinessId, name: 'Admin', description: 'System Administrator' }
+        ]);
 
-          const { data: rData } = await supabase.from('roles').insert([
-            { business_id: bRef.id, name: 'Admin', description: 'System Administrator' }
-          ]).select().single();
+        await supabase.from('branches').insert([
+          { id: newBranchId, business_id: newBusinessId, name: 'Main Branch', type: 'retail' }
+        ]);
 
-          const rRef = rData as any;
-
-          const { data: brData } = await supabase.from('branches').insert([
-            { business_id: bRef.id, name: 'Main Branch', type: 'retail' }
-          ]).select().single();
-          
-          const brRef = brData as any;
-
-          if (rRef && brRef) {
-            await supabase.from('business_users').insert([
-              { business_id: bRef.id, user_id: user.id, branch_id: brRef.id, role_id: rRef.id }
-            ]);
-          }
-
-          await supabase.from('categories').insert([
-            { business_id: bRef.id, name: 'General' }
-          ]);
-        }
+        await supabase.from('categories').insert([
+          { business_id: newBusinessId, name: 'General' }
+        ]);
 
         toast.success('Signup successful! Welcome to Tareza ERP.');
         navigate('/dashboard');

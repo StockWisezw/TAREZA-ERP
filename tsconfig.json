@@ -20,6 +20,11 @@
         "./src/*"
       ]
     },
+    "strict": true,
+    "strictNullChecks": false,
+    "noImplicitAny": false,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
     "allowImportingTsExtensions": true,
     "noEmit": true
   },

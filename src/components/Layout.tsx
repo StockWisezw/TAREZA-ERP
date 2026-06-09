@@ -109,8 +109,8 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw' || user?.email === 'dev@tarezaerp.co.zw';
-  const [isLocked, setIsLocked] = React.useState(false);
-  const [unlockPin, setUnlockPin] = React.useState('');
+  // Screen lock removed per user request
+  const isLocked = false;
   const [businessName, setBusinessName] = React.useState<string>('');
   const [subStatus, setSubStatus] = React.useState<string>('ACTIVE');
   const [subEndDate, setSubEndDate] = React.useState<string | null>(null);
@@ -231,89 +231,11 @@ export default function Layout() {
       navigate(item.link);
     }
   };
-  const [pinError, setPinError] = React.useState(false);
-
-  React.useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-
-    const resetTimer = () => {
-      clearTimeout(timeoutId);
-      if (!isLocked) {
-        // Auto lock after 5 minutes of inactivity
-        timeoutId = setTimeout(() => setIsLocked(true), 5 * 60 * 1000);
-      }
-    };
-
-    const handleActivity = () => resetTimer();
-
-    window.addEventListener('mousemove', handleActivity);
-    window.addEventListener('keydown', handleActivity);
-    window.addEventListener('scroll', handleActivity);
-    window.addEventListener('click', handleActivity);
-
-    resetTimer();
-
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener('mousemove', handleActivity);
-      window.removeEventListener('keydown', handleActivity);
-      window.removeEventListener('scroll', handleActivity);
-      window.removeEventListener('click', handleActivity);
-    };
-  }, [isLocked]);
-
   const handleSignOut = () => {
     localStorage.removeItem('isPreviewMode');
     signOut();
     window.location.href = '/login';
   };
-
-  const handleUnlock = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (unlockPin === '1234' || unlockPin === '0000') {
-      setIsLocked(false);
-      setUnlockPin('');
-      setPinError(false);
-    } else {
-      setPinError(true);
-      setTimeout(() => setPinError(false), 2000);
-    }
-  };
-
-  if (isLocked) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
-        <div className="w-full max-w-sm p-8 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200 text-center">
-           <div className="bg-primary/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Lock className="w-8 h-8 text-primary" />
-           </div>
-           <h2 className="text-2xl font-bold tracking-tight text-white mb-2">App Locked</h2>
-           <p className="text-zinc-400 text-sm mb-8">{user?.email || 'Admin User'}</p>
-           
-           <form onSubmit={handleUnlock} className="space-y-4">
-             <input 
-               type="password" 
-               autoFocus
-               placeholder="Enter PIN (e.g. 1234)" 
-               className={`w-full bg-zinc-950 border ${pinError ? 'border-red-500' : 'border-zinc-800'} text-white text-center text-2xl tracking-widest p-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary`}
-               value={unlockPin}
-               onChange={(e) => setUnlockPin(e.target.value)}
-             />
-             {pinError && <p className="text-red-500 text-sm animate-pulse">Incorrect PIN. Try again.</p>}
-             <Button type="submit" className="w-full h-12 text-lg font-bold bg-primary hover:bg-primary/90 text-primary-foreground">
-               Unlock
-             </Button>
-           </form>
-           
-           <div className="mt-8">
-             <Button variant="ghost" className="text-zinc-500 hover:text-white" onClick={handleSignOut}>
-               <LogOut className="w-4 h-4 mr-2"/> Switch User
-             </Button>
-           </div>
-        </div>
-      </div>
-    );
-  }
 
   const NavLinks = ({ mobile }: { mobile?: boolean }) => (
     <div className="flex flex-col px-2">
@@ -564,10 +486,7 @@ export default function Layout() {
                       <Lock className="w-4 h-4 mr-2" /> Developer Portal
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setIsLocked(true)} className="py-2 font-medium text-amber-600 dark:text-amber-500 cursor-pointer">
-                    <Lock className="w-4 h-4 mr-2" /> Lock Terminal
-                  </DropdownMenuItem>
+
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleSignOut} className="py-2 text-red-600 dark:text-red-400 cursor-pointer">
                     Log out

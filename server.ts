@@ -6,12 +6,50 @@ import { Paynow } from "paynow";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, updateDoc, collection, addDoc } from "firebase/firestore";
 
+interface RateLimitRecord {
+  hits: number;
+  resetTime: number;
+}
+const rateLimiterStore = new Map<string, RateLimitRecord>();
+
+function rateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+  const clientIp = Array.isArray(ip) ? ip[0] : String(ip).split(",")[0].trim();
+  const now = Date.now();
+  
+  let record = rateLimiterStore.get(clientIp);
+  if (!record || now > record.resetTime) {
+    record = {
+      hits: 0,
+      resetTime: now + 60000 // 1 minute window
+    };
+  }
+  
+  record.hits += 1;
+  rateLimiterStore.set(clientIp, record);
+  
+  res.setHeader("X-RateLimit-Limit", 100);
+  res.setHeader("X-RateLimit-Remaining", Math.max(0, 100 - record.hits));
+  res.setHeader("X-RateLimit-Reset", Math.ceil(record.resetTime / 1000));
+  
+  if (record.hits > 100) {
+    return res.status(429).json({ 
+      error: "Too many requests. Please try again after 60 seconds." 
+    });
+  }
+  
+  next();
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  
+  // Apply API rate-limiting to all secure endpoints
+  app.use("/api", rateLimiter);
 
   // Load applet's Firebase configuration to connect securely on the backend
   let firebaseConfig = {};

@@ -213,7 +213,7 @@ export function SupplierDashboard() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 12 }} dx={-10} tickFormatter={(val) => `$${val}`} />
                   <RechartsTooltip 
                     contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    formatter={(value: number) => [`$${value.toLocaleString()}`, 'Purchases']}
+                    formatter={(value: any) => [`$${parseFloat(value).toLocaleString()}`, 'Purchases']}
                   />
                   <Area type="monotone" dataKey="amount" stroke="#18181b" strokeWidth={2} fillOpacity={1} fill="url(#colorAmount)" />
                 </AreaChart>

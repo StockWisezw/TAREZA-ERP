@@ -325,7 +325,7 @@ export function BulkImport() {
       setIsSaving(true);
       setSaveProgress({ current: 0, total: validItems.length });
 
-      // Fetch all existing products to check for duplicates by SKU (case-insensitive)
+      // Fetch all existing products to check for duplicates by SKU, Barcode, or Name (case-insensitive)
       const { data: existingProducts, error: extProdsErr } = await supabase
         .from('products')
         .select('*')
@@ -336,10 +336,19 @@ export function BulkImport() {
       }
 
       const skuToProductMap = new Map<string, any>();
+      const barcodeToProductMap = new Map<string, any>();
+      const nameToProductMap = new Map<string, any>();
+
       if (existingProducts) {
         existingProducts.forEach(p => {
           if (p.sku) {
             skuToProductMap.set(p.sku.trim().toUpperCase(), p);
+          }
+          if (p.barcode) {
+            barcodeToProductMap.set(p.barcode.trim().toUpperCase(), p);
+          }
+          if (p.name) {
+            nameToProductMap.set(p.name.trim().toLowerCase(), p);
           }
         });
       }
@@ -410,14 +419,31 @@ export function BulkImport() {
           }
         }
 
-        const derivedSku = (item.sku || `SKU-${normCategoryName.substring(0,2).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`).trim();
         const rPrice = parseFloat(item.retailPrice) || 0;
         const wPrice = item.wholesalePrice ? parseFloat(item.wholesalePrice) : (rPrice * 0.9);
         const cPrice = item.costPrice ? parseFloat(item.costPrice) : (rPrice * 0.7);
         const stockQty = parseFloat(item.stock) || 0;
 
-        // Check if SKU already exists
-        const existingProd = skuToProductMap.get(derivedSku.toUpperCase());
+        const cleanSku = item.sku ? item.sku.trim().toUpperCase() : '';
+        const cleanBarcode = item.barcode ? item.barcode.trim().toUpperCase() : '';
+        const cleanName = item.name ? item.name.trim().toLowerCase() : '';
+
+        // Check if product exists by matching SKU, Barcode, or Name
+        let existingProd = null;
+        if (cleanSku) {
+          existingProd = skuToProductMap.get(cleanSku);
+        }
+        if (!existingProd && cleanBarcode) {
+          existingProd = barcodeToProductMap.get(cleanBarcode);
+        }
+        if (!existingProd && cleanName) {
+          existingProd = nameToProductMap.get(cleanName);
+        }
+
+        const derivedSku = existingProd
+          ? existingProd.sku
+          : (item.sku || `SKU-${normCategoryName.substring(0,2).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`).trim();
+
         let prodId = '';
 
         if (existingProd) {
@@ -443,10 +469,24 @@ export function BulkImport() {
             continue;
           }
           productsUpdatedCount++;
+
+          // Update local maps so duplicates in the SAME batch merge properly!
+          const updatedRecord = {
+            ...existingProd,
+            name: item.name.trim(),
+            barcode: item.barcode.trim() || null,
+            category_id: finalCategoryId,
+            retail_price: rPrice,
+            wholesale_price: wPrice,
+            cost_price: cPrice
+          };
+          if (updatedRecord.sku) skuToProductMap.set(updatedRecord.sku.trim().toUpperCase(), updatedRecord);
+          if (updatedRecord.barcode) barcodeToProductMap.set(updatedRecord.barcode.trim().toUpperCase(), updatedRecord);
+          if (updatedRecord.name) nameToProductMap.set(updatedRecord.name.trim().toLowerCase(), updatedRecord);
         } else {
           // Insert new product
           prodId = crypto.randomUUID();
-          const { error: prodErr } = await supabase.from('products').insert({
+          const newProductRecord = {
             id: prodId,
             business_id: businessId,
             name: item.name.trim(),
@@ -458,13 +498,20 @@ export function BulkImport() {
             cost_price: cPrice,
             is_active: true,
             created_at: new Date().toISOString()
-          });
+          };
+
+          const { error: prodErr } = await supabase.from('products').insert(newProductRecord);
 
           if (prodErr) {
             console.error(`Failed to insert product "${item.name}":`, prodErr);
             continue;
           }
           productsAddedCount++;
+
+          // Add to local memory maps so downstream identical records resolve to this newly created product
+          skuToProductMap.set(derivedSku.toUpperCase(), newProductRecord);
+          if (newProductRecord.barcode) barcodeToProductMap.set(newProductRecord.barcode.toUpperCase(), newProductRecord);
+          nameToProductMap.set(newProductRecord.name.toLowerCase(), newProductRecord);
         }
 
         // Manage inventory stock & stock movement records
@@ -484,6 +531,13 @@ export function BulkImport() {
           if (!invErr) {
             inventoryUpdatedCount++;
 
+            // Update local memory map cache
+            productIdToInventoryMap.set(prodId, {
+              ...existingInv,
+              quantity: newQty,
+              updated_at: new Date().toISOString()
+            });
+
             // Insert stock movement tracking if value adjusted
             const diff = newQty - (existingInv.quantity || 0);
             if (diff !== 0) {
@@ -501,8 +555,9 @@ export function BulkImport() {
           }
         } else {
           // No current stock record for this branch; create it
+          const newInvId = crypto.randomUUID();
           const { error: invErr } = await supabase.from('inventory').insert({
-            id: crypto.randomUUID(),
+            id: newInvId,
             business_id: businessId,
             branch_id: selectedBranchId,
             product_id: prodId,
@@ -514,6 +569,18 @@ export function BulkImport() {
 
           if (!invErr) {
             inventoryUpdatedCount++;
+
+            // Update local memory map cache
+            productIdToInventoryMap.set(prodId, {
+              id: newInvId,
+              business_id: businessId,
+              branch_id: selectedBranchId,
+              product_id: prodId,
+              quantity: stockQty,
+              reorder_level: 5,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
 
             if (stockQty > 0) {
               await supabase.from('stock_movements').insert({

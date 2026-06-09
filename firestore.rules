@@ -17,7 +17,7 @@ service cloud.firestore {
     }
     
     function belongsToUserBusiness(bizId) {
-      return isSignedIn() && getUserBusinessId() == bizId;
+      return isSignedIn() && bizId != null && bizId != "" && getUserBusinessId() == bizId;
     }
     
     function incoming() {
@@ -28,6 +28,10 @@ service cloud.firestore {
       return resource.data;
     }
 
+    function businessIdUnchanged() {
+      return existing().business_id == incoming().business_id;
+    }
+
     // 1. Profiles (Owner only)
     match /profiles/{profileId} {
       allow read, write: if isSignedIn() && request.auth.uid == profileId;
@@ -35,165 +39,165 @@ service cloud.firestore {
     
     // 2. Business Users linkage (Tenancy gatekeeper)
     match /business_users/{userId} {
-      // User can read their own link, or any user within the same business can read it
       allow read: if isSignedIn() && (
         request.auth.uid == userId ||
-        getUserBusinessId() == existing().business_id
+        belongsToUserBusiness(existing().business_id)
       );
-      // User can write their own link if they don't have one yet (registration), or edit if same business
-      allow write: if isSignedIn() && (
-        request.auth.uid == userId ||
-        !exists(/databases/$(database)/documents/business_users/$(request.auth.uid)) ||
-        getUserBusinessId() == incoming().business_id
+      allow write: if isSignedIn() && request.auth.uid == userId && (
+        resource == null ||
+        belongsToUserBusiness(existing().business_id)
       );
     }
     
     // 3. Businesses Profile
     match /businesses/{businessId} {
-      allow read: if isSignedIn() && getUserBusinessId() == businessId;
-      allow write: if isSignedIn() && (
-        getUserBusinessId() == businessId ||
-        !exists(/databases/$(database)/documents/business_users/$(request.auth.uid))
-      );
+      allow read: if belongsToUserBusiness(businessId);
+      allow write: if belongsToUserBusiness(businessId);
     }
 
     // 4. Primary Business Scoped Tables (Strict business_id tenancy checks)
+    // All follow strict tenancy pattern:
+    // 1. Each record MUST have business_id
+    // 2. business_id cannot be modified
+    // 3. User must own the business
     
-    // Branches / Warehouses
     match /branches/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Roles
     match /roles/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
 
-    // Role Permissions
     match /role_permissions/{id} {
-      allow read, write: if isSignedIn();
+      allow read, write: if false;
     }
     
-    // Inventory Categories
     match /categories/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Product Catalog
     match /products/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Warehouse Inventory levels
     match /inventory/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Client Directory
     match /customers/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Vendor/Supplier Directory
     match /suppliers/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Sales Records
     match /sales/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
 
-    // Sales Line Items
     match /sale_items/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if belongsToUserBusiness(existing().business_id);
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Expense Categories
     match /expense_categories/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Cash Float / Till register logs
     match /cash_drawer_logs/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // ZIMRA and general tax settings
     match /tax_rates/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Procurement Orders
     match /purchase_orders/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Audit inventory verification (Stocktakes)
     match /stocktakes_advanced/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Branch replenishment (Transfers)
     match /inventory_transfers/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
 
-    // Inventory audit updates
     match /stock_movements/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if belongsToUserBusiness(existing().business_id);
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Subscriptions
     match /subscriptions/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Accounting: Chart of Accounts (Siloed per business)
     match /accounts/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Accounting Journal Entries
     match /journal_entries/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
 
-    // Journal entry debit/credit rows
     match /journal_lines/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if belongsToUserBusiness(existing().business_id);
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Cash till register active sessions
     match /register_sessions/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
     // System audit logger (Trace compliance)
     match /audit_logs/{id} {
       allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && (resource == null || belongsToUserBusiness(existing().business_id));
+      allow write: if belongsToUserBusiness(incoming().business_id) && 
+                   (resource == null || businessIdUnchanged());
     }
     
-    // Customer care (Support tickets)
     match /support_tickets/{id} {
       allow read: if isSignedIn() && (
         request.auth.uid == existing().user_id ||
@@ -202,7 +206,7 @@ service cloud.firestore {
       allow write: if isSignedIn() && (
         request.auth.uid == incoming().user_id ||
         belongsToUserBusiness(incoming().business_id)
-      );
+      ) && (resource == null || businessIdUnchanged());
     }
   }
 }

@@ -11,20 +11,22 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import POS from './pages/POS';
-import Inventory from './pages/Inventory';
-import Customers from './pages/Customers';
-import Suppliers from './pages/Suppliers';
-import Settings from './pages/Settings';
-import ReceiptHistory from './pages/ReceiptHistory';
-import DeveloperPanel from './pages/DeveloperPanel';
-import Reports from './pages/Reports';
-import CashManagement from './pages/CashManagement';
-import Accounting from './pages/Accounting';
-import Messenger from './pages/Messenger';
 import { Toaster } from './components/ui/sonner';
 import { syncRBZExchangeRates } from './services/currencyService';
+
+// Code-splitting via dynamic imports for optimized initial load sizes
+const Dashboard = React.lazy(() => import('./pages/Dashboard'));
+const POS = React.lazy(() => import('./pages/POS'));
+const Inventory = React.lazy(() => import('./pages/Inventory'));
+const Customers = React.lazy(() => import('./pages/Customers'));
+const Suppliers = React.lazy(() => import('./pages/Suppliers'));
+const Settings = React.lazy(() => import('./pages/Settings'));
+const ReceiptHistory = React.lazy(() => import('./pages/ReceiptHistory'));
+const DeveloperPanel = React.lazy(() => import('./pages/DeveloperPanel'));
+const Reports = React.lazy(() => import('./pages/Reports'));
+const CashManagement = React.lazy(() => import('./pages/CashManagement'));
+const Accounting = React.lazy(() => import('./pages/Accounting'));
+const Messenger = React.lazy(() => import('./pages/Messenger'));
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -49,24 +51,31 @@ export default function App() {
       <ThemeProvider defaultTheme="system" disableTransitionOnChange>
         <AuthProvider>
           <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/dev-portal" element={<ProtectedRoute><DeveloperPanel /></ProtectedRoute>} />
-              <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/pos" element={<POS />} />
-                <Route path="/receipts" element={<ReceiptHistory />} />
-                <Route path="/inventory" element={<Inventory />} />
-                <Route path="/customers" element={<Customers />} />
-                <Route path="/suppliers" element={<Suppliers />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="/cash" element={<CashManagement />} />
-                <Route path="/accounting" element={<Accounting />} />
-                <Route path="/messenger" element={<Messenger />} />
-              </Route>
-            </Routes>
+            <React.Suspense fallback={
+              <div className="h-screen w-full flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+                <div className="w-8 h-8 rounded-full border-4 border-zinc-200 border-t-zinc-900 animate-spin mb-4" />
+                <p className="text-zinc-500 text-sm font-medium animate-pulse">Loading Tareza ERP...</p>
+              </div>
+            }>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/dev-portal" element={<ProtectedRoute><DeveloperPanel /></ProtectedRoute>} />
+                <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/pos" element={<POS />} />
+                  <Route path="/receipts" element={<ReceiptHistory />} />
+                  <Route path="/inventory" element={<Inventory />} />
+                  <Route path="/customers" element={<Customers />} />
+                  <Route path="/suppliers" element={<Suppliers />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/reports" element={<Reports />} />
+                  <Route path="/cash" element={<CashManagement />} />
+                  <Route path="/accounting" element={<Accounting />} />
+                  <Route path="/messenger" element={<Messenger />} />
+                </Route>
+              </Routes>
+            </React.Suspense>
           </BrowserRouter>
           <Toaster />
         </AuthProvider>

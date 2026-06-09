@@ -406,7 +406,7 @@ export function InventoryDashboard() {
                   />
                   <Tooltip 
                     contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    formatter={(value: number) => [`$${value.toFixed(2)}`, 'Valuation']}
+                    formatter={(value: any) => [`$${parseFloat(value).toFixed(2)}`, 'Valuation']}
                   />
                   <Line type="monotone" dataKey="value" stroke="#2563eb" strokeWidth={2} dot={{ r: 4, fill: '#2563eb' }} activeDot={{ r: 6 }} />
                 </LineChart>
@@ -560,7 +560,7 @@ export function InventoryDashboard() {
                       />
                       <Tooltip
                         contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '11px' }}
-                        formatter={(val: any, name: string, props: any) => {
+                        formatter={(val: any, name: any, props: any) => {
                           if (name === 'turnoverRate') return [`${val}x year`, 'Turnover Coefficient'];
                           if (name === 'unitsSold') return [`${val} units`, 'Units Dynamic Outflow'];
                           return [val, name];

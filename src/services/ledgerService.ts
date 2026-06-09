@@ -161,6 +161,7 @@ export async function postJournalEntry(
       // Record Journal Line detail
       const lineId = doc(collection(db, 'journal_lines')).id;
       batch.set(doc(db, 'journal_lines', lineId), {
+        business_id: businessId,
         journal_entry_id: jeId,
         account_id: targetAcct.id,
         debit: line.debit,
