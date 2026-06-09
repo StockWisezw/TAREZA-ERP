@@ -88,6 +88,61 @@ export function BillingSettings() {
   const [sandboxStep, setSandboxStep] = useState<'input' | 'connecting' | 'ussd' | 'verifying' | 'success'>('input');
   const [pinCode, setPinCode] = useState('');
   const [pastedInvoices, setPastedInvoices] = useState<any[]>([]);
+  const [pollUrl, setPollUrl] = useState('');
+  const [verifyingStatus, setVerifyingStatus] = useState<'idle' | 'checking' | 'failed'>('idle');
+
+  // Automatic status checker while in 'verifying' status
+  useEffect(() => {
+    if (sandboxStep !== 'verifying' || !pollUrl) return;
+
+    // Fast check first
+    handleCheckStatus(pollUrl, true);
+
+    const timer = setInterval(() => {
+      handleCheckStatus(pollUrl, true);
+    }, 7000);
+
+    return () => clearInterval(timer);
+  }, [sandboxStep, pollUrl]);
+
+  const handleCheckStatus = async (targetPollUrl?: string, quiet = false) => {
+    const activeUrl = targetPollUrl || pollUrl;
+    if (!activeUrl) return;
+
+    if (!quiet) setVerifyingStatus('checking');
+    try {
+      const response = await fetch('/api/paynow/poll', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          pollUrl: activeUrl,
+          business_id: businessData?.id
+        })
+      });
+
+      const result = await response.json();
+      if (response.ok && result.success) {
+        toast.success('Payment verified! Your license has been updated.', {
+          id: 'paynow-verify-success'
+        });
+        setSandboxStep('success');
+        setVerifyingStatus('idle');
+        loadData();
+      } else {
+        if (!quiet) {
+          setVerifyingStatus('failed');
+          toast.error(result.message || 'Payment is still processing on Paynow.', {
+            description: 'Make sure you pay and complete checkout on the Paynow page.'
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error polling status:', err);
+      if (!quiet) setVerifyingStatus('failed');
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -180,38 +235,20 @@ export function BillingSettings() {
       }
 
       if (result.redirectUrl) {
+        setPollUrl(result.pollUrl || '');
         setSandboxStep('verifying');
-        // Open redirect URL in new window/tab for security
+        
+        // Open redirect URL
         window.open(result.redirectUrl, '_blank');
         toast.info('Opening secure Paynow Zimbabwe checkout terminal...', {
           description: result.note || 'Please complete your billing authorization on the Paynow payment page in the new tab.'
         });
-        
-        // Advance state on response
-        setTimeout(() => {
-          handlePaymentSuccess();
-        }, 6000);
       } else {
-        // Mobile push: EcoCash / OneMoney
-        setSandboxStep('ussd');
-        toast.success('Mobile push transaction sent!', {
-          description: result.instructions || 'An EcoCash/OneMoney USSD confirmation prompt was triggered on your phone. Please enter your mobile money PIN to authorize.'
-        });
+        toast.error('Could not retrieve secure checkout URL from Paynow.');
       }
     } catch (err: any) {
-      console.warn('[Billing] Paynow live keys not configured or network error, running in demo sandbox mode:', err.message);
-      
-      // Fallback sandbox simulation for demo accounts
-      setTimeout(() => {
-        if (mobileMethod === 'visa') {
-          setSandboxStep('verifying');
-          setTimeout(() => {
-            handlePaymentSuccess();
-          }, 1800);
-        } else {
-          setSandboxStep('ussd');
-        }
-      }, 1500);
+      console.warn('[Billing] Paynow live keys failed or network error:', err.message);
+      toast.error(`Integration Error: ${err.message || 'Failed to initialize Paynow checkout.'}`);
     }
   };
 
@@ -661,7 +698,7 @@ export function BillingSettings() {
             {sandboxStep === 'input' && (
               <div className="space-y-4 py-2">
                 <div className="flex justify-between items-center bg-zinc-50 dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                  <span className="text-xs font-bold text-zinc-655 dark:text-zinc-400">Choose Settlements Currency</span>
+                  <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Choose Settlements Currency</span>
                   <div className="flex gap-1.5">
                     <Button 
                       size="sm"
@@ -682,116 +719,29 @@ export function BillingSettings() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold text-zinc-600 dark:text-zinc-450 block uppercase tracking-wide">
-                    Select Channel
-                  </Label>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    <button 
-                      onClick={() => setMobileMethod('ecocash')}
-                      className={`py-2 px-1 text-center rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${
-                        mobileMethod === 'ecocash' 
-                          ? 'bg-indigo-50 border-indigo-500 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-500 dark:text-indigo-400' 
-                          : 'bg-zinc-50/50 border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 text-zinc-400 hover:text-zinc-900'
-                      }`}
-                    >
-                      <span className="text-[10px] font-bold block">EcoCash</span>
-                    </button>
-
-                    <button 
-                      onClick={() => setMobileMethod('innbucks')}
-                      className={`py-2 px-1 text-center rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${
-                        mobileMethod === 'innbucks' 
-                          ? 'bg-indigo-50 border-indigo-500 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-500 dark:text-indigo-400' 
-                          : 'bg-zinc-50/50 border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 text-zinc-400 hover:text-zinc-900'
-                      }`}
-                    >
-                      <span className="text-[10px] font-bold block">InnBucks</span>
-                    </button>
-
-                    <button 
-                      onClick={() => setMobileMethod('onemoney')}
-                      className={`py-2 px-1 text-center rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${
-                        mobileMethod === 'onemoney' 
-                          ? 'bg-indigo-50 border-indigo-500 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-500 dark:text-indigo-400' 
-                          : 'bg-zinc-50/50 border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 text-zinc-400 hover:text-zinc-900'
-                      }`}
-                    >
-                      <span className="text-[10px] font-bold block">OneMoney</span>
-                    </button>
-
-                    <button 
-                      onClick={() => setMobileMethod('visa')}
-                      className={`py-2 px-1 text-center rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${
-                        mobileMethod === 'visa' 
-                          ? 'bg-indigo-50 border-indigo-500 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-500 dark:text-indigo-400' 
-                          : 'bg-zinc-50/50 border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 text-zinc-400 hover:text-zinc-900'
-                      }`}
-                    >
-                      <span className="text-[10px] font-bold block">Cards</span>
-                    </button>
+                <div className="bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 p-4 rounded-xl space-y-2 text-zinc-700 dark:text-zinc-300">
+                  <div className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400">
+                    Official Checkout Portal
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
+                    You will be redirected securely to the live, official check-out channel on the <strong>Paynow Zimbabwe</strong> website.
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400 font-medium">
+                    In the redirected secure portal, you will be able to complete payment securely using:
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5 pt-1 text-[10px] font-mono font-semibold text-zinc-550 dark:text-zinc-400">
+                    <div className="flex items-center gap-1">✓ EcoCash Mobile</div>
+                    <div className="flex items-center gap-1">✓ InnBucks Account</div>
+                    <div className="flex items-center gap-1">✓ OneMoney Mobile</div>
+                    <div className="flex items-center gap-1">✓ Visa / Mastercard</div>
                   </div>
                 </div>
 
-                {mobileMethod !== 'visa' ? (
-                  <div className="space-y-1.5 animate-in fade-in duration-200">
-                    <Label htmlFor="mobile-number" className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-                      {mobileMethod === 'ecocash' ? 'EcoCash Number' : mobileMethod === 'innbucks' ? 'InnBucks Account/Phone' : 'OneMoney Number'}
-                    </Label>
-                    <div className="relative">
-                      <Smartphone className="absolute left-3 top-3.5 h-4 w-4 text-zinc-400" />
-                      <Input
-                        id="mobile-number"
-                        placeholder="e.g. 0771234567"
-                        value={mobileNumber}
-                        onChange={(e) => setMobileNumber(e.target.value)}
-                        className="pl-9 h-11 border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950 text-sm font-mono text-zinc-900 dark:text-white"
-                      />
-                    </div>
-                    <span className="text-[10px] text-zinc-400 block font-medium">Standard push notice will be triggered on this device.</span>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5 animate-in fade-in duration-200">
-                    <div className="space-y-1">
-                      <Label htmlFor="card-number" className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">Card Number</Label>
-                      <Input
-                        id="card-number"
-                        placeholder="4000 1234 5678 9010"
-                        value={cardNumber}
-                        onChange={(e) => setCardNumber(e.target.value)}
-                        className="h-10 border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950 font-mono text-sm"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label htmlFor="card-expiry" className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">Expiry Date</Label>
-                        <Input
-                          id="card-expiry"
-                          placeholder="MM/YY"
-                          value={cardExpiry}
-                          onChange={(e) => setCardExpiry(e.target.value)}
-                          className="h-10 border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950 font-mono text-center text-sm"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="card-cvv" className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">CVV</Label>
-                        <Input
-                          id="card-cvv"
-                          placeholder="123"
-                          value={cardCvv}
-                          onChange={(e) => setCardCvv(e.target.value)}
-                          className="h-10 border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950 font-mono text-center text-sm"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 <Button 
                   onClick={handleStartPaynow}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-11 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md mt-4"
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-11 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md mt-4 animate-bounce"
                 >
-                  Authorize Secure Payment via Paynow
+                  Redirect to Paynow Website
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </div>
@@ -863,13 +813,54 @@ export function BillingSettings() {
 
             {/* Step 4: Token Verification */}
             {sandboxStep === 'verifying' && (
-              <div className="py-10 text-center space-y-4 animate-in fade-in duration-300">
-                <Loader2 className="w-10 h-10 animate-spin text-emerald-500 mx-auto" />
-                <div>
-                  <h4 className="font-bold text-sm text-zinc-900 dark:text-white">Verifying Transaction Token</h4>
-                  <p className="text-xs text-zinc-450 mt-1 max-w-xs mx-auto leading-relaxed">
-                    Awaiting Callback webhook from Paynow endpoints and confirming active status with business database...
+              <div className="py-6 text-center space-y-5 animate-in fade-in duration-300">
+                <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-full border-4 border-indigo-100 dark:border-indigo-950/50 animate-pulse" />
+                  <Loader2 className="w-8 h-8 animate-spin text-indigo-600 dark:text-indigo-400 relative z-10" />
+                </div>
+                
+                <div className="space-y-1 bg-zinc-50 dark:bg-zinc-900/50 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                  <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white">Awaiting Paynow Authorization</h4>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-xs mx-auto">
+                    We have successfully launched the official, secure Paynow Zimbabwe payment page in a new window/tab. 
                   </p>
+                  <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold mt-2">
+                    Please complete your payment on their website.
+                  </p>
+                </div>
+
+                <div className="space-y-2.5">
+                  <Button
+                    onClick={() => handleCheckStatus()}
+                    disabled={verifyingStatus === 'checking'}
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-11 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md"
+                  >
+                    {verifyingStatus === 'checking' ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Verifying with Paynow API...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-4 h-4" />
+                        Verify Payment Status
+                      </>
+                    )}
+                  </Button>
+
+                  {pollUrl && (
+                    <Button
+                      variant="outline"
+                      onClick={() => window.open(pollUrl, '_blank')}
+                      className="w-full border-zinc-200 dark:border-zinc-850 text-zinc-600 dark:text-zinc-350 font-bold h-9 rounded-xl text-[10px]"
+                    >
+                      Can't see the tab? Re-open Paynow checkout
+                    </Button>
+                  )}
+                </div>
+
+                <div className="text-[10px] text-zinc-400 leading-relaxed max-w-xs mx-auto">
+                  Our system is listening to Paynow's live webhooks. We will automatically activate your Premium subscription as soon as the gateway confirms receipt!
                 </div>
               </div>
             )}
