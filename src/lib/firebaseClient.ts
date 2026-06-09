@@ -388,6 +388,18 @@ export async function getActiveBusinessId(): Promise<string | null> {
   if (!user) return null;
 
   try {
+    // 1. Direct document lookup (extremely efficient, no composite indexes or secure queries required if UID is docId)
+    const directDocRef = fireDoc(db, 'business_users', user.uid);
+    const directSnap = await fireGetDoc(directDocRef);
+    if (directSnap.exists()) {
+      const bizId = directSnap.data()?.business_id;
+      if (bizId) {
+        setActiveBusinessId(bizId);
+        return bizId;
+      }
+    }
+
+    // 2. Fallback query for legacy or non-UID-keyed setups
     const qSnap = await fireGetDocs(fireQuery(
       fireCollection(db, 'business_users'),
       fireWhere('user_id', '==', user.uid)

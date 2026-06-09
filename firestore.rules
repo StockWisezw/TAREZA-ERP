@@ -41,9 +41,13 @@ service cloud.firestore {
     match /business_users/{userId} {
       allow read: if isSignedIn() && (
         request.auth.uid == userId ||
+        (resource != null && resource.data.user_id == request.auth.uid) ||
         belongsToUserBusiness(existing().business_id)
       );
-      allow write: if isSignedIn() && request.auth.uid == userId && (
+      allow write: if isSignedIn() && (
+        request.auth.uid == userId || 
+        (incoming() != null && incoming().user_id == request.auth.uid)
+      ) && (
         resource == null ||
         belongsToUserBusiness(existing().business_id)
       );
