@@ -289,7 +289,22 @@ export function collection(...args: any[]): any {
 
 export async function getDoc(docRef: any): Promise<any> {
   try {
-    const snap = await fireGetDoc(docRef);
+    let snap;
+    try {
+      snap = await fireGetDoc(docRef);
+    } catch (err: any) {
+      const isOffline = err?.message?.includes('offline') || String(err).includes('offline');
+      if (isOffline) {
+        try {
+          const { getDocFromCache } = await import('firebase/firestore');
+          snap = await getDocFromCache(docRef);
+        } catch (cacheErr) {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
     return {
       exists: () => snap.exists(),
       data: () => snap.data() as any,
@@ -346,7 +361,22 @@ export function where(col: string, op: string, val: any) {
 
 export async function getDocs(queryObj: any) {
   try {
-    const snap = await fireGetDocs(queryObj);
+    let snap;
+    try {
+      snap = await fireGetDocs(queryObj);
+    } catch (err: any) {
+      const isOffline = err?.message?.includes('offline') || String(err).includes('offline');
+      if (isOffline) {
+        try {
+          const { getDocsFromCache } = await import('firebase/firestore');
+          snap = await getDocsFromCache(queryObj);
+        } catch (cacheErr) {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
     const docs = snap.docs.map(snapDoc => ({
       id: snapDoc.id,
       data: () => snapDoc.data()
@@ -363,22 +393,40 @@ export async function getDocs(queryObj: any) {
   }
 }
 
+// Safe localStorage wrappers to prevent iframe sandbox SecurityErrors
+function safeGetLocalStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    console.warn(`[Storage] Failed to read ${key} from localStorage:`, e);
+    return null;
+  }
+}
+
+function safeSetLocalStorage(key: string, value: string | null) {
+  try {
+    if (value) {
+      localStorage.setItem(key, value);
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch (e) {
+    console.warn(`[Storage] Failed to write ${key} to localStorage:`, e);
+  }
+}
+
 // Active business ID cache & auto-resolving mechanism
 let cachedBusinessId: string | null = null;
 
 export function setActiveBusinessId(id: string | null) {
   cachedBusinessId = id;
-  if (id) {
-    localStorage.setItem('tareza_active_business_id', id);
-  } else {
-    localStorage.removeItem('tareza_active_business_id');
-  }
+  safeSetLocalStorage('tareza_active_business_id', id);
 }
 
 export async function getActiveBusinessId(): Promise<string | null> {
   if (cachedBusinessId) return cachedBusinessId;
 
-  const localId = localStorage.getItem('tareza_active_business_id');
+  const localId = safeGetLocalStorage('tareza_active_business_id');
   if (localId) {
     cachedBusinessId = localId;
     return localId;
@@ -390,8 +438,24 @@ export async function getActiveBusinessId(): Promise<string | null> {
   try {
     // 1. Direct document lookup (extremely efficient, no composite indexes or secure queries required if UID is docId)
     const directDocRef = fireDoc(db, 'business_users', user.uid);
-    const directSnap = await fireGetDoc(directDocRef);
-    if (directSnap.exists()) {
+    let directSnap;
+    try {
+      directSnap = await fireGetDoc(directDocRef);
+    } catch (err: any) {
+      const isOfflineDir = err?.message?.includes('offline') || String(err).includes('offline');
+      if (isOfflineDir) {
+        try {
+          const { getDocFromCache } = await import('firebase/firestore');
+          directSnap = await getDocFromCache(directDocRef);
+        } catch (cacheErr) {
+          throw err; // bubble up if cache retrieval fails
+        }
+      } else {
+        throw err;
+      }
+    }
+
+    if (directSnap && directSnap.exists()) {
       const bizId = directSnap.data()?.business_id;
       if (bizId) {
         setActiveBusinessId(bizId);
@@ -400,11 +464,28 @@ export async function getActiveBusinessId(): Promise<string | null> {
     }
 
     // 2. Fallback query for legacy or non-UID-keyed setups
-    const qSnap = await fireGetDocs(fireQuery(
+    const q = fireQuery(
       fireCollection(db, 'business_users'),
       fireWhere('user_id', '==', user.uid)
-    ));
-    if (!qSnap.empty) {
+    );
+    let qSnap;
+    try {
+      qSnap = await fireGetDocs(q);
+    } catch (err: any) {
+      const isOfflineQ = err?.message?.includes('offline') || String(err).includes('offline');
+      if (isOfflineQ) {
+        try {
+          const { getDocsFromCache } = await import('firebase/firestore');
+          qSnap = await getDocsFromCache(q);
+        } catch (cacheErr) {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
+
+    if (qSnap && !qSnap.empty) {
       const bizId = qSnap.docs[0].data()?.business_id;
       if (bizId) {
         setActiveBusinessId(bizId);
@@ -414,7 +495,9 @@ export async function getActiveBusinessId(): Promise<string | null> {
   } catch (err) {
     console.error('[Firebase] Error auto-resolving active business ID:', err);
   }
-  return null;
+  
+  // Return 'default_business' as a last-resort fallback when completely offline and unresolvable
+  return 'default_business';
 }
 
 // Low-level query emulator on top of Firestore collections
@@ -640,7 +723,23 @@ class SupabaseQueryBuilder {
       q = fireQuery(colRef, ...constraints);
     }
 
-    const querySnap = await fireGetDocs(q);
+    let querySnap;
+    try {
+      querySnap = await fireGetDocs(q);
+    } catch (err: any) {
+      const isOffline = err?.message?.includes('offline') || String(err).includes('offline');
+      if (isOffline) {
+        try {
+          console.warn(`[Firebase] Client offline, loading query on ${this.table} from cache...`);
+          const { getDocsFromCache } = await import('firebase/firestore');
+          querySnap = await getDocsFromCache(q);
+        } catch (cacheErr) {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
     return querySnap.docs;
   }
 
