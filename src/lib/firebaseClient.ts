@@ -24,7 +24,8 @@ import {
   where as fireWhere, 
   limit as fireLimit, 
   orderBy as fireOrderBy,
-  getDocFromServer
+  getDocFromServer,
+  documentId
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 import firebaseConfigPlaceholder from '../../firebase-applet-config.json';
@@ -427,7 +428,7 @@ export async function getActiveBusinessId(): Promise<string | null> {
   if (cachedBusinessId) return cachedBusinessId;
 
   const localId = safeGetLocalStorage('tareza_active_business_id');
-  if (localId) {
+  if (localId && localId !== 'default_business') {
     cachedBusinessId = localId;
     return localId;
   }
@@ -435,67 +436,74 @@ export async function getActiveBusinessId(): Promise<string | null> {
   const user = fireAuth.currentUser;
   if (!user) return null;
 
-  try {
-    // 1. Direct document lookup (extremely efficient, no composite indexes or secure queries required if UID is docId)
-    const directDocRef = fireDoc(db, 'business_users', user.uid);
-    let directSnap;
+  let retries = 3;
+  let delay = 350;
+
+  while (retries > 0) {
     try {
-      directSnap = await fireGetDoc(directDocRef);
+      // 1. Direct document lookup (extremely efficient, no composite indexes or secure queries required if UID is docId)
+      const directDocRef = fireDoc(db, 'business_users', user.uid);
+      const directSnap = await fireGetDoc(directDocRef);
+      if (directSnap && directSnap.exists()) {
+        const bizId = directSnap.data()?.business_id;
+        if (bizId) {
+          setActiveBusinessId(bizId);
+          return bizId;
+        }
+      }
+
+      // 2. Fallback query for legacy or non-UID-keyed setups
+      const q = fireQuery(
+        fireCollection(db, 'business_users'),
+        fireWhere('user_id', '==', user.uid)
+      );
+      const qSnap = await fireGetDocs(q);
+      if (qSnap && !qSnap.empty) {
+        const bizId = qSnap.docs[0].data()?.business_id;
+        if (bizId) {
+          setActiveBusinessId(bizId);
+          return bizId;
+        }
+      }
+
+      // If both completed but no record exists yet, exit loop to allow creation
+      break;
     } catch (err: any) {
-      const isOfflineDir = err?.message?.includes('offline') || String(err).includes('offline');
-      if (isOfflineDir) {
+      const errMsg = String(err).toLowerCase();
+      const isOfflineOrNetwork = errMsg.includes('offline') || 
+                                 errMsg.includes('unavailable') || 
+                                 errMsg.includes('network') || 
+                                 errMsg.includes('failed to get') ||
+                                 errMsg.includes('permission-denied') || 
+                                 errMsg.includes('insufficient permissions');
+
+      if (isOfflineOrNetwork && retries > 1) {
+        console.warn(`[Firebase] Transient error resolving business ID (retrying in ${delay}ms, auth state: ${fireAuth.currentUser ? 'signed-in' : 'signed-out'}). Error:`, err);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+        retries--;
+      } else {
+        console.error('[Firebase] Error auto-resolving active business ID:', err);
+        // Try to retrieve from cache before completely giving up
         try {
+          const directDocRef = fireDoc(db, 'business_users', user.uid);
           const { getDocFromCache } = await import('firebase/firestore');
-          directSnap = await getDocFromCache(directDocRef);
+          const cacheSnap = await getDocFromCache(directDocRef);
+          if (cacheSnap && cacheSnap.exists()) {
+            const bizId = cacheSnap.data()?.business_id;
+            if (bizId) {
+              setActiveBusinessId(bizId);
+              return bizId;
+            }
+          }
         } catch (cacheErr) {
-          throw err; // bubble up if cache retrieval fails
+          // Ignore cache fetch failures
         }
-      } else {
-        throw err;
+        break;
       }
     }
-
-    if (directSnap && directSnap.exists()) {
-      const bizId = directSnap.data()?.business_id;
-      if (bizId) {
-        setActiveBusinessId(bizId);
-        return bizId;
-      }
-    }
-
-    // 2. Fallback query for legacy or non-UID-keyed setups
-    const q = fireQuery(
-      fireCollection(db, 'business_users'),
-      fireWhere('user_id', '==', user.uid)
-    );
-    let qSnap;
-    try {
-      qSnap = await fireGetDocs(q);
-    } catch (err: any) {
-      const isOfflineQ = err?.message?.includes('offline') || String(err).includes('offline');
-      if (isOfflineQ) {
-        try {
-          const { getDocsFromCache } = await import('firebase/firestore');
-          qSnap = await getDocsFromCache(q);
-        } catch (cacheErr) {
-          throw err;
-        }
-      } else {
-        throw err;
-      }
-    }
-
-    if (qSnap && !qSnap.empty) {
-      const bizId = qSnap.docs[0].data()?.business_id;
-      if (bizId) {
-        setActiveBusinessId(bizId);
-        return bizId;
-      }
-    }
-  } catch (err) {
-    console.error('[Firebase] Error auto-resolving active business ID:', err);
   }
-  
+
   // Return 'default_business' as a last-resort fallback when completely offline and unresolvable
   return 'default_business';
 }
@@ -591,7 +599,7 @@ class SupabaseQueryBuilder {
           }
 
           const cleanItem = normalizeInput(item, this.table);
-          if (requiresBusinessScope && activeBizId) {
+          if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business') {
             cleanItem.business_id = activeBizId;
           }
           return { id: docId, ...cleanItem };
@@ -604,17 +612,17 @@ class SupabaseQueryBuilder {
           insertedItems.push(item);
         }
 
-        return { data: insertedItems.map(d => normalizeOutput(d.id, d, this.table)), count: insertedItems.length, error: null };
+        return { data: insertedItems.map(d => normalizeOutput(d.id, d, this.table)), count: itemsToInsert.length, error: null };
       } 
       
       if (this.isUpdate) {
         if (this.targetId) {
-          if (this.table === 'businesses' && activeBizId && this.targetId !== activeBizId) {
+          if (this.table === 'businesses' && activeBizId && activeBizId !== 'default_business' && this.targetId !== activeBizId) {
             throw new Error(`Permission denied: Cannot update other business profile`);
           }
           const docRef = fireDoc(db, this.table, this.targetId);
           const cleanItem = normalizeInput(this.payload, this.table);
-          if (requiresBusinessScope && activeBizId) {
+          if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business') {
             cleanItem.business_id = activeBizId;
           }
           await fireUpdateDoc(docRef, cleanItem);
@@ -623,7 +631,7 @@ class SupabaseQueryBuilder {
         } else {
           const results = await this.getFilteredDocs();
           const cleanItem = normalizeInput(this.payload, this.table);
-          if (requiresBusinessScope && activeBizId) {
+          if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business') {
             cleanItem.business_id = activeBizId;
           }
           for (const docSnap of results) {
@@ -636,7 +644,7 @@ class SupabaseQueryBuilder {
 
       if (this.isDelete) {
         if (this.targetId) {
-          if (requiresBusinessScope && activeBizId) {
+          if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business') {
             const docRef = fireDoc(db, this.table, this.targetId);
             const snap = await fireGetDoc(docRef);
             if (snap.exists() && snap.data()?.business_id !== activeBizId) {
@@ -656,6 +664,34 @@ class SupabaseQueryBuilder {
       }
 
       // SELECT
+      if (this.targetId) {
+        const docRef = fireDoc(db, this.table, this.targetId);
+        let snap;
+        try {
+          snap = await fireGetDoc(docRef);
+        } catch (err: any) {
+          const isOffline = err?.message?.includes('offline') || String(err).includes('offline');
+          if (isOffline) {
+            const { getDocFromCache } = await import('firebase/firestore');
+            snap = await getDocFromCache(docRef);
+          } else {
+            throw err;
+          }
+        }
+        let mappedData = [];
+        if (snap.exists()) {
+          const data = snap.data();
+          if (!requiresBusinessScope || data?.business_id === activeBizId || this.table === 'businesses') {
+            mappedData = [normalizeOutput(snap.id, data, this.table)];
+          }
+        }
+        return { 
+          data: mappedData, 
+          count: mappedData.length, 
+          error: null 
+        };
+      }
+
       const results = await this.getFilteredDocs();
       const mappedData = results.map(docSnap => normalizeOutput(docSnap.id, docSnap.data(), this.table));
       return { 
@@ -676,14 +712,14 @@ class SupabaseQueryBuilder {
     const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id');
     const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
 
-    if (requiresBusinessScope && activeBizId) {
+    if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business') {
       const hasBizIdFilter = this.eqFilters.some(f => f.col === 'business_id');
       if (!hasBizIdFilter) {
         this.eqFilters.push({ col: 'business_id', val: activeBizId });
       } else {
         this.eqFilters = this.eqFilters.map(f => f.col === 'business_id' ? { col: 'business_id', val: activeBizId } : f);
       }
-    } else if (this.table === 'businesses' && activeBizId) {
+    } else if (this.table === 'businesses' && activeBizId && activeBizId !== 'default_business') {
       if (this.targetId) {
         this.targetId = activeBizId;
       } else {
@@ -699,21 +735,37 @@ class SupabaseQueryBuilder {
     const constraints: any[] = [];
     for (const filter of this.eqFilters) {
       if (filter.val !== undefined) {
-        constraints.push(fireWhere(filter.col, '==', filter.val));
+        if (filter.col === 'id' || filter.col === '$id') {
+          constraints.push(fireWhere(documentId(), '==', filter.val));
+        } else {
+          constraints.push(fireWhere(filter.col, '==', filter.val));
+        }
       }
     }
     for (const filter of this.gteFilters) {
       if (filter.val !== undefined) {
-        constraints.push(fireWhere(filter.col, '>=', filter.val));
+        if (filter.col === 'id' || filter.col === '$id') {
+          constraints.push(fireWhere(documentId(), '>=', filter.val));
+        } else {
+          constraints.push(fireWhere(filter.col, '>=', filter.val));
+        }
       }
     }
     for (const filter of this.lteFilters) {
       if (filter.val !== undefined) {
-        constraints.push(fireWhere(filter.col, '<=', filter.val));
+        if (filter.col === 'id' || filter.col === '$id') {
+          constraints.push(fireWhere(documentId(), '<=', filter.val));
+        } else {
+          constraints.push(fireWhere(filter.col, '<=', filter.val));
+        }
       }
     }
     if (this.orderCol) {
-      constraints.push(fireOrderBy(this.orderCol, this.orderAscending ? 'asc' : 'desc'));
+      if (this.orderCol === 'id' || this.orderCol === '$id') {
+        constraints.push(fireOrderBy(documentId(), this.orderAscending ? 'asc' : 'desc'));
+      } else {
+        constraints.push(fireOrderBy(this.orderCol, this.orderAscending ? 'asc' : 'desc'));
+      }
     }
     if (this.limitNum !== undefined) {
       constraints.push(fireLimit(this.limitNum));
