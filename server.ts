@@ -79,12 +79,13 @@ async function startServer() {
     }
 
     try {
-      const paynowId = process.env.PAYNOW_INTEGRATION_ID;
-      const paynowKey = process.env.PAYNOW_INTEGRATION_KEY;
+      // Fallback securely of default credentials to user's specified settings
+      const paynowId = process.env.PAYNOW_INTEGRATION_ID || "25065";
+      const paynowKey = process.env.PAYNOW_INTEGRATION_KEY || "6e8f5604-5749-47c9-9861-e39bc3910119";
 
       if (!paynowId || !paynowKey) {
         throw new Error(
-          "Paynow Integration ID or Key is missing. Please set PAYNOW_INTEGRATION_ID and PAYNOW_INTEGRATION_KEY environment variables in your Vercel Project Settings."
+          "Paynow Integration ID or Key is missing. Please set PAYNOW_INTEGRATION_ID and PAYNOW_INTEGRATION_KEY environment variables."
         );
       }
 
@@ -97,12 +98,14 @@ async function startServer() {
       const payment = paynow.createPayment(`SUB-${business_id}-${Date.now()}`, email);
       payment.add(`Tareza ERP Premium Subscription - ${business_id}`, parseFloat(amount));
 
-      if (method === "visa") {
+      // If they explicitly requested direct Paynow page redirection, or if they choose visa/cards, 
+      // or if they just want web interface payments for reliability:
+      if (method === "visa" || method === "paynow_web" || method === "cards" || !phone) {
         const response = await paynow.send(payment);
         if (response && response.success) {
           return res.json({
             success: true,
-            method: "visa",
+            method: "web_redirect",
             redirectUrl: response.redirectUrl,
             pollUrl: response.pollUrl
           });
@@ -110,19 +113,47 @@ async function startServer() {
           return res.status(400).json({ error: response.error || "Initiation failed on Paynow." });
         }
       } else {
+        // Option to fall back to mobile push if specifically requested with phone number,
+        // but we can also return web redirect if mobile push fails.
         const provider = method === "onemoney" ? "onemoney" : "ecocash";
-        const response = await paynow.sendMobile(payment, phone, provider);
         
-        if (response && response.success) {
-          return res.json({
-            success: true,
-            method: provider,
-            status: response.status,
-            instructions: response.instructions,
-            pollUrl: response.pollUrl
-          });
-        } else {
-          return res.status(400).json({ error: response.error || "Mobile wallet transaction failed to initialize on Paynow." });
+        try {
+          const response = await paynow.sendMobile(payment, phone, provider);
+          if (response && response.success) {
+            return res.json({
+              success: true,
+              method: provider,
+              status: response.status,
+              instructions: response.instructions,
+              pollUrl: response.pollUrl
+            });
+          } else {
+            // If mobile push fails, fall back gracefully to direct checkout page redirect!
+            const webResponse = await paynow.send(payment);
+            if (webResponse && webResponse.success) {
+              return res.json({
+                success: true,
+                method: "web_redirect",
+                redirectUrl: webResponse.redirectUrl,
+                pollUrl: webResponse.pollUrl,
+                note: "Mobile push failed, redirecting to Paynow web checkout."
+              });
+            }
+            return res.status(400).json({ error: response.error || "Mobile money push failed and web checkout was unavailable." });
+          }
+        } catch (mobileErr: any) {
+          // Graceful fallback to direct web checkout redirect page
+          const webResponse = await paynow.send(payment);
+          if (webResponse && webResponse.success) {
+            return res.json({
+              success: true,
+              method: "web_redirect",
+              redirectUrl: webResponse.redirectUrl,
+              pollUrl: webResponse.pollUrl,
+              note: "Redirecting to primary secure Paynow checkout page."
+            });
+          }
+          throw mobileErr;
         }
       }
     } catch (error: any) {

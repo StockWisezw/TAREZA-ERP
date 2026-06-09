@@ -179,18 +179,18 @@ export function BillingSettings() {
         throw new Error(result.error || 'Payment initiation failed.');
       }
 
-      if (result.method === 'visa' && result.redirectUrl) {
+      if (result.redirectUrl) {
         setSandboxStep('verifying');
         // Open redirect URL in new window/tab for security
         window.open(result.redirectUrl, '_blank');
         toast.info('Opening secure Paynow Zimbabwe checkout terminal...', {
-          description: 'Please complete your credit card billing authorization in the new tab.'
+          description: result.note || 'Please complete your billing authorization on the Paynow payment page in the new tab.'
         });
         
         // Advance state on response
         setTimeout(() => {
           handlePaymentSuccess();
-        }, 5000);
+        }, 6000);
       } else {
         // Mobile push: EcoCash / OneMoney
         setSandboxStep('ussd');
