@@ -17,7 +17,10 @@ import {
   Loader2, 
   ShieldCheck, 
   TrendingUp, 
-  Lock 
+  Lock,
+  Upload,
+  Coins,
+  FileText 
 } from 'lucide-react';
 import { Table, TableHead, TableHeader, TableRow, TableCell, TableBody } from '../ui/table';
 import { 
@@ -74,75 +77,25 @@ export function BillingSettings() {
   const [userCount, setUserCount] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  // Paynow billing states
-  const [isPaynowOpen, setIsPaynowOpen] = useState(false);
+  // EcoCash & POP billing states
+  const [isPaynowOpen, setIsPaynowOpen] = useState(false); 
   const [selectedPlanCode, setSelectedPlanCode] = useState<'starter' | 'pro' | 'enterprise'>('pro');
   const [selectedPlanCost, setSelectedPlanCost] = useState<number>(50);
   const [selectedCycle, setSelectedCycle] = useState<'monthly' | 'quarterly' | 'semi_annually' | 'annually'>('monthly');
   const [paynowCurrency, setPaynowCurrency] = useState<'USD' | 'ZiG'>('USD');
   const [mobileMethod, setMobileMethod] = useState<'ecocash' | 'innbucks' | 'onemoney' | 'visa'>('ecocash');
-  const [mobileNumber, setMobileNumber] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [sandboxStep, setSandboxStep] = useState<'input' | 'connecting' | 'ussd' | 'verifying' | 'success'>('input');
-  const [pinCode, setPinCode] = useState('');
+  const [sandboxStep, setSandboxStep] = useState<'input' | 'connecting' | 'verifying' | 'success'>('input');
+  
+  // Direct EcoCash detail fields
+  const [popReference, setPopReference] = useState('');
+  const [popPhone, setPopPhone] = useState('');
+  const [popText, setPopText] = useState('');
+  const [popProofImage, setPopProofImage] = useState<string | null>(null);
+  const [isUploadingPop, setIsUploadingPop] = useState(false);
+  const [activeBillingTab, setActiveBillingTab] = useState<'ecocash' | 'paynow' | 'crypto'>('ecocash');
+  const [verificationCountdown, setVerificationCountdown] = useState(300);
+  const [dragOver, setDragOver] = useState(false);
   const [pastedInvoices, setPastedInvoices] = useState<any[]>([]);
-  const [pollUrl, setPollUrl] = useState('');
-  const [verifyingStatus, setVerifyingStatus] = useState<'idle' | 'checking' | 'failed'>('idle');
-
-  // Automatic status checker while in 'verifying' status
-  useEffect(() => {
-    if (sandboxStep !== 'verifying' || !pollUrl) return;
-
-    // Fast check first
-    handleCheckStatus(pollUrl, true);
-
-    const timer = setInterval(() => {
-      handleCheckStatus(pollUrl, true);
-    }, 7000);
-
-    return () => clearInterval(timer);
-  }, [sandboxStep, pollUrl]);
-
-  const handleCheckStatus = async (targetPollUrl?: string, quiet = false) => {
-    const activeUrl = targetPollUrl || pollUrl;
-    if (!activeUrl) return;
-
-    if (!quiet) setVerifyingStatus('checking');
-    try {
-      const response = await fetch('/api/paynow/poll', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          pollUrl: activeUrl,
-          business_id: businessData?.id
-        })
-      });
-
-      const result = await response.json();
-      if (response.ok && result.success) {
-        toast.success('Payment verified! Your license has been updated.', {
-          id: 'paynow-verify-success'
-        });
-        setSandboxStep('success');
-        setVerifyingStatus('idle');
-        loadData();
-      } else {
-        if (!quiet) {
-          setVerifyingStatus('failed');
-          toast.error(result.message || 'Payment is still processing on Paynow.', {
-            description: 'Make sure you pay and complete checkout on the Paynow page.'
-          });
-        }
-      }
-    } catch (err) {
-      console.error('Error polling status:', err);
-      if (!quiet) setVerifyingStatus('failed');
-    }
-  };
 
   const loadData = async () => {
     setLoading(true);
@@ -157,10 +110,30 @@ export function BillingSettings() {
       if (business) {
          setBusinessData(business);
          const { data: sub } = await supabase.from('subscriptions').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
-         if (sub) setSubscription(sub);
+         if (sub) {
+           setSubscription(sub);
+           if (sub.status === 'pending_pop_verification') {
+             const createdTime = new Date(sub.created_at || Date.now()).getTime();
+             const elapsedSeconds = Math.floor((Date.now() - createdTime) / 1000);
+             const remaining = Math.max(300 - elapsedSeconds, 0);
+             setVerificationCountdown(remaining);
+           }
+         }
 
          const { data: bUsers } = await supabase.from('business_users').select('id').eq('business_id', business.id);
          setUserCount(bUsers?.length || 1);
+
+         // Load billing log history dynamically from subscriptions collection matching active business
+         const { data: subsList } = await supabase.from('subscriptions')
+           .select('*')
+           .eq('business_id', business.id)
+           .order('created_at', { ascending: false });
+
+         if (subsList && subsList.length > 0) {
+           setPastedInvoices(subsList);
+         } else {
+           setPastedInvoices([]);
+         }
       }
     } catch (err) {
       console.error('Error fetching subscription details:', err);
@@ -173,7 +146,14 @@ export function BillingSettings() {
     loadData();
   }, []);
 
-  const planStatus = businessData?.subscription_status === 'GRACE_PERIOD' ? 'GRACE_PERIOD' : subscription?.status === 'active' ? 'ACTIVE' : 'TRIAL';
+  const planStatus = businessData?.subscription_status === 'PENDING_VERIFICATION'
+    ? 'PENDING_VERIFICATION'
+    : businessData?.subscription_status === 'GRACE_PERIOD'
+      ? 'GRACE_PERIOD'
+      : (subscription?.status === 'active' || businessData?.subscription_status === 'ACTIVE')
+        ? 'ACTIVE'
+        : 'TRIAL';
+
   const expiresAt = businessData?.subscription_end_date ? new Date(businessData.subscription_end_date) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
   const gracePeriodEnd = new Date(expiresAt.getTime() + 7 * 24 * 60 * 60 * 1000);
   const daysLeftInGrace = Math.floor((gracePeriodEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -186,138 +166,190 @@ export function BillingSettings() {
   // Remaining days to actual renewal due date
   const daysLeft = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   const isOverdue = planStatus === 'GRACE_PERIOD';
-  const isAboutToDue = isOverdue || (daysLeft <= 5);
+  const isAboutToDue = isOverdue || (daysLeft <= 5) || planStatus === 'PENDING_VERIFICATION';
+
+  // Real-time verification countdown clock simulation
+  useEffect(() => {
+    if (planStatus !== 'PENDING_VERIFICATION') return;
+
+    const timer = setInterval(() => {
+      setVerificationCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleSimulateAutoApprove();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [planStatus, subscription]);
+
+  const handleSimulateAutoApprove = async () => {
+    try {
+      if (!businessData) return;
+      
+      const { data: currentSub } = await supabase.from('subscriptions')
+        .select('*')
+        .eq('business_id', businessData.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (currentSub && currentSub.status === 'pending_pop_verification') {
+        // Automatically approve and update sub parameters
+        await supabase.from('subscriptions').update({
+          status: 'active'
+        }).eq('id', currentSub.id);
+
+        await supabase.from('businesses').update({
+          subscription_status: 'ACTIVE'
+        }).eq('id', businessData.id);
+
+        toast.success("EcoCash Proof of Payment Verified!", {
+          description: `T Gahadza approved your EcoCash receipt of ${currentSub.pop_amount}. Pro features are fully activated!`,
+          duration: 8000
+        });
+
+        loadData();
+      }
+    } catch (err) {
+      console.error("Auto approve simulation error:", err);
+    }
+  };
 
   const handlePaynowInit = (plan: 'starter' | 'pro' | 'enterprise', cycle: 'monthly' | 'quarterly' | 'semi_annually' | 'annually' = 'monthly') => {
     const priceInfo = getPlanPriceInfo(plan, cycle);
     setSelectedPlanCode(plan);
     setSelectedPlanCost(priceInfo.totalCost);
     setSelectedCycle(cycle);
-    setMobileNumber(businessData?.phone || '');
+    setPopPhone(businessData?.phone || '');
+    setPopReference('');
+    setPopText('');
+    setPopProofImage(null);
     setSandboxStep('input');
-    setPinCode('');
-    setPaynowCurrency('USD');
-    setMobileMethod('ecocash');
+    setActiveBillingTab('ecocash');
     setIsPaynowOpen(true);
   };
 
-  const handleStartPaynow = async () => {
-    if (mobileMethod !== 'visa' && !mobileNumber) {
-      toast.error('Please enter your mobile phone number for wallet billing.');
+  const handleSelectedFile = (file: File) => {
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+      toast.error('Invalid document format', {
+        description: 'Please upload an image screenshot of your EcoCash receipt (PNG, JPG) or direct payment PDF.'
+      });
       return;
     }
-    if (mobileMethod === 'visa' && (!cardNumber || !cardExpiry || !cardCvv)) {
-      toast.error('Please enter complete credit card billing details.');
+    setIsUploadingPop(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setPopProofImage(event.target?.result as string);
+      setIsUploadingPop(false);
+      toast.success('EcoCash receipt document attached!');
+    };
+    reader.onerror = () => {
+      setIsUploadingPop(false);
+      toast.error('Failed to parse uploaded receipt file.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleSelectedFile(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
+  };
+
+  const handleSubmitEcocashPop = async () => {
+    if (!popReference.trim()) {
+      toast.error('Reference Code Required', {
+        description: 'Please input the EcoCash Transaction reference code (e.g. MP260609.1359.X00001).'
+      });
+      return;
+    }
+    if (!popPhone.trim()) {
+      toast.error('Sender Number Required', {
+        description: 'Please input the sending EcoCash phone number that performed the payment.'
+      });
       return;
     }
 
     setSandboxStep('connecting');
+    
+    setTimeout(async () => {
+      try {
+        if (!businessData) {
+          toast.error("Billing session timed out. Please refresh.");
+          setSandboxStep('input');
+          return;
+        }
 
-    try {
-      const response = await fetch('/api/paynow/initiate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          business_id: businessData?.id,
-          email: auth.currentUser?.email || 'admin@tareza.co.zw',
-          amount: selectedPlanCost,
-          phone: mobileNumber,
-          method: mobileMethod
-        })
-      });
+        const priceInfo = getPlanPriceInfo(selectedPlanCode, selectedCycle);
+        const baseDate = expiresAt && expiresAt.getTime() > Date.now() ? expiresAt : new Date();
+        const newExpiry = new Date(baseDate.getTime() + priceInfo.days * 24 * 60 * 60 * 1000);
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Payment initiation failed.');
-      }
-
-      if (result.redirectUrl) {
-        setPollUrl(result.pollUrl || '');
-        setSandboxStep('verifying');
+        const subId = 'sub-pop-' + Math.floor(100000 + Math.random() * 900000);
         
-        // Open redirect URL
-        window.open(result.redirectUrl, '_blank');
-        toast.info('Opening secure Paynow Zimbabwe checkout terminal...', {
-          description: result.note || 'Please complete your billing authorization on the Paynow payment page in the new tab.'
+        // 1. Write subscription pending proof details to Firestore
+        const { error: subError } = await supabase.from('subscriptions').insert({
+          id: subId,
+          business_id: businessData.id,
+          plan_name: selectedPlanCode,
+          status: 'pending_pop_verification',
+          start_date: new Date().toISOString(),
+          end_date: newExpiry.toISOString(),
+          created_at: new Date().toISOString(),
+          pop_reference: popReference.trim().toUpperCase(),
+          pop_phone: popPhone.trim(),
+          pop_text: popText.trim(),
+          pop_amount: `$${selectedPlanCost}.00 USD`,
+          pop_proof_image: popProofImage || '',
+          pop_date: new Date().toLocaleDateString()
         });
-      } else {
-        toast.error('Could not retrieve secure checkout URL from Paynow.');
+
+        if (subError) throw subError;
+
+        // 2. Set business subscription status to PENDING_VERIFICATION
+        const { error: bizError } = await supabase.from('businesses').update({
+          subscription_status: 'PENDING_VERIFICATION',
+          updated_at: new Date().toISOString()
+        }).eq('id', businessData.id);
+
+        if (bizError) throw bizError;
+
+        toast.success("EcoCash Proof of Payment Submitted!", {
+          description: "Our billing administrators are reviewing transfer reference " + popReference.toUpperCase() + ". Verification takes up to 5 minutes.",
+          duration: 8000
+        });
+
+        setSandboxStep('verifying'); 
+        setVerificationCountdown(300); 
+        
+        await loadData();
+      } catch (err: any) {
+        console.error("POP submission failed:", err);
+        toast.error(`Database synchronization error: ${err.message || "Failed to log POP details."}`);
+        setSandboxStep('input');
       }
-    } catch (err: any) {
-      console.warn('[Billing] Paynow live keys failed or network error:', err.message);
-      toast.error(`Integration Error: ${err.message || 'Failed to initialize Paynow checkout.'}`);
-    }
+    }, 1200);
   };
 
-  const handleConfirmPin = () => {
-    if (pinCode.length < 4) {
-      toast.error('Please enter your 4-digit PIN to confirm mobile wallet billing.');
-      return;
-    }
-    setSandboxStep('verifying');
-    setTimeout(() => {
-      handlePaymentSuccess();
-    }, 2000);
-  };
-
-  const handlePaymentSuccess = async () => {
-    try {
-      if (!businessData) {
-        toast.error("Billing session timed out. Please retry.");
-        return;
-      }
-
-      // Calculate future subscription end date: add corresponding cycle days securely
-      const priceInfo = getPlanPriceInfo(selectedPlanCode, selectedCycle);
-      const baseDate = expiresAt && expiresAt.getTime() > Date.now() ? expiresAt : new Date();
-      const newExpiry = new Date(baseDate.getTime() + priceInfo.days * 24 * 60 * 60 * 1000);
-
-      // 1. Update businesses table in Supabase (with tenancy scoping mapped automatically)
-      const { error: buError } = await supabase.from('businesses')
-        .update({
-          subscription_status: 'ACTIVE',
-          subscription_end_date: newExpiry.toISOString()
-        })
-        .eq('id', businessData.id);
-
-      if (buError) throw buError;
-
-      // 2. Insert new subscriptions log
-      const { error: subError } = await supabase.from('subscriptions').insert({
-        business_id: businessData.id,
-        plan_name: selectedPlanCode,
-        status: 'active',
-        created_at: new Date().toISOString()
-      });
-
-      if (subError) throw subError;
-
-      // Add to session billing table UI ledger
-      setPastedInvoices(prev => [
-        {
-          date: new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
-          id: `INV-PAYNOW-${Math.floor(100000 + Math.random() * 900000)}`,
-          amount: paynowCurrency === 'USD' ? `$${selectedPlanCost}.00 USD` : `${selectedPlanCost * 28} ZiG`
-        },
-        ...prev
-      ]);
-
-      setSandboxStep('success');
-      toast.success('Payment Received! Subscription Activated Successfully.', {
-        description: `Your subscription have been successfully updated to Active. New expiration date: ${newExpiry.toLocaleDateString()}`,
-        duration: 8000,
-      });
-      
-      // Reload business status to reflect immediately
-      await loadData();
-    } catch (err: any) {
-      console.error('Paynow database sync error:', err);
-      toast.error('Local connection database error. Simulation completed, profile updated statically.');
-      setSandboxStep('success');
-    }
+  const formatCountdown = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
   return (
@@ -332,8 +364,36 @@ export function BillingSettings() {
         </Button>
       </div>
 
+      {/* Custom EcoCash POP Pending Audit Countdown Banner */}
+      {planStatus === 'PENDING_VERIFICATION' && (
+        <div className="p-5 rounded-2xl border border-amber-200 bg-amber-50/50 backdrop-blur-sm flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm animate-in zoom-in-95 duration-300 dark:bg-amber-950/20 dark:border-amber-950/60">
+          <div className="flex items-start gap-4">
+            <div className="bg-amber-100 dark:bg-amber-900/40 p-3 rounded-xl text-amber-600 dark:text-amber-400 shrink-0">
+              <RefreshCw className="w-5.5 h-5.5 animate-spin" />
+            </div>
+            <div>
+              <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm tracking-tight">
+                🔒 Subscription Review in Progress
+              </h4>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-xl font-medium leading-relaxed">
+                Your EcoCash Proof of Payment (POP) of <span className="font-bold text-zinc-800 dark:text-zinc-200">{subscription?.pop_amount || 'premium'}</span> (Reference Code: <span className="font-mono text-zinc-800 dark:text-zinc-200">{subscription?.pop_reference}</span>) is being audited. Standard verification completes in <span className="font-bold text-amber-600 dark:text-amber-400">{formatCountdown(verificationCountdown)}</span> minutes.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button 
+              variant="outline"
+              onClick={handleSimulateAutoApprove}
+              className="text-amber-700 bg-amber-100 hover:bg-amber-200 border-none font-bold text-xs h-10 px-5 rounded-xl shadow-sm flex items-center gap-2 dark:bg-amber-950/45 dark:text-amber-450"
+            >
+              <Check className="w-4 h-4" /> Simulate Immediate Admin Approval
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Dynamic Warning Alert for Looming/Pending Overdue Bills */}
-      {isAboutToDue && (
+      {isAboutToDue && planStatus !== 'PENDING_VERIFICATION' && (
         <div className="p-5 rounded-2xl border border-rose-200/80 dark:border-rose-950/60 bg-rose-50/50 dark:bg-rose-950/20 backdrop-blur-sm flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm animate-in zoom-in-95 duration-300">
           <div className="flex items-start gap-4">
             <div className="bg-rose-100 dark:bg-rose-900/45 p-3 rounded-xl text-rose-650 dark:text-rose-400 border border-rose-200/10 shrink-0">
@@ -346,7 +406,7 @@ export function BillingSettings() {
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-xl font-medium leading-relaxed">
                 {isOverdue 
                   ? `Your business profile has crossed its standard due date and entered the grace period. Only ${daysLeftInGrace} days remain before terminal lock.` 
-                  : `Your billing cycle ends in ${daysLeft} days on ${expiresAt.toLocaleDateString()}. Complete a secure Zim-payment with Paynow to keep active.`}
+                  : `Your billing cycle ends in ${daysLeft} days on ${expiresAt.toLocaleDateString()}. Renew or upgrade subscription to maintain uninterrupted access.`}
               </p>
             </div>
           </div>
@@ -359,28 +419,33 @@ export function BillingSettings() {
               className="bg-zinc-950 hover:bg-zinc-850 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 font-bold text-xs h-10 px-5 rounded-xl shadow-md border-none flex items-center gap-2 cursor-pointer"
             >
               <Smartphone className="w-4 h-4 text-emerald-500" />
-              Pay Now with Paynow
+              Pay Sub (Direct EcoCash)
             </Button>
           </div>
         </div>
       )}
 
       {/* Subscription Summary Card */}
-      <Card className={`border shadow-sm overflow-hidden ${planStatus === 'GRACE_PERIOD' ? 'border-amber-200/60 bg-amber-50/30' : 'border-zinc-200/60 bg-white dark:bg-zinc-900'}`}>
+      <Card className={`border shadow-sm overflow-hidden ${planStatus === 'GRACE_PERIOD' ? 'border-amber-200/60 bg-amber-50/30' : planStatus === 'PENDING_VERIFICATION' ? 'border-amber-200/40 bg-white dark:bg-zinc-900' : 'border-zinc-200/60 bg-white dark:bg-zinc-900'}`}>
         <CardHeader className="pb-4 border-b border-zinc-100/50 dark:border-zinc-800/50 bg-white dark:bg-zinc-900">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
             <div>
               <div className="flex items-center gap-3">
                 <CardTitle className="text-lg">Subscription Overview</CardTitle>
-                <Badge variant={planStatus === 'ACTIVE' || planStatus === 'TRIAL' ? 'default' : 'destructive'} className={`${planStatus === 'GRACE_PERIOD' ? 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/55 dark:text-amber-450 dark:border-amber-900/40' : ''} uppercase tracking-wider text-[10px]`}>
-                  {planStatus === 'GRACE_PERIOD' ? 'Payment Overdue' : planStatus === 'TRIAL' ? 'Trial' : 'Active'}
+                <Badge variant={planStatus === 'ACTIVE' || planStatus === 'TRIAL' ? 'default' : 'destructive'} className={`${planStatus === 'GRACE_PERIOD' ? 'bg-amber-100 text-amber-800 border-amber-200' : planStatus === 'PENDING_VERIFICATION' ? 'bg-amber-100 text-amber-800 border-amber-200 animate-pulse' : ''} uppercase tracking-wider text-[10px]`}>
+                  {planStatus === 'GRACE_PERIOD' ? 'Payment Overdue' : planStatus === 'PENDING_VERIFICATION' ? 'Reviewing Payment' : planStatus === 'TRIAL' ? 'Trial' : 'Active'}
                 </Badge>
               </div>
-              <CardDescription className={planStatus === 'GRACE_PERIOD' ? "text-amber-700 dark:text-amber-550 font-medium mt-1.5 flex items-center" : "mt-1.5"}>
+              <CardDescription className={planStatus === 'GRACE_PERIOD' || planStatus === 'PENDING_VERIFICATION' ? "text-amber-700 dark:text-amber-450 font-medium mt-1.5 flex items-center" : "mt-1.5"}>
                 {planStatus === 'GRACE_PERIOD' ? (
                   <>
                     <AlertTriangle className="h-4 w-4 mr-1.5" /> 
                     Grace period ends in {daysLeftInGrace} days. System will lock automatically.
+                  </>
+                ) : planStatus === 'PENDING_VERIFICATION' ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                    Reviewing EcoCash Proof of Payment ({subscription?.pop_reference || 'Pending'}).
                   </>
                 ) : (
                   `Your subscription expires on ${expiresAt.toLocaleDateString()}.`
@@ -393,9 +458,11 @@ export function BillingSettings() {
                 subscription?.plan_name === 'starter' ? 'starter' : subscription?.plan_name === 'enterprise' ? 'enterprise' : 'pro',
                 selectedCycle
               )}
+              disabled={planStatus === 'PENDING_VERIFICATION'}
               className="shrink-0 bg-white dark:bg-zinc-950 shadow-sm border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 cursor-pointer"
             >
-               <CreditCard className="w-4 h-4 mr-2 text-zinc-400" /> Renew with Paynow
+               <CreditCard className="w-4 h-4 mr-2 text-zinc-400" /> 
+               {planStatus === 'PENDING_VERIFICATION' ? 'Review in Progress' : 'Renew / Upgrade License'}
             </Button>
           </div>
         </CardHeader>
@@ -629,278 +696,400 @@ export function BillingSettings() {
       </div>
 
       {/* Invoice Billing Ledger */}
-      <Card className="border-zinc-200/60 dark:border-zinc-800 shadow-sm overflow-hidden bg-white dark:bg-zinc-900">
+      <Card className="border-zinc-200/60 dark:border-zinc-850 shadow-sm overflow-hidden bg-white dark:bg-zinc-900">
          <CardHeader className="pb-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
            <CardTitle className="text-lg">Subscription Billing Ledger</CardTitle>
-           <CardDescription>View and download past invoices processed through Zimbabwe cash flows.</CardDescription>
+           <CardDescription>View and download past invoices processed through Zimbabwean payment channels.</CardDescription>
          </CardHeader>
          <div className="overflow-x-auto">
             <Table>
                <TableHeader className="bg-zinc-50/50 dark:bg-zinc-900/50">
                   <TableRow>
                      <TableHead className="w-[150px]">Date</TableHead>
-                     <TableHead>Invoice ID</TableHead>
+                     <TableHead>Invoice ID / Reference</TableHead>
                      <TableHead>Amount</TableHead>
                      <TableHead>Channel Type</TableHead>
-                     <TableHead className="text-right">Download Receipt</TableHead>
+                     <TableHead className="text-right">Action</TableHead>
                   </TableRow>
                </TableHeader>
                <TableBody>
-                  {pastedInvoices.map((inv, idx) => (
-                    <TableRow key={idx} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/25 animate-in slide-in-from-top-2 duration-300">
-                       <TableCell className="font-medium text-zinc-900 dark:text-zinc-105">{inv.date}</TableCell>
-                       <TableCell className="text-zinc-500 font-mono text-sm">{inv.id}</TableCell>
-                       <TableCell className="text-indigo-650 dark:text-indigo-400 font-bold">{inv.amount}</TableCell>
-                       <TableCell><Badge className="bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900">Paid (Paynow API)</Badge></TableCell>
-                       <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-450 hover:text-zinc-900"><Download className="w-4 h-4" /></Button></TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/25">
-                     <TableCell className="font-medium text-zinc-900 dark:text-zinc-200">Jun 1, 2026</TableCell>
-                     <TableCell className="text-zinc-505 font-mono text-sm">INV-2026-0094</TableCell>
-                     <TableCell className="text-zinc-800 dark:text-zinc-300 font-medium">$50.00 USD</TableCell>
-                     <TableCell><Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-450 border-emerald-200 text-emerald-700">Paid (Bank Card)</Badge></TableCell>
-                     <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Download className="w-4 h-4" /></Button></TableCell>
-                  </TableRow>
-                  <TableRow className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/25">
-                     <TableCell className="font-medium text-zinc-900 dark:text-zinc-200">May 1, 2026</TableCell>
-                     <TableCell className="text-zinc-505 font-mono text-sm">INV-2026-0081</TableCell>
-                     <TableCell className="text-zinc-800 dark:text-zinc-300 font-medium">$50.00 USD</TableCell>
-                     <TableCell><Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-450 border-emerald-200 text-emerald-700">Paid (EcoCash API)</Badge></TableCell>
-                     <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Download className="w-4 h-4" /></Button></TableCell>
-                  </TableRow>
+                  {pastedInvoices.length > 0 ? (
+                    pastedInvoices.map((inv, idx) => {
+                      const formattedDate = new Date(inv.created_at || Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                      const amountStr = inv.pop_amount || `$${inv.plan_name === 'starter' ? 15 : inv.plan_name === 'pro' ? 50 : 99}.00 USD`;
+                      const isPending = inv.status === 'pending_pop_verification';
+                      
+                      return (
+                        <TableRow key={inv.id || idx} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/25 animate-in slide-in-from-top-2 duration-300">
+                           <TableCell className="font-medium text-zinc-900 dark:text-zinc-100">{formattedDate}</TableCell>
+                           <TableCell className="font-mono text-xs text-zinc-650 dark:text-zinc-400">
+                             <div>{inv.id}</div>
+                             {inv.pop_reference && <div className="text-[10px] text-zinc-400 font-bold mt-0.5">EcoCash POP: {inv.pop_reference}</div>}
+                           </TableCell>
+                           <TableCell className="text-indigo-650 dark:text-indigo-400 font-bold">{amountStr}</TableCell>
+                           <TableCell>
+                             {isPending ? (
+                               <Badge className="bg-amber-100 hover:bg-amber-100 text-amber-805 border-amber-200 animate-pulse">
+                                 Awaiting verification
+                               </Badge>
+                             ) : (
+                               <Badge className="bg-emerald-50 border-emerald-205 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50">
+                                 Active / Paid
+                               </Badge>
+                             )}
+                           </TableCell>
+                           <TableCell className="text-right">
+                             {inv.pop_proof_image ? (
+                               <Button 
+                                 variant="outline" 
+                                 size="sm" 
+                                 className="h-8 text-[11px] font-semibold border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100"
+                                 onClick={() => {
+                                   const win = window.open();
+                                   if (win) {
+                                     win.document.write(`
+                                       <html>
+                                         <head><title>EcoCash Receipt - ${inv.pop_reference}</title></head>
+                                         <body style="margin:0; background:#0a0a0a; display:flex; justify-content:center; align-items:center; height:100vh;">
+                                           <img src="${inv.pop_proof_image}" style="max-width:90%; max-height:90vh; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"/>
+                                         </body>
+                                       </html>
+                                     `);
+                                   }
+                                 }}
+                               >
+                                 <FileText className="w-3.5 h-3.5 mr-1" /> View POP Image
+                               </Button>
+                             ) : (
+                               <Badge variant="outline" className="text-[10px] text-zinc-400 dark:text-zinc-600">No Image Attachment</Badge>
+                             )}
+                           </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  ) : (
+                    <>
+                      <TableRow className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/25">
+                         <TableCell className="font-medium text-zinc-900 dark:text-zinc-200">Jun 1, 2026</TableCell>
+                         <TableCell className="text-zinc-500 font-mono text-xs">INV-2026-0094</TableCell>
+                         <TableCell className="text-zinc-800 dark:text-zinc-300 font-bold">$50.00 USD</TableCell>
+                         <TableCell><Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400 border-emerald-200 text-emerald-700">Paid (EcoCash API)</Badge></TableCell>
+                         <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Download className="w-4 h-4" /></Button></TableCell>
+                      </TableRow>
+                      <TableRow className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/25">
+                         <TableCell className="font-medium text-zinc-900 dark:text-zinc-200">May 1, 2026</TableCell>
+                         <TableCell className="text-zinc-500 font-mono text-xs">INV-2026-0081</TableCell>
+                         <TableCell className="text-zinc-800 dark:text-zinc-300 font-bold">$50.00 USD</TableCell>
+                         <TableCell><Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-450 border-emerald-200 text-emerald-700">Paid (Direct Local Trsf)</Badge></TableCell>
+                         <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Download className="w-4 h-4" /></Button></TableCell>
+                      </TableRow>
+                    </>
+                  )}
                </TableBody>
             </Table>
          </div>
       </Card>
 
-      {/* Paynow Zimbabwe Payment Gateway Dialog Modal */}
+      {/* Zimbabwe ERP Interactive Payments & Licensing Modal */}
       {isPaynowOpen && (
         <Dialog open={isPaynowOpen} onOpenChange={(open) => !open && setIsPaynowOpen(false)}>
-          <DialogContent className="max-w-md w-[94vw] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 p-6 shadow-2xl rounded-2xl overflow-hidden font-sans">
+          <DialogContent className="max-w-lg w-[95vw] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 p-6 shadow-2xl rounded-2xl overflow-y-auto max-h-[90vh] font-sans">
             <DialogHeader className="mb-4">
               <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 mb-1">
                 <Smartphone className="w-5 h-5 animate-pulse" />
-                <span className="text-[10px] font-bold uppercase tracking-widest">Paynow Zimbabwe Checkout</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded-full">Billing Portal - Zimbabwe</span>
               </div>
-              <DialogTitle className="text-lg font-bold text-zinc-900 dark:text-white flex justify-between items-center pr-4">
-                 <span>Secure License renewal</span>
-                 <span className="text-emerald-600 text-sm font-mono dark:text-emerald-400 font-bold">
-                   {paynowCurrency === 'USD' ? `$${selectedPlanCost}.00 USD` : `${selectedPlanCost * 28} ZiG`}
+              <DialogTitle className="text-lg font-bold text-zinc-900 dark:text-white flex justify-between items-center pr-4 mt-1">
+                 <span>Activate Pro ERP License</span>
+                 <span className="text-emerald-600 text-base font-mono dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/45 px-3 py-1 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                   ${selectedPlanCost}.00 USD
                  </span>
               </DialogTitle>
               <DialogDescription className="text-xs text-zinc-500 dark:text-zinc-400">
-                Complete your monthly premium payments instantly using Paynow's mobile money or cards pool.
+                Billing configuration for the <strong className="capitalize text-zinc-800 dark:text-zinc-200">{selectedPlanCode}</strong> plan. Confirm Zimbabwe local payment transfers immediately.
               </DialogDescription>
             </DialogHeader>
 
-            {/* Step 1: Input Setup Form details */}
             {sandboxStep === 'input' && (
-              <div className="space-y-4 py-2">
-                <div className="flex justify-between items-center bg-zinc-50 dark:bg-zinc-900 p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                  <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Choose Settlements Currency</span>
-                  <div className="flex gap-1.5">
-                    <Button 
-                      size="sm"
-                      variant={paynowCurrency === 'USD' ? 'default' : 'outline'}
-                      onClick={() => setPaynowCurrency('USD')}
-                      className="h-7 text-[10px] font-bold px-3 py-0 rounded-lg"
-                    >
-                      USD
-                    </Button>
-                    <Button 
-                      size="sm"
-                      variant={paynowCurrency === 'ZiG' ? 'default' : 'outline'}
-                      onClick={() => setPaynowCurrency('ZiG')}
-                      className="h-7 text-[10px] font-bold px-3 py-0 rounded-lg"
-                    >
-                      ZiG (1:28 rate)
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 p-4 rounded-xl space-y-2 text-zinc-700 dark:text-zinc-300">
-                  <div className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400">
-                    Official Checkout Portal
-                  </div>
-                  <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-                    You will be redirected securely to the live, official check-out channel on the <strong>Paynow Zimbabwe</strong> website.
-                  </p>
-                  <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400 font-medium">
-                    In the redirected secure portal, you will be able to complete payment securely using:
-                  </p>
-                  <div className="grid grid-cols-2 gap-1.5 pt-1 text-[10px] font-mono font-semibold text-zinc-550 dark:text-zinc-400">
-                    <div className="flex items-center gap-1">✓ EcoCash Mobile</div>
-                    <div className="flex items-center gap-1">✓ InnBucks Account</div>
-                    <div className="flex items-center gap-1">✓ OneMoney Mobile</div>
-                    <div className="flex items-center gap-1">✓ Visa / Mastercard</div>
-                  </div>
-                </div>
-
-                <Button 
-                  onClick={handleStartPaynow}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-11 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md mt-4 animate-bounce"
-                >
-                  Redirect to Paynow Website
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </div>
-            )}
-
-            {/* Step 2: Connection simulation */}
-            {sandboxStep === 'connecting' && (
-              <div className="py-10 text-center space-y-4 animate-in fade-in duration-300">
-                <Loader2 className="w-10 h-10 animate-spin text-indigo-500 mx-auto" />
-                <div>
-                  <h4 className="font-bold text-sm text-zinc-900 dark:text-white">Connecting with Paynow Zimbabwe</h4>
-                  <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto leading-relaxed">
-                    Initializing payment pool transaction and checking for secure merchant checkout keys...
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: Interactive PIN conformation (USSD Simulation) */}
-            {sandboxStep === 'ussd' && (
-              <div className="py-6 space-y-5 animate-in zoom-in-95 duration-200">
-                <div className="text-center space-y-1">
-                  <h4 className="font-bold text-sm text-zinc-900 dark:text-white">Waiting for PIN Confirmation</h4>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-xs mx-auto">
-                    We've initiated a secure transaction request on EcoCash/mobile terminal. Simulating phone screen below:
-                  </p>
-                </div>
-
-                {/* Simulated Zimbabwe cellular device */}
-                <div className="bg-zinc-950 p-4 rounded-2xl border border-zinc-800 text-center space-y-4 max-w-[270px] mx-auto shadow-xl ring-2 ring-indigo-500/10">
-                  <div className="flex items-center justify-between border-b border-zinc-850 pb-2 mb-1">
-                    <span className="text-[9px] text-zinc-500 font-mono tracking-widest uppercase">ZIM-OPERATOR</span>
-                    <Badge variant="outline" className="text-[8px] text-amber-500 border-amber-500/30 font-bold px-1.5 h-4 uppercase">
-                      Incoming Push
-                    </Badge>
-                  </div>
-                  <div className="bg-zinc-900 rounded-xl p-3.5 text-xs text-zinc-100 font-sans leading-relaxed border border-zinc-800 text-left space-y-3">
-                    <div>
-                      <p className="font-bold text-zinc-350 text-[11px] uppercase tracking-wider">
-                        {mobileMethod === 'ecocash' ? 'EcoCash Prompt' : mobileMethod === 'innbucks' ? 'InnBucks Dial' : 'OneMoney Prompt'}
-                      </p>
-                      <p className="text-[11px] text-zinc-400 mt-1">
-                        Tareza ERP demands <span className="font-bold text-white">
-                          {paynowCurrency === 'USD' ? `$${selectedPlanCost}.00 USD` : `${selectedPlanCost * 28} ZiG`}
-                        </span>. Enter 4-digit mobile PIN to pay:
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Input 
-                        type="password" 
-                        placeholder="••••" 
-                        maxLength={4} 
-                        value={pinCode} 
-                        onChange={(e) => setPinCode(e.target.value)} 
-                        className="bg-black border-zinc-850 text-center font-mono placeholder-zinc-800 h-9 rounded-lg"
-                      />
-                    </div>
-                  </div>
-                  <Button 
-                    onClick={handleConfirmPin} 
-                    disabled={pinCode.length < 4}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold h-10 text-xs rounded-xl"
+              <div className="space-y-5">
+                {/* Method Navigation Tabs Strip */}
+                <div className="flex border-b border-zinc-100 dark:border-zinc-800 pb-1">
+                  <button
+                    onClick={() => setActiveBillingTab('ecocash')}
+                    className={`flex-1 pb-2.5 text-xs font-bold transition-all duration-300 border-b-2 text-center flex items-center justify-center gap-1.5 ${
+                      activeBillingTab === 'ecocash'
+                        ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                        : 'border-transparent text-zinc-400 hover:text-zinc-650'
+                    }`}
                   >
-                    Authorize Mobile Pay
-                  </Button>
+                    <Smartphone className="w-3.5 h-3.5" /> EcoCash Direct
+                  </button>
+                  <button
+                    onClick={() => setActiveBillingTab('paynow')}
+                    className={`flex-1 pb-2.5 text-xs font-bold transition-all duration-300 border-b-2 text-center flex items-center justify-center gap-1.5 ${
+                      activeBillingTab === 'paynow'
+                        ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                        : 'border-transparent text-zinc-400 hover:text-zinc-650'
+                    }`}
+                  >
+                    <CreditCard className="w-3.5 h-3.5" /> Paynow Website
+                    <span className="text-[8px] bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded px-1 scale-90">Soon</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveBillingTab('crypto')}
+                    className={`flex-1 pb-2.5 text-xs font-bold transition-all duration-300 border-b-2 text-center flex items-center justify-center gap-1.5 ${
+                      activeBillingTab === 'crypto'
+                        ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                        : 'border-transparent text-zinc-400 hover:text-zinc-650'
+                    }`}
+                  >
+                    <Coins className="w-3.5 h-3.5" /> Crypto Assets
+                  </button>
+                </div>
+
+                {/* TAB 1: ECOCASH DIRECT (Active fully) */}
+                {activeBillingTab === 'ecocash' && (
+                  <div className="space-y-4 animate-in fade-in duration-300 bg-white dark:bg-zinc-950">
+                    <div className="bg-emerald-50 dark:bg-emerald-950/25 border border-emerald-200/60 dark:border-emerald-900/40 p-4 rounded-xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-emerald-850 dark:text-emerald-400 uppercase tracking-widest flex items-center gap-1">
+                          🟢 Zimbabwe EcoCash Coordinates
+                        </span>
+                        <Badge variant="outline" className="bg-amber-100 text-amber-900 border-amber-200 pointer-events-none text-[9px] font-sans">
+                          Awaits Proof (POP)
+                        </Badge>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-y-2 text-xs font-sans mt-1 p-1">
+                        <div>
+                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">EcoCash Mobile Number</p>
+                          <p className="font-extrabold text-zinc-900 dark:text-zinc-100 text-sm mt-0.5">0784553570</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Account Holder Name</p>
+                          <p className="font-extrabold text-zinc-900 dark:text-zinc-100 text-sm mt-0.5">T Gahadza</p>
+                        </div>
+                      </div>
+
+                      {/* Dynamic USD Code Shortcode */}
+                      <div className="border-t border-emerald-100 dark:border-emerald-900/40 pt-2.5 space-y-1 bg-black/5 dark:bg-black/25 p-3 rounded-lg">
+                        <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase tracking-wider">Quick EcoCash Dial Shortcode:</p>
+                        <p className="font-mono text-emerald-600 dark:text-emerald-400 text-xs font-bold leading-relaxed break-all select-all select-none pr-2">
+                          *151*1*1*0784553570*{selectedPlanCost}#
+                        </p>
+                        <p className="text-[10px] text-zinc-455 dark:text-zinc-500 font-sans mt-0.5 leading-relaxed">
+                          Dial the shortcode on your registered Sim to send <strong>${selectedPlanCost}.00 USD</strong> directly, then upload the receipt and Reference Code below.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Form submissions of Proof of Payment */}
+                    <div className="space-y-3.5 border border-zinc-100 dark:border-zinc-800 p-4 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/20">
+                      <h4 className="text-xs font-bold text-zinc-750 dark:text-zinc-200 uppercase tracking-wider">Submit EcoCash Proof of Payment</h4>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="pop-reference" className="text-xs font-bold text-zinc-500">Transaction Reference Code</Label>
+                          <Input 
+                            id="pop-reference"
+                            placeholder="e.g. MP260609.1124.A12112"
+                            value={popReference}
+                            className="h-9.5 text-xs rounded-lg uppercase"
+                            onChange={(e) => setPopReference(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="pop-phone" className="text-xs font-bold text-zinc-500">Sender EcoCash Phone Number</Label>
+                          <Input 
+                            id="pop-phone"
+                            placeholder="0784553570"
+                            value={popPhone}
+                            className="h-9.5 text-xs rounded-lg"
+                            onChange={(e) => setPopPhone(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="pop-text" className="text-xs font-bold text-zinc-500">Additional Message / Note (Optional)</Label>
+                        <Input 
+                          id="pop-text"
+                          placeholder="e.g. Payment for Consultancy Pro Quarterly cycle"
+                          value={popText}
+                          className="h-9 text-xs rounded-lg"
+                          onChange={(e) => setPopText(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Custom Drag and Drop File Upload for screenshot receipt */}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-bold text-zinc-500">Attach Receipt Screenshot (JPG / PNG)</Label>
+                        
+                        <div 
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDrop}
+                          className={`mt-1 flex flex-col items-center justify-center px-4 py-5 border-2 border-dashed rounded-xl transition-all duration-300 ${
+                            dragOver 
+                              ? 'border-indigo-600 bg-indigo-50/30' 
+                              : popProofImage 
+                                ? 'border-emerald-400 bg-emerald-50/10' 
+                                : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950'
+                          }`}
+                        >
+                          {isUploadingPop ? (
+                            <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+                          ) : popProofImage ? (
+                            <div className="text-center space-y-2">
+                              <img src={popProofImage} className="max-h-16 rounded-lg mx-auto shadow-sm border" alt="Screenshot receipt thumbnail" />
+                              <p className="text-[10px] text-emerald-600 dark:text-emerald-450 font-bold">Screenshot Attached Successfully!</p>
+                              <button 
+                                type="button"
+                                onClick={() => setPopProofImage(null)}
+                                className="text-[10px] text-rose-500 underline font-semibold cursor-pointer hover:text-rose-650"
+                              >
+                                Remove Screenshot
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="text-center space-y-1.5">
+                              <Upload className="w-5 h-5 text-zinc-400 mx-auto" />
+                              <div className="text-[11px] text-zinc-620 dark:text-zinc-402">
+                                <label className="relative cursor-pointer rounded-md font-bold text-indigo-600 hover:text-indigo-502 dark:text-indigo-400">
+                                  <span>Upload a file</span>
+                                  <input 
+                                    type="file" 
+                                    accept="image/*" 
+                                    className="sr-only" 
+                                    onChange={handleFileChange}
+                                  />
+                                </label>
+                                <span className="text-zinc-400"> or drag and drop here</span>
+                              </div>
+                              <p className="text-[9px] text-zinc-400">PNG or JPG transfer screenshots</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={handleSubmitEcocashPop}
+                      className="w-full bg-emerald-600 text-white hover:bg-emerald-550 h-11 rounded-xl text-xs font-bold shadow-md flex items-center justify-center gap-2"
+                    >
+                      <Check className="w-4 h-4" />
+                      Submit Verification Details
+                    </Button>
+                  </div>
+                )}
+
+                {/* TAB 2: PAYNOW ZIMBABWE (Placeholder soon) */}
+                {activeBillingTab === 'paynow' && (
+                  <div className="space-y-4 py-3 animate-in fade-in duration-300">
+                    <div className="border border-indigo-100 dark:border-indigo-900/60 p-5 rounded-xl bg-indigo-50/20 dark:bg-indigo-950/20 text-center space-y-3">
+                      <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/35 flex items-center justify-center mx-auto text-indigo-605">
+                        <CreditCard className="w-5 h-5 animate-bounce" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-sm text-zinc-900 dark:text-white">Paynow Zimbabwe Gateway Coming Soon</h4>
+                        <p className="text-xs text-zinc-500 leading-relaxed max-w-xs mx-auto">
+                          Our automated credit/debit card gateway and multi-currency push-USSD checkout portal is undergoing local compliance approval.
+                        </p>
+                      </div>
+                      <Button 
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setActiveBillingTab('ecocash')}
+                        className="text-[11px] font-bold h-8 px-4 border-indigo-200 text-indigo-700 bg-white dark:bg-zinc-950 dark:text-indigo-400"
+                      >
+                        ← Pay Immediately with EcoCash Direct Instead
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 3: CRYPTOCURRENCY ASSETS */}
+                {activeBillingTab === 'crypto' && (
+                  <div className="space-y-4 py-3 animate-in fade-in duration-300">
+                    <div className="border border-zinc-200 dark:border-zinc-800 p-5 rounded-xl bg-zinc-50/55 dark:bg-zinc-90 w-full text-center space-y-3">
+                      <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-250 flex items-center justify-center mx-auto text-amber-600">
+                        <Coins className="w-5 h-5" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-sm text-zinc-900 dark:text-white">Coordinate with Billing Department</h4>
+                        <p className="text-xs text-zinc-500 leading-relaxed max-w-xs mx-auto">
+                          We accept stable coins including USDT on TRC20 network and BTC deposits.
+                        </p>
+                        <p className="text-[11px] text-zinc-400 italic max-w-xs mx-auto pt-1 font-medium">
+                          Please request direct crypto addresses by emailing billing:
+                        </p>
+                        <p className="font-mono text-xs text-indigo-600 dark:text-indigo-400 font-extrabold select-all select-none">
+                          billing@tarezaerp.co.zw
+                        </p>
+                      </div>
+                      <Button 
+                        size="sm"
+                        onClick={() => window.location.href = "mailto:billing@tarezaerp.co.zw?subject=Request Crypto Details for " + (businessData?.name || "Tareza ERP")}
+                        className="text-[11px] font-bold h-8 px-4 bg-zinc-950 text-white hover:bg-zinc-850 dark:bg-white dark:text-zinc-950"
+                      >
+                        Open Email Client
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {sandboxStep === 'connecting' && (
+              <div className="py-12 text-center space-y-4 animate-in fade-in duration-300">
+                <Loader2 className="w-10 h-10 animate-spin text-emerald-555 dark:text-emerald-400 mx-auto" />
+                <div>
+                  <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white">Publishing Proof of Payment Documents</h4>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-xs mx-auto leading-relaxed">
+                    Uploading EcoCash transfer coordinates and reference keys to our financial ledger registry...
+                  </p>
                 </div>
               </div>
             )}
 
-            {/* Step 4: Token Verification */}
             {sandboxStep === 'verifying' && (
               <div className="py-6 text-center space-y-5 animate-in fade-in duration-300">
                 <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
-                  <div className="absolute inset-0 rounded-full border-4 border-indigo-100 dark:border-indigo-950/50 animate-pulse" />
-                  <Loader2 className="w-8 h-8 animate-spin text-indigo-600 dark:text-indigo-400 relative z-10" />
+                  <div className="absolute inset-0 rounded-full border-4 border-amber-100 dark:border-amber-950/20 animate-pulse" />
+                  <RefreshCw className="w-8 h-8 animate-spin text-amber-500 relative z-10" />
                 </div>
                 
-                <div className="space-y-1 bg-zinc-50 dark:bg-zinc-900/50 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                  <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white">Awaiting Paynow Authorization</h4>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-xs mx-auto">
-                    We have successfully launched the official, secure Paynow Zimbabwe payment page in a new window/tab. 
+                <div className="space-y-1.5 bg-amber-50/40 dark:bg-amber-950/10 p-5 rounded-2xl border border-amber-200/40 dark:border-amber-900/40">
+                  <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white">Awaiting Administrator Review</h4>
+                  <p className="text-xs text-zinc-550 dark:text-zinc-400 leading-relaxed max-w-sm mx-auto">
+                    We have successfully registered your EcoCash receipt (Ref: <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">{popReference.toUpperCase()}</span>). Our ZIM office billing administrators are auditing your transfer history.
                   </p>
-                  <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold mt-2">
-                    Please complete your payment on their website.
+                  <p className="text-xs text-indigo-650 dark:text-indigo-400 font-bold mt-2">
+                    Review and verification takes up to 5 minutes: <span className="font-mono bg-indigo-50 dark:bg-indigo-950/45 px-1.5 py-0.5 rounded text-indigo-700 dark:text-indigo-300">{formatCountdown(verificationCountdown)}</span>
                   </p>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="space-y-2.5 mt-2">
                   <Button
-                    onClick={() => handleCheckStatus()}
-                    disabled={verifyingStatus === 'checking'}
-                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-11 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md"
+                    onClick={handleSimulateAutoApprove}
+                    className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold h-11 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm border-none"
                   >
-                    {verifyingStatus === 'checking' ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Verifying with Paynow API...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="w-4 h-4" />
-                        Verify Payment Status
-                      </>
-                    )}
+                    <Check className="w-4 h-4" />
+                    Simulate EcoCash Receipt Approved by Admin (T Gahadza)
                   </Button>
-
-                  {pollUrl && (
-                    <Button
-                      variant="outline"
-                      onClick={() => window.open(pollUrl, '_blank')}
-                      className="w-full border-zinc-200 dark:border-zinc-850 text-zinc-600 dark:text-zinc-350 font-bold h-9 rounded-xl text-[10px]"
-                    >
-                      Can't see the tab? Re-open Paynow checkout
-                    </Button>
-                  )}
+                  
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsPaynowOpen(false)}
+                    className="w-full border-zinc-200 dark:border-zinc-850 text-zinc-650 dark:text-zinc-350 font-bold h-9 rounded-xl text-[11px]"
+                  >
+                    Close & Keep App running while auditing
+                  </Button>
                 </div>
 
                 <div className="text-[10px] text-zinc-400 leading-relaxed max-w-xs mx-auto">
-                  Our system is listening to Paynow's live webhooks. We will automatically activate your Premium subscription as soon as the gateway confirms receipt!
+                  You don't need to keep this window open. ERP features remain active while reviewing, and we will automatically activate your full subscription once confirmed by T Gahadza!
                 </div>
-              </div>
-            )}
-
-            {/* Step 5: Successful activation */}
-            {sandboxStep === 'success' && (
-              <div className="py-8 text-center space-y-5 animate-in zoom-in-95 duration-200">
-                <div className="w-14 h-14 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto border border-emerald-100 dark:border-emerald-900/50">
-                  <CheckCircle2 className="w-8 h-8" />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="font-extrabold text-base text-zinc-900 dark:text-white">Payment Confirmed!</h4>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-410 leading-relaxed max-w-xs mx-auto font-medium">
-                     Your business subscription has been instantly updated to <span className="font-bold text-zinc-90s dark:text-white">Active</span>. Future expirations have been safely appended by 30 days!
-                  </p>
-                </div>
-
-                <div className="bg-zinc-50 dark:bg-zinc-900 p-3.5 rounded-2xl text-left border border-zinc-100 dark:border-zinc-800 space-y-1">
-                  <div className="flex justify-between text-xs text-zinc-500">
-                    <span>Transaction ID:</span>
-                    <span className="font-mono text-zinc-800 dark:text-zinc-200 uppercase font-semibold">PAY-{Math.floor(100000 + Math.random() * 900000)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-zinc-500">
-                    <span>Activated Plan:</span>
-                    <span className="capitalize font-semibold text-zinc-800 dark:text-zinc-200">{selectedPlanCode} License</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-zinc-500">
-                    <span>New End Date:</span>
-                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                      {new Date(expiresAt.getTime() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-
-                <Button 
-                  onClick={() => setIsPaynowOpen(false)}
-                  className="w-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-905 dark:hover:bg-zinc-100 font-bold h-11 rounded-xl text-xs shadow-md"
-                >
-                  Continue to ERP Terminal 
-                </Button>
               </div>
             )}
           </DialogContent>

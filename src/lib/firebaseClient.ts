@@ -210,7 +210,7 @@ const ALLOWED_KEYS: Record<string, string[]> = {
   stocktakes_advanced: ['id', 'business_id', 'branch_id', 'status', 'type', 'started_at', 'completed_at', 'pos_session_id', 'total_shortage', 'total_overage', 'charge_sales_posted', 'created_at'],
   inventory_transfers: ['id', 'business_id', 'from_branch_id', 'to_branch_id', 'status', 'created_at', 'items', 'notes'],
   stock_movements: ['id', 'business_id', 'product_id', 'branch_id', 'quantity', 'type', 'created_at'],
-  subscriptions: ['id', 'business_id', 'plan_name', 'status', 'start_date', 'end_date', 'created_at'],
+  subscriptions: ['id', 'business_id', 'plan_name', 'status', 'start_date', 'end_date', 'created_at', 'pop_reference', 'pop_phone', 'pop_text', 'pop_date', 'pop_amount', 'pop_proof_image'],
   accounts: ['id', 'business_id', 'code', 'name', 'type', 'balance', 'is_system', 'created_at'],
   journal_entries: ['id', 'business_id', 'branch_id', 'date', 'reference', 'description', 'created_at', 'user_id'],
   journal_lines: ['id', 'business_id', 'journal_entry_id', 'account_id', 'debit', 'credit', 'description'],
