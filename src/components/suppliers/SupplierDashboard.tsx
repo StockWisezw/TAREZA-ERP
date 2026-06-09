@@ -115,10 +115,13 @@ export function SupplierDashboard() {
 
         setPurchaseTrend(trend);
         
-        setTopSuppliers(formattedTop.length > 0 ? formattedTop : [
-          { name: "National Foods Ltd", value: "$0.00", pct: "0% of total" },
-          { name: "Delta Beverages", value: "$0.00", pct: "0% of total" }
-        ]);
+        setTopSuppliers(formattedTop.length > 0 ? formattedTop : (
+          slist.length > 0 
+            ? slist.slice(0, 4).map(s => ({ name: s.name, value: "$0.00", pct: "0% of spend" }))
+            : [
+                { name: "No active suppliers", value: "$0.00", pct: "Add suppliers in Directory" }
+              ]
+        ));
 
       } catch (err) {
         console.error('Error loading supplier dashboard metrics:', err);

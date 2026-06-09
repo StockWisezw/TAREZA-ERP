@@ -61,6 +61,7 @@ export default function POS() {
   const [lastSale, setLastSale] = useState<SaleRecord | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const shouldPrintRef = useRef(false);
+  const cartContainerRef = useRef<HTMLDivElement>(null);
 
   // Web Speech API states and logic for voice item search & control
   const [isListening, setIsListening] = useState(false);
@@ -257,6 +258,16 @@ export default function POS() {
       setNumpadBuffer('');
     }
   }, [cart, selectedCartItemId]);
+
+  // Auto-scroll cart list whenever the cart length changes
+  useEffect(() => {
+    if (cart.length > 0 && cartContainerRef.current) {
+      const el = cartContainerRef.current;
+      setTimeout(() => {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      }, 50);
+    }
+  }, [cart.length]);
 
   const getVatRate = () => localStorage.getItem('tareza_vat_enabled') === 'true' ? 0.15 : 0;
 
@@ -1600,7 +1611,7 @@ export default function POS() {
         </Card>
 
         {/* Dynamic Interactive Shopping Cart items list container */}
-        <Card className="border-zinc-200 shadow-sm flex-1 min-h-[140px] max-h-[290px] flex flex-col pt-1.5 bg-white pb-1.5 rounded-xl overflow-hidden">
+        <Card className="border-zinc-200 shadow-sm flex-1 min-h-[140px] max-h-[350px] flex flex-col pt-1.5 bg-white pb-1.5 rounded-xl overflow-hidden">
           {cart.length === 0 ? (
             <div className="flex-grow flex flex-col items-center justify-center text-zinc-400 p-3">
               <ShoppingCart className="h-7 w-7 text-zinc-300 mb-1.5" />
@@ -1608,7 +1619,7 @@ export default function POS() {
             </div>
           ) : (
             <div className="flex flex-col h-full overflow-hidden">
-              <ScrollArea className="flex-1 px-2.5">
+              <div ref={cartContainerRef} className="flex-1 overflow-y-auto px-2.5 scroll-smooth">
                 <div className="space-y-1">
                   {cart.map((item, index) => {
                     const isSelected = selectedCartItemId === item.id;
@@ -1699,7 +1710,7 @@ export default function POS() {
                           <div className="text-right min-w-[50px]">
                             <span className="font-bold text-xs font-mono text-zinc-900">${(item.subtotal + item.vatAmount).toFixed(2)}</span>
                           </div>
-
+ 
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -1713,7 +1724,7 @@ export default function POS() {
                     );
                   })}
                 </div>
-              </ScrollArea>
+              </div>
               
               <div className="text-[9px] text-zinc-500 text-center select-none font-medium mt-1 leading-none py-1 border-t border-zinc-100 bg-zinc-50/70 rounded-b-xl flex items-center justify-center gap-1.5 shrink-0">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />

@@ -101,7 +101,7 @@ export function PaymentDialog({ open, onOpenChange, onComplete }: PaymentDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[550px]">
+      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Complete Payment</DialogTitle>
         </DialogHeader>
@@ -217,7 +217,7 @@ export function PaymentDialog({ open, onOpenChange, onComplete }: PaymentDialogP
         ) : (
           <div className="py-8 flex flex-col items-center justify-center space-y-4 pt-10 pb-6 rounded-xl bg-emerald-50 border border-emerald-100">
             <CheckCircle2 className="h-20 w-20 text-emerald-500" />
-            <h3 className="text-2xl font-bold text-emerald-600">{remainingBalance <= 0 ? "Refund Paid" : "Fully Paid"}</h3>
+            <h3 className="text-2xl font-bold text-emerald-600">{totals.total < 0 ? "Refund Paid" : "Sale Completed"}</h3>
             {changeAmount > 0 && (
               <div className="mt-4 p-4 bg-white border border-emerald-200 rounded-xl shadow-sm text-center min-w-[200px]">
                 <p className="text-zinc-500 font-medium mb-1">Change Due</p>
