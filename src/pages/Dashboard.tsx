@@ -47,6 +47,49 @@ export default function Dashboard() {
   const [pendingSubscription, setPendingSubscription] = useState<any>(null);
   const [verificationCountdown, setVerificationCountdown] = useState<number>(300);
 
+  const renderFormattedInsight = (text: string) => {
+    if (!text) return null;
+    const sections = text.split('\n\n');
+    return (
+      <div className="space-y-4 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed font-sans mt-1">
+        {sections.map((sec, i) => {
+          const trimmedSec = sec.trim();
+          if (trimmedSec.startsWith('###') || trimmedSec.startsWith('##')) {
+            const headingText = trimmedSec.replace(/^#+\s*/, '').trim();
+            return (
+              <h4 key={i} className="text-sm font-bold text-zinc-900 dark:text-zinc-50 tracking-tight border-b border-zinc-150 dark:border-zinc-800 pb-1 mt-3">
+                {headingText}
+              </h4>
+            );
+          }
+          if (trimmedSec.match(/^[1-3]\.\s/) || trimmedSec.startsWith('*') || trimmedSec.startsWith('-')) {
+            const lines = trimmedSec.split('\n');
+            const titleLine = lines[0].replace(/^[1-3]\.\s+\*\*|^-\s+\*\*|^\*\s+\*\*/, '').replace(/\*\*:/, ':').trim();
+            const restOfLines = lines.slice(1).join(' ').trim();
+            return (
+              <div key={i} className="bg-zinc-50 dark:bg-zinc-900/20 p-4 rounded-xl border border-zinc-150/60 dark:border-zinc-850">
+                <h5 className="font-bold text-zinc-850 dark:text-zinc-100 flex items-center gap-1.5 text-xs">
+                  <span className="w-1.5 h-1.5 bg-violet-500 rounded-full inline-block shrink-0"></span>
+                  {titleLine.replace(/\*\*/g, '')}
+                </h5>
+                {restOfLines && (
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 pl-3 font-medium">
+                    {restOfLines.replace(/\*\*/g, '')}
+                  </p>
+                )}
+              </div>
+            );
+          }
+          return (
+            <p key={i} className="text-[11px] text-zinc-605 dark:text-zinc-350 leading-relaxed font-normal">
+              {trimmedSec.replace(/\*\*/g, '')}
+            </p>
+          );
+        })}
+      </div>
+    );
+  };
+
   const fetchOpenSession = async (busId: string) => {
     if (!busId) return;
     setSessionLoading(true);
@@ -195,33 +238,25 @@ export default function Dashboard() {
       try {
         const bizId = businessContext.business_id;
 
-        // Fetch branches
-        const { data: branchesData } = await supabase
-          .from('branches')
-          .select('id, name')
-          .eq('business_id', bizId);
+        // Fetch all required data in parallel to optimize load time
+        const [branchesRes, salesRes, activeProductsRes, inventoryRes] = await Promise.all([
+          supabase.from('branches').select('id, name').eq('business_id', bizId),
+          supabase.from('sales').select('total, branch_id, created_at').eq('business_id', bizId),
+          supabase.from('products').select('id').eq('business_id', bizId).eq('is_active', true),
+          supabase.from('inventory').select('product_id, quantity, reorder_level, branch_id').eq('business_id', bizId)
+        ]);
 
-        const branches = branchesData || [];
+        if (branchesRes.error) throw new Error(`[Branches Error] ${branchesRes.error.message}`);
+        if (salesRes.error) throw new Error(`[Sales Error] ${salesRes.error.message}`);
+        if (activeProductsRes.error) throw new Error(`[Products Error] ${activeProductsRes.error.message}`);
+        if (inventoryRes.error) throw new Error(`[Inventory Error] ${inventoryRes.error.message}`);
+
+        const branches = branchesRes.data || [];
         setBranchesList(branches);
 
-        // Fetch sales
-        const { data: salesInfo } = await supabase
-          .from('sales')
-          .select('total, branch_id, created_at')
-          .eq('business_id', bizId);
-
-        // Fetch active products
-        const { data: activeProducts } = await supabase
-          .from('products')
-          .select('id')
-          .eq('business_id', bizId)
-          .eq('is_active', true);
-
-        // Fetch inventory
-        const { data: inventoryData } = await supabase
-          .from('inventory')
-          .select('product_id, quantity, reorder_level, branch_id')
-          .eq('business_id', bizId);
+        const salesInfo = salesRes.data || [];
+        const activeProducts = activeProductsRes.data || [];
+        const inventoryData = inventoryRes.data || [];
 
         const branchesCount = branches.length;
         
@@ -328,12 +363,59 @@ export default function Dashboard() {
         }
         setBranchStockData(stockChart);
 
-      } catch (err) {
-        console.error(err);
+      } catch (err: any) {
+        console.error("Dashboard stats telemetry error:", err);
+        const errMsg = err?.message || String(err);
+        if (errMsg.includes('offline') || errMsg.includes('Failed to fetch') || errMsg.includes('network')) {
+          toast.warning("Working Offline: Using cached business indicators.");
+        } else {
+          toast.error("Telemetry Sync Error: Unable to refresh some dashboard indicators.", {
+            description: errMsg.substring(0, 100)
+          });
+        }
       }
     }
     loadStats();
   }, [businessContext]);
+
+  useEffect(() => {
+    if (!businessContext?.business_id) {
+      setAiLoading(false);
+      return;
+    }
+
+    async function fetchAdvisorInsights() {
+      setAiLoading(true);
+      try {
+        const response = await fetch("/api/ai/insights", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            totalSales: stats.totalSales,
+            transactions: stats.transactions,
+            lowStock: stats.lowStock,
+            activeBranches: stats.activeBranches
+          })
+        });
+        const data = await response.json();
+        if (data.insight) {
+          setAiInsight(data.insight);
+        } else {
+          setAiInsight("AI copilot advisor temporarily offline.");
+        }
+      } catch (err) {
+        console.error("AI insight fetch failed:", err);
+        setAiInsight("Unable to connect to predictive advisory server at this time. Please check your internet connection.");
+      } finally {
+        setAiLoading(false);
+      }
+    }
+
+    const timer = setTimeout(fetchAdvisorInsights, 300);
+    return () => clearTimeout(timer);
+  }, [businessContext, stats.totalSales, stats.transactions, stats.lowStock, stats.activeBranches]);
 
   useEffect(() => {
     async function ensureBusinessProfile() {
@@ -908,6 +990,43 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 🔮 Tareza GPT — Predictive AI Advisor */}
+      <Card className="border border-violet-500/20 bg-gradient-to-r from-violet-500/5 via-fuchsia-500/5 to-transparent dark:from-violet-950/15 dark:via-fuchsia-950/10 overflow-hidden relative rounded-2xl shadow-sm my-6">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-violet-500/5 rounded-full blur-3xl -mr-12 -mt-12"></div>
+        <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle className="text-sm font-bold flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+              <div className="p-1.5 bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 rounded-lg shrink-0">
+                <Sparkles className="h-4 w-4 animate-pulse" />
+              </div>
+              <span className="tracking-tight">Tareza GPT Predictive AI Advisor</span>
+            </CardTitle>
+            <CardDescription className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+              Dynamic demand forecasting and stock reordering priority models powered by Gemini 3.5.
+            </CardDescription>
+          </div>
+          <span className="bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase">
+            Active Predictor
+          </span>
+        </CardHeader>
+        <CardContent className="pb-5">
+          {aiLoading ? (
+            <div className="py-8 text-center space-y-2">
+              <RefreshCw className="h-5 w-5 text-violet-500 animate-spin mx-auto" />
+              <p className="text-xs text-zinc-400 dark:text-zinc-500 font-semibold animate-pulse">Running planning algorithms...</p>
+            </div>
+          ) : aiInsight ? (
+            <div className="space-y-4">
+              {renderFormattedInsight(aiInsight)}
+            </div>
+          ) : (
+            <div className="text-xs text-zinc-405 py-3">
+              No predictive insights has been compiled for this period yet. Try refreshing later.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4 border-border/60 shadow-sm">

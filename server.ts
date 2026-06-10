@@ -5,6 +5,7 @@ import { createServer as createViteServer } from "vite";
 import { Paynow } from "paynow";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, updateDoc, collection, addDoc } from "firebase/firestore";
+import { GoogleGenAI } from "@google/genai";
 
 interface RateLimitRecord {
   hits: number;
@@ -217,6 +218,64 @@ async function startServer() {
     } catch (err) {
       console.error("Callback Firestore update error:", err);
       res.status(500).send("Internal processing error");
+    }
+  });
+
+  // 4. Gemini AI Insights and Reorder Suggestions API
+  app.post("/api/ai/insights", async (req, res) => {
+    const { totalSales, transactions, lowStock, activeBranches } = req.body;
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+
+    if (!geminiApiKey) {
+      return res.json({
+        success: false,
+        insight: "### 💡 AI Advisor (Offline)\n\nTo enable automated AI forecasting, demand projection, and smart stock recommendations, please configure your `GEMINI_API_KEY` in the **Settings > Secrets** panel. Once registered, Tareza's predictive modeling will activate instantly."
+      });
+    }
+
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: geminiApiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build'
+          }
+        }
+      });
+
+      const prompt = `You are a professional retail and ERP planning AI advisor representing Tareza ERP. 
+Generate a comprehensive, highly actionable performance report and inventory forecasting advice based on the company's real operational metrics below:
+- Total Sales Earnings: $${totalSales || 0} USD value equivalent
+- Total Transactions Completed: ${transactions || 0} sales transactions
+- Low Stock/Reorder Warnings: ${lowStock || 0} items currently need restocking.
+- Branches Managed: ${activeBranches || 1} retail branches
+
+Keep the advice tailored for high-growth African local retail climates, such as Zimbabwe (dual-currency management e.g. USD and local currency, supply chain lag, cash-management stability, and optimizing inventory velocity). 
+Do NOT mention internal architecture, coding variables, or placeholder text. 
+Structure your response in exactly 3 sections using standard Markdown:
+1. 📈 **Operational Forecast**: Core analytics insights on transaction density and sales performance.
+2. 🚨 **Stock Priority & Reorders**: Immediate suggestions for items with low stock or needing reordering, considering typical supplier shipping lead times.
+3. 💡 **Strategic Growth Recommendation**: A high-impact tip concerning pricing, seasonal trends, or currency management.
+
+Keep the response concise, visually striking, professional, and limited to about 200 words.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+      });
+
+      const insightText = response.text || "No insights could be generated at this time.";
+
+      return res.json({
+        success: true,
+        insight: insightText
+      });
+    } catch (err: any) {
+      console.error("Gemini AI API generation failed:", err);
+      return res.json({
+        success: false,
+        insight: `An error occurred while generating AI insights: ${err.message || String(err)}`
+      });
     }
   });
 

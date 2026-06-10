@@ -20,7 +20,8 @@ import {
   BookOpen,
   MessageSquare,
   Trash2,
-  Check
+  Check,
+  Compass
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from './ui/button';

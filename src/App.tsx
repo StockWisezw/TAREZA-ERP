@@ -27,6 +27,7 @@ const Reports = React.lazy(() => import('./pages/Reports'));
 const CashManagement = React.lazy(() => import('./pages/CashManagement'));
 const Accounting = React.lazy(() => import('./pages/Accounting'));
 const Messenger = React.lazy(() => import('./pages/Messenger'));
+const Roadmap = React.lazy(() => import('./pages/Roadmap'));
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -73,6 +74,7 @@ export default function App() {
                   <Route path="/cash" element={<CashManagement />} />
                   <Route path="/accounting" element={<Accounting />} />
                   <Route path="/messenger" element={<Messenger />} />
+                  <Route path="/roadmap" element={<Roadmap />} />
                 </Route>
               </Routes>
             </React.Suspense>

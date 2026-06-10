@@ -30,7 +30,8 @@ import {
   Layers,
   Send,
   HelpCircle,
-  Inbox
+  Inbox,
+  ArrowRight
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -468,6 +469,34 @@ export default function DeveloperPanel() {
       </nav>
 
       <div className="flex-1 max-w-7xl mx-auto w-full p-6 space-y-6">
+        
+        {/* 🗺️ Interactive Developer Roadmap Banner Card */}
+        <Card className="border border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 via-violet-500/5 to-transparent dark:from-indigo-950/15 dark:via-violet-950/10 overflow-hidden relative rounded-2xl shadow-sm">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl -mr-12 -mt-12"></div>
+          <CardContent className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="space-y-1.5 flex-1">
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-400 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                <Compass className="h-3 w-3" /> Confined Developer Channel
+              </div>
+              <CardTitle className="text-base font-extrabold text-zinc-950 dark:text-zinc-50 tracking-tight flex items-center gap-2">
+                Active Sprints & Product Roadmap Hub
+              </CardTitle>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-2xl font-sans font-medium">
+                Review and prioritize Tareza ERP's development backlog, track live feature deployment metrics, upvote upcoming modules, or log new operator recommendations directly into the development pipeline.
+              </p>
+            </div>
+            <div className="shrink-0 flex items-center gap-2">
+              <Button 
+                onClick={() => navigate('/roadmap')} 
+                className="rounded-xl px-4 h-10 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 shadow-none transition-all cursor-pointer select-none font-sans"
+              >
+                Launch Roadmap Dashboard
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* Subscriptions manager - 7 columns */}
