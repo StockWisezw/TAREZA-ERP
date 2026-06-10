@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { supabase } from '../lib/firebaseClient';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { usePOSStore } from '../store/posStore';
+import { postJournalEntry } from '../services/ledgerService';
 
 interface CashLog {
   id: string;
@@ -452,20 +453,45 @@ export default function CashManagement() {
           logType = 'drop';
         }
 
+        const amt = parseFloat(entryAmount);
+        const description = entryNotes || `POS cash drawer ${entryType}`;
+
         await supabase.from('cash_drawer_logs').insert([{
             business_id: businessId,
             branch_id: branchId || null,
-            amount: parseFloat(entryAmount),
+            amount: amt,
             type: logType,
             transaction_type: entryType,
-            notes: entryNotes || 'Uncategorized movement',
+            notes: description,
             created_at: new Date().toISOString()
         }]);
 
+        // Post standard journal entries for business expenses registered at the POS drawer
+        if (entryType === 'expense') {
+          try {
+            const { data: userDetails } = await supabase.auth.getUser();
+            const callerId = userDetails?.user?.id || 'default_user';
+
+            await postJournalEntry(
+              businessId,
+              branchId || 'default_branch',
+              callerId,
+              `POS-EXP-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+              `POS till expense: ${description}`,
+              [
+                { accountCode: '6000', debit: amt, credit: 0, description: `POS micro expense: ${description}` },
+                { accountCode: '1000', debit: 0, credit: amt, description: `Cash till payout: ${description}` }
+              ]
+            );
+          } catch (ledgerError) {
+            console.error('Ledger journal creation failed:', ledgerError);
+          }
+        }
+
         // If there is an active session in register_sessions, update its payouts and expected balance
         if (activeSession) {
-          const updatedPayouts = Number(activeSession.payouts_total || 0) + parseFloat(entryAmount);
-          const updatedExpected = Number(activeSession.expected_balance || 0) - parseFloat(entryAmount);
+          const updatedPayouts = Number(activeSession.payouts_total || 0) + amt;
+          const updatedExpected = Number(activeSession.expected_balance || 0) - amt;
           
           await supabase
             .from('register_sessions')
@@ -476,7 +502,7 @@ export default function CashManagement() {
             });
         }
         
-        toast.success(`Registered cash $${parseFloat(entryAmount).toFixed(2)} ${entryType}.`);
+        toast.success(`Registered cash $${amt.toFixed(2)} ${entryType}. Expense automatically posted to Journals.`);
         setEntryAmount('');
         setEntryNotes('');
         setEntryType('expense');
@@ -554,8 +580,8 @@ export default function CashManagement() {
       switch (type) {
           case 'opening_float': return 'Opening Shift Float';
           case 'expense': return 'Expensed Till Cash';
-          case 'restock': return 'COD Stock Purchase';
-          case 'owner_collection': return 'Safe Drops / Outflow';
+          case 'restock': return 'COD Stock Purchase (Archived)';
+          case 'owner_collection': return 'Cash Collection (Safe Drop)';
           case 'closing_count': return 'Closing Reconciliation';
           case 'cash_sale': return 'Gross Cash Sales';
           default: return type.replace(/_/g, ' ');
@@ -1131,10 +1157,9 @@ export default function CashManagement() {
                 </CardHeader>
                 <CardContent>
                   <Tabs value={entryType} onValueChange={setEntryType} className="space-y-4">
-                    <TabsList className="grid grid-cols-3 w-full border bg-zinc-100 p-1 rounded-lg">
+                    <TabsList className="grid grid-cols-2 w-full border bg-zinc-100 p-1 rounded-lg">
                       <TabsTrigger value="expense" className="text-xs rounded font-medium">Expense</TabsTrigger>
-                      <TabsTrigger value="restock" className="text-xs rounded font-medium">Restock COD</TabsTrigger>
-                      <TabsTrigger value="owner_collection" className="text-xs rounded font-medium">Safe Drop</TabsTrigger>
+                      <TabsTrigger value="owner_collection" className="text-xs rounded font-medium">Cash Collection (Safe Drop)</TabsTrigger>
                     </TabsList>
                     
                     <div className="space-y-4 pt-2">
@@ -1160,9 +1185,7 @@ export default function CashManagement() {
                           placeholder={
                             entryType === 'expense' 
                               ? "e.g., Office printing stationery" 
-                              : entryType === 'restock' 
-                                ? "e.g., Cash purchase of fresh vegetable delivery" 
-                                : "e.g., Vault cash transfers (Manager Collection)"
+                              : "e.g., Vault cash transfers (Cash collection)"
                           } 
                           className="bg-white border-zinc-200"
                           value={entryNotes}

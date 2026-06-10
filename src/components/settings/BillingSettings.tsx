@@ -254,6 +254,14 @@ export function BillingSettings() {
     reader.readAsDataURL(file);
   };
 
+  // Handle EcoCash Proof of Payment (POP) file selection for subscription activation verification
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleSelectedFile(file);
+    }
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);

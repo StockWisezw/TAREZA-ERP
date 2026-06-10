@@ -21,7 +21,7 @@ const Inventory = React.lazy(() => import('./pages/Inventory'));
 const Customers = React.lazy(() => import('./pages/Customers'));
 const Suppliers = React.lazy(() => import('./pages/Suppliers'));
 const Settings = React.lazy(() => import('./pages/Settings'));
-const ReceiptHistory = React.lazy(() => import('./pages/ReceiptHistory'));
+const ChartOfAccounts = React.lazy(() => import('./pages/ChartOfAccounts'));
 const DeveloperPanel = React.lazy(() => import('./pages/DeveloperPanel'));
 const Reports = React.lazy(() => import('./pages/Reports'));
 const CashManagement = React.lazy(() => import('./pages/CashManagement'));
@@ -64,7 +64,7 @@ export default function App() {
                 <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/pos" element={<POS />} />
-                  <Route path="/receipts" element={<ReceiptHistory />} />
+                  <Route path="/coa" element={<ChartOfAccounts />} />
                   <Route path="/inventory" element={<Inventory />} />
                   <Route path="/customers" element={<Customers />} />
                   <Route path="/suppliers" element={<Suppliers />} />

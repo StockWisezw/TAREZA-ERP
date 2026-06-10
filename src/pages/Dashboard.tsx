@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
-import { Activity, CreditCard, DollarSign, Package, Sparkles, Clock, Lock, Unlock, Play, RefreshCw, AlertTriangle, CheckCircle2, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
+import { Activity, CreditCard, DollarSign, Package, Sparkles, Clock, Lock, Unlock, Play, RefreshCw, AlertTriangle, CheckCircle2, BarChart3, PieChart as PieChartIcon, Check } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, Legend, PieChart, Pie } from 'recharts';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/firebaseClient';
@@ -41,6 +41,11 @@ export default function Dashboard() {
   const [closingNotesInput, setClosingNotesInput] = useState('');
   const [openingFloatInput, setOpeningFloatInput] = useState('0');
   const [businessContext, setBusinessContext] = useState<{ business_id: string; branch_id: string; user_id: string } | null>(null);
+
+  // Subscription verification states
+  const [bizSubscriptionStatus, setBizSubscriptionStatus] = useState<string>('');
+  const [pendingSubscription, setPendingSubscription] = useState<any>(null);
+  const [verificationCountdown, setVerificationCountdown] = useState<number>(300);
 
   const fetchOpenSession = async (busId: string) => {
     if (!busId) return;
@@ -413,9 +418,34 @@ export default function Dashboard() {
         setBusinessContext(context);
         if (context.business_id) {
           fetchOpenSession(context.business_id);
-          const { data: bData } = await supabase.from('businesses').select('name').eq('id', context.business_id).limit(1).maybeSingle();
-          if (bData?.name) {
-            setBusinessName(bData.name);
+          
+          const { data: bData } = await supabase.from('businesses')
+            .select('name, subscription_status')
+            .eq('id', context.business_id)
+            .limit(1)
+            .maybeSingle();
+            
+          if (bData) {
+            setBusinessName(bData.name || '');
+            setBizSubscriptionStatus(bData.subscription_status || '');
+          }
+
+          // Fetch latest subscription to check if it's pending review
+          const { data: latestSub } = await supabase.from('subscriptions')
+            .select('*')
+            .eq('business_id', context.business_id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (latestSub) {
+            setPendingSubscription(latestSub);
+            if (latestSub.status === 'pending_pop_verification') {
+              const createdTime = new Date(latestSub.created_at || Date.now()).getTime();
+              const elapsedSeconds = Math.floor((Date.now() - createdTime) / 1000);
+              const remaining = Math.max(300 - elapsedSeconds, 0);
+              setVerificationCountdown(remaining);
+            }
           }
         }
       } catch (err) {
@@ -427,6 +457,57 @@ export default function Dashboard() {
 
     ensureBusinessProfile();
   }, []);
+
+  // Real-time verification countdown clock simulation on the dashboard
+  useEffect(() => {
+    if (bizSubscriptionStatus !== 'PENDING_VERIFICATION') return;
+
+    const timer = setInterval(() => {
+      setVerificationCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [bizSubscriptionStatus]);
+
+  const handleSimulateAutoApprove = async () => {
+    try {
+      if (!businessContext?.business_id || !pendingSubscription) return;
+      
+      const { error: subErr } = await supabase.from('subscriptions').update({
+        status: 'active'
+      }).eq('id', pendingSubscription.id);
+
+      if (subErr) throw subErr;
+
+      const { error: bizErr } = await supabase.from('businesses').update({
+        subscription_status: 'ACTIVE'
+      }).eq('id', businessContext.business_id);
+
+      if (bizErr) throw bizErr;
+
+      toast.success("EcoCash Proof of Payment Verified!", {
+        description: `Your subscription has been verified. Welcome to Pro ERP!`,
+        duration: 8000
+      });
+
+      setBizSubscriptionStatus('ACTIVE');
+      setPendingSubscription({ ...pendingSubscription, status: 'active' });
+    } catch (err) {
+      console.error("Auto approve simulation error on dashboard:", err);
+    }
+  };
+
+  const formatCountdown = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
 
   if (loading) {
      return <div className="p-8 text-center text-zinc-500">Checking business profile...</div>;
@@ -452,6 +533,59 @@ export default function Dashboard() {
           </p>
         </div>
       </div>
+
+      {/* 🔒 Subscription Verification Alert */}
+      {bizSubscriptionStatus === 'PENDING_VERIFICATION' && (
+        <div className={`p-5 rounded-2xl border flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm animate-in zoom-in-95 duration-300 ${
+          verificationCountdown === 0 
+            ? 'border-rose-200 bg-rose-50/50 dark:bg-rose-950/20 dark:border-rose-950/60' 
+            : 'border-amber-200 bg-amber-50/50 dark:bg-amber-950/40 dark:border-amber-950/60'
+        }`}>
+          <div className="flex items-start gap-4">
+            <div className={`p-3 rounded-xl shrink-0 ${
+              verificationCountdown === 0 
+                ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400' 
+                : 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400'
+            }`}>
+              <RefreshCw className={`w-5 h-5 ${verificationCountdown > 0 ? 'animate-spin' : ''}`} />
+            </div>
+            <div>
+              <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm tracking-tight flex items-center gap-2">
+                <span>🔒 Subscription Review in Progress</span>
+                {verificationCountdown === 0 && (
+                  <span className="bg-rose-100 text-rose-800 text-[10px] uppercase font-bold px-2.5 py-0.5 rounded-full dark:bg-rose-950/55 dark:text-rose-400">
+                    Delayed
+                  </span>
+                )}
+              </h4>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-xl font-medium leading-relaxed">
+                {verificationCountdown === 0 ? (
+                  <>
+                    <span className="font-extrabold text-rose-600 dark:text-rose-400">Verification Lag Detected:</span> Your EcoCash Proof of Payment verification is taking longer than expected. Standard 5-minute audit window has passed (Ref: <span className="font-mono font-bold text-zinc-805 dark:text-zinc-200 bg-black/5 dark:bg-black/20 px-1 rounded">{pendingSubscription?.pop_reference || 'REF-PENDING'}</span>). Please wait or use administrative simulation below to approve immediately in sandbox mode.
+                  </>
+                ) : (
+                  <>
+                    Your EcoCash Proof of Payment (POP) of <span className="font-bold text-zinc-850 dark:text-zinc-200">{pendingSubscription?.pop_amount || 'license fee'}</span> (Reference Code: <span className="font-mono font-bold text-zinc-850 dark:text-zinc-200 bg-black/5 dark:bg-black/20 px-1 rounded">{pendingSubscription?.pop_reference || 'Pending'}</span>) is being audited. Standard verification completes in <span className="font-extrabold text-amber-600 dark:text-amber-400">{formatCountdown(verificationCountdown)}</span> minutes.
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button 
+              variant="outline"
+              onClick={handleSimulateAutoApprove}
+              className={`font-bold text-xs h-10 px-5 rounded-xl shadow-sm flex items-center gap-2 border-none cursor-pointer ${
+                verificationCountdown === 0 
+                  ? 'text-rose-700 bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/45 dark:text-rose-400' 
+                  : 'text-amber-700 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/45 dark:text-amber-450'
+              }`}
+            >
+              <Check className="w-4 h-4" /> Simulate Immediate Admin Approval
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* 🧾 Register Shift Summary Dashboard Widget */}
       {sessionLoading ? (
