@@ -69,7 +69,7 @@ export type SaleRecord = {
   discountTotal: number;
   total: number;
   timestamp: string;
-  status: 'offline_pending' | 'synced' | 'parked' | 'refunded' | 'partially_refunded';
+  status: 'offline_pending' | 'synced' | 'parked' | 'refunded' | 'partially_refunded' | 'QUOTATION';
   receiptNumber: string;
   customerId?: string;
   customerName?: string;

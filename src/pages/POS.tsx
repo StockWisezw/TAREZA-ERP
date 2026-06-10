@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Trash2, CreditCard, Receipt, Barcode, ShoppingCart, Package, ArrowRightLeft, UserPlus, Pause, Play, Tag, HelpCircle, X, ChevronDown, Check, Coins, User, Mic, MicOff } from 'lucide-react';
+import { Search, Trash2, CreditCard, Receipt, Barcode, ShoppingCart, Package, ArrowRightLeft, UserPlus, Pause, Play, Tag, HelpCircle, X, ChevronDown, Check, Coins, User, Mic, MicOff, FileText, FileSpreadsheet, Printer } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -34,7 +34,7 @@ import {
   logAuditEvent
 } from '../services/ledgerService';
 
-import { db, doc, getDoc, updateDoc } from '../lib/firebaseClient';
+import { db, doc, getDoc, updateDoc, supabase } from '../lib/firebaseClient';
 
 export default function POS() {
   const navigate = useNavigate();
@@ -60,6 +60,169 @@ export default function POS() {
   const [showPostSale, setShowPostSale] = useState(false);
   const [lastSale, setLastSale] = useState<SaleRecord | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+
+  // Quotation States
+  const [isQuoteDialogOpen, setIsQuoteDialogOpen] = useState(false);
+  const [quoteNotes, setQuoteNotes] = useState('Estimate valid for 30 days. Prices are subject to change.');
+  const [quoteCustomerName, setQuoteCustomerName] = useState('');
+  const [isQuotesListOpen, setIsQuotesListOpen] = useState(false);
+  const [dbQuotes, setDbQuotes] = useState<any[]>([]);
+  const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
+
+  const fetchQuotations = async () => {
+    setIsLoadingQuotes(true);
+    try {
+      const { data, error } = await supabase
+        .from('sales')
+        .select('*')
+        .eq('status', 'QUOTATION')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setDbQuotes(data || []);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to load quotations list.');
+    } finally {
+      setIsLoadingQuotes(false);
+    }
+  };
+
+  const resumeQuotation = (quote: any) => {
+    clearCart();
+
+    if (quote.items && Array.isArray(quote.items)) {
+      quote.items.forEach((item: any) => {
+        const productObj: Product = item.product || {
+          id: item.product_id || item.productId,
+          name: item.product_name || item.name || 'Unknown Item',
+          sku: item.sku || '',
+          barcode: item.barcode || '',
+          retailPrice: item.price || item.unit_price || item.unitPrice || 0,
+          wholesalePrice: item.price || item.unit_price || item.unitPrice || 0,
+          taxClass: item.tax_class || 'standard'
+        };
+        addToCart(productObj, item.quantity, item.tier || 'retail');
+      });
+
+      if (quote.customer_id || quote.customerId) {
+        setCurrentCustomer({
+          id: quote.customer_id || quote.customerId,
+          name: quote.customerName || 'Customer',
+          creditLimit: 0,
+          balance: 0
+        });
+      }
+
+      toast.success(`Quotation ${quote.receipt_number || quote.receiptNumber} loaded into active cart!`);
+    } else {
+      toast.error('Quotation has no items.');
+    }
+  };
+
+  const deleteQuotation = async (id: string, number: string) => {
+    if (!confirm(`Are you sure you want to permanently delete quotation ${number}?`)) return;
+    try {
+      const { error } = await supabase.from('sales').delete().eq('id', id);
+      if (error) throw error;
+      toast.success(`Quotation ${number} deleted.`);
+      fetchQuotations();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Failed to delete quote: ${err.message}`);
+    }
+  };
+
+  const handleCreateQuotation = async () => {
+    if (cart.length === 0) {
+      toast.error('Cannot create quotation with an empty cart.');
+      return;
+    }
+
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      let businessId = '';
+      let branchId = '';
+      
+      if (userData?.user) {
+        const { data: businessData } = await supabase
+          .from('business_users')
+          .select('business_id, branch_id')
+          .eq('user_id', userData.user.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (businessData) {
+          businessId = businessData.business_id;
+          branchId = businessData.branch_id;
+        }
+      }
+
+      const quoteReceiptNumber = `QUOT-${Math.floor(Date.now() / 1000).toString(16).toUpperCase()}`;
+      
+      const payload: any = {
+        receiptNumber: quoteReceiptNumber,
+        receipt_number: quoteReceiptNumber,
+        total: totals.total,
+        vatTotal: totals.vat,
+        vat_total: totals.vat,
+        discountTotal: totals.discount,
+        discount_total: totals.discount,
+        subtotal: totals.subtotal,
+        payment_method: 'cash',
+        payments: [],
+        items: cart,
+        status: 'QUOTATION',
+        customerName: quoteCustomerName || currentCustomer?.name || 'Valued Customer',
+        created_at: new Date().toISOString()
+      };
+
+      if (businessId) payload.business_id = businessId;
+      if (branchId) payload.branch_id = branchId;
+      if (currentCustomer?.id) {
+        payload.customerId = currentCustomer.id;
+        payload.customer_id = currentCustomer.id;
+      }
+
+      const { data: quoteDoc, error: quoteErr } = await supabase.from('sales').insert([payload]).select().single();
+
+      if (quoteErr) throw quoteErr;
+
+      await logAuditEvent(
+        businessId,
+        userData?.user?.id || 'unknown',
+        'CREATE',
+        'POS',
+        null,
+        { receiptNumber: quoteReceiptNumber, total: totals.total, isQuotation: true }
+      );
+
+      toast.success(`Quotation ${quoteReceiptNumber} saved successfully!`);
+      
+      const printedRecord: SaleRecord = {
+        id: quoteDoc?.id || crypto.randomUUID(),
+        items: cart,
+        payments: [],
+        subtotal: totals.subtotal,
+        vatTotal: totals.vat,
+        discountTotal: totals.discount,
+        total: totals.total,
+        timestamp: new Date().toISOString(),
+        status: 'QUOTATION',
+        receiptNumber: quoteReceiptNumber,
+        customerId: currentCustomer?.id,
+        customerName: quoteCustomerName || currentCustomer?.name || 'Valued Customer',
+      };
+
+      setLastSale(printedRecord);
+      setIsQuoteDialogOpen(false);
+      clearCart();
+      setShowPostSale(true);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Failed to create quotation: ${err.message || 'Unknown error'}`);
+    }
+  };
   const shouldPrintRef = useRef(false);
   const cartContainerRef = useRef<HTMLDivElement>(null);
 
@@ -1349,6 +1512,98 @@ export default function POS() {
               <Button onClick={parkSale} variant="outline" size="sm" className="hidden sm:flex" disabled={cart.length === 0}>
                 <Pause className="w-4 h-4 mr-2" /> Hold Sale
               </Button>
+
+              <Dialog open={isQuotesListOpen} onOpenChange={(open) => {
+                setIsQuotesListOpen(open);
+                if (open) fetchQuotations();
+              }}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="hidden sm:flex border-zinc-200 bg-white">
+                    <FileText className="w-4 h-4 mr-2 text-zinc-650" /> Saved Quotes
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-xl bg-white">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-bold text-zinc-900">Saved Quotations & Estimates</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 pt-2">
+                    {isLoadingQuotes ? (
+                      <div className="text-center py-8 text-zinc-500">Loading quotations...</div>
+                    ) : dbQuotes.length === 0 ? (
+                      <div className="text-center py-8 text-zinc-400 italic">No quotations found in database. Create one by clicking the Quote button in the checkout panel.</div>
+                    ) : (
+                      <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+                        {dbQuotes.map((q: any) => (
+                          <Card key={q.id} className="border-zinc-200 hover:border-zinc-350 shadow-sm transition-all bg-white">
+                            <CardContent className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-bold text-sm text-blue-600">{q.receipt_number || q.receiptNumber}</span>
+                                  <Badge variant="outline" className="text-[10px] bg-blue-50/50 text-blue-700 font-semibold border-blue-200">Quote</Badge>
+                                </div>
+                                <p className="text-xs font-semibold text-zinc-800 mt-1">Customer: <span className="text-zinc-600 font-medium">{q.customerName || q.customer_name || 'Walk-In Customer'}</span></p>
+                                <p className="text-[10px] text-zinc-400 mt-0.5">{new Date(q.created_at || q.timestamp).toLocaleString()}</p>
+                              </div>
+                              <div className="flex items-center gap-3 w-full sm:w-auto sm:justify-end">
+                                <div className="text-right mr-2 hidden sm:block">
+                                  <p className="font-mono font-bold text-sm text-zinc-900">${Number(q.total).toFixed(2)}</p>
+                                  <p className="text-[10px] text-zinc-400">{q.items?.length || 0} items</p>
+                                </div>
+                                <div className="flex gap-1.5 w-full sm:w-auto">
+                                  <Button 
+                                    size="sm" 
+                                    className="h-8 text-xs bg-zinc-900 text-white hover:bg-zinc-800"
+                                    onClick={() => {
+                                      resumeQuotation(q);
+                                      setIsQuotesListOpen(false);
+                                    }}
+                                  >
+                                    Load to Cart
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="h-8 text-xs border-zinc-220 bg-white hover:bg-zinc-50"
+                                    onClick={() => {
+                                      const printedRecord: SaleRecord = {
+                                        id: q.id,
+                                        items: q.items || [],
+                                        payments: [],
+                                        subtotal: Number(q.subtotal || 0),
+                                        vatTotal: Number(q.vat_total || q.vatTotal || 0),
+                                        discountTotal: Number(q.discount_total || q.discountTotal || 0),
+                                        total: Number(q.total || 0),
+                                        timestamp: q.created_at || q.timestamp || new Date().toISOString(),
+                                        status: 'QUOTATION',
+                                        receiptNumber: q.receipt_number || q.receiptNumber,
+                                        customerId: q.customer_id || q.customerId,
+                                        customerName: q.customerName || 'Valued Customer',
+                                      };
+                                      setLastSale(printedRecord);
+                                      setShowPostSale(true);
+                                      setIsQuotesListOpen(false);
+                                    }}
+                                  >
+                                    <Printer className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-8 text-xs text-red-500 hover:text-red-700 p-2"
+                                    onClick={() => deleteQuotation(q.id, q.receipt_number || q.receiptNumber)}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
               {parkedSales.length > 0 && (
                 <Dialog>
                   <DialogTrigger asChild>
@@ -1901,7 +2156,7 @@ export default function POS() {
                 variant="outline" 
                 onClick={clearCart} 
                 disabled={cart.length === 0}
-                className="flex-1 h-9 px-1 text-[10px] font-bold text-rose-600 border-rose-200 bg-white hover:bg-rose-50 rounded-lg transition-colors"
+                className="flex-1 h-9 px-0.5 text-[9px] font-bold text-rose-600 border-rose-200 bg-white hover:bg-rose-50 rounded-lg transition-colors"
                 title="Cancel sale / Clear order items"
               >
                 Clear
@@ -1910,11 +2165,82 @@ export default function POS() {
                 variant="outline" 
                 onClick={parkSale} 
                 disabled={cart.length === 0}
-                className="flex-1 h-9 px-1 text-[10px] font-bold text-zinc-700 border-zinc-200 bg-white hover:bg-zinc-100 rounded-lg transition-all"
+                className="flex-1 h-9 px-0.5 text-[9px] font-bold text-zinc-700 border-zinc-200 bg-white hover:bg-zinc-100 rounded-lg transition-all"
                 title="Put items on hold"
               >
                 Hold
               </Button>
+              <Dialog open={isQuoteDialogOpen} onOpenChange={(open) => {
+                setIsQuoteDialogOpen(open);
+                if (open) {
+                  setQuoteCustomerName(currentCustomer?.name || '');
+                }
+              }}>
+                <DialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    disabled={cart.length === 0}
+                    className="flex-1 h-9 px-0.5 text-[9px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50/50 rounded-lg transition-all shadow-sm"
+                    title="Generate a Proforma Quotation/Estimate"
+                  >
+                    Quote
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md bg-white">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-bold text-zinc-900">Generate Proforma Quotation</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 pt-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-zinc-650">Customer Name / Direct Billing ID</label>
+                      <Input 
+                        value={quoteCustomerName}
+                        onChange={e => setQuoteCustomerName(e.target.value)}
+                        placeholder="e.g. Acme Corporation Ltd or John Doe" 
+                        className="bg-white border-zinc-200 h-10 text-zinc-900"
+                      />
+                      <p className="text-[10px] text-zinc-400">If customer was selected on POS main, their name is pre-loaded automatically.</p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-zinc-650">Quotation Terms & Notes</label>
+                      <Input 
+                        value={quoteNotes}
+                        onChange={e => setQuoteNotes(e.target.value)}
+                        placeholder="e.g. Estimate valid for 30 days." 
+                        className="bg-white border-zinc-200 h-10 text-zinc-900"
+                      />
+                    </div>
+
+                    <div className="bg-zinc-50 border rounded-xl p-3 text-xs text-zinc-700 space-y-2">
+                      <div className="flex justify-between">
+                        <span>Line Items:</span>
+                        <span className="font-semibold text-zinc-800">{cart.length} product(s)</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Total Items Quantity:</span>
+                        <span className="font-semibold text-zinc-800">{cart.reduce((sum, item) => sum + item.quantity, 0)} units</span>
+                      </div>
+                      <Separator className="my-1.5" />
+                      <div className="flex justify-between font-bold text-sm text-zinc-900">
+                        <span>Estimated Total Cost:</span>
+                        <span className="font-mono text-zinc-950">${totals.total.toFixed(2)} USD</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 text-[11px] text-blue-800 flex items-start gap-2">
+                      <span className="mt-0.5 font-bold">ℹ</span>
+                      <span>Quotations do not hold or deduct stock inventory, and do not process cash or ledger payments. They are proforma only.</span>
+                    </div>
+                  </div>
+                  <DialogFooter className="pt-3 border-t gap-2 sm:gap-0">
+                    <Button variant="outline" onClick={() => setIsQuoteDialogOpen(false)}>Cancel</Button>
+                    <Button className="bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={handleCreateQuotation}>
+                      Save & Print Quote
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
 
             <div className="grid grid-cols-2 gap-1">

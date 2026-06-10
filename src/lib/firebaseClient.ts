@@ -25,7 +25,10 @@ import {
   limit as fireLimit, 
   orderBy as fireOrderBy,
   getDocFromServer,
-  documentId
+  documentId,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  memoryLocalCache
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 import firebaseConfigPlaceholder from '../../firebase-applet-config.json';
@@ -62,9 +65,23 @@ if (import.meta.env.VITE_FIREBASE_PROJECT_ID && !isPlaceholderOrEmpty(import.met
 if (
   import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID &&
   import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID !== '(default)' &&
-  !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID)
+  !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID) &&
+  !import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID.includes('://') &&
+  !import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID.includes('.firebaseio.com') &&
+  !import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID.includes('firebaseio')
 ) {
   resolvedConfig.firestoreDatabaseId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID;
+}
+
+// Ensure the final resolved databaseId is not an RTDB URL
+if (
+  resolvedConfig.firestoreDatabaseId && (
+    resolvedConfig.firestoreDatabaseId.includes('://') ||
+    resolvedConfig.firestoreDatabaseId.includes('.firebaseio.com') ||
+    resolvedConfig.firestoreDatabaseId.includes('firebaseio')
+  )
+) {
+  resolvedConfig.firestoreDatabaseId = firebaseConfigPlaceholder.firestoreDatabaseId;
 }
 if (import.meta.env.VITE_FIREBASE_STORAGE_BUCKET && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET)) {
   resolvedConfig.storageBucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET;
@@ -83,9 +100,23 @@ export const firebaseConfig = resolvedConfig;
 
 // Initialize Firebase App
 export const app = initializeApp(resolvedConfig);
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-}, resolvedConfig.firestoreDatabaseId);
+
+function createFirestoreInstance() {
+  // Use memoryLocalCache to guarantee 100% stability against IndexedDb transaction restrictions in sandboxed iframes
+  try {
+    return initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+      localCache: memoryLocalCache()
+    }, resolvedConfig.firestoreDatabaseId);
+  } catch (err: any) {
+    console.warn('[Firebase] Fallback to standard initializeFirestore: ', err);
+    return initializeFirestore(app, {
+      experimentalForceLongPolling: true
+    }, resolvedConfig.firestoreDatabaseId);
+  }
+}
+
+export const db = createFirestoreInstance();
 export const fireAuth = getAuth(app);
 
 // Immediate validation of Firestore connection
@@ -186,6 +217,21 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   };
   console.error('Database Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
+}
+
+export function checkIsOfflineError(err: any): boolean {
+  if (!err) return false;
+  const msg = String(err.message || err).toLowerCase();
+  return (
+    msg.includes('offline') ||
+    msg.includes('reach') ||
+    msg.includes('respond') ||
+    msg.includes('network') ||
+    msg.includes('unavailable') ||
+    msg.includes('failed to get') ||
+    msg.includes('timeout') ||
+    msg.includes('unreachable')
+  );
 }
 
 // Map database column types for integrity
@@ -294,8 +340,7 @@ export async function getDoc(docRef: any): Promise<any> {
     try {
       snap = await fireGetDoc(docRef);
     } catch (err: any) {
-      const isOffline = err?.message?.includes('offline') || String(err).includes('offline');
-      if (isOffline) {
+      if (checkIsOfflineError(err)) {
         try {
           const { getDocFromCache } = await import('firebase/firestore');
           snap = await getDocFromCache(docRef);
@@ -366,8 +411,7 @@ export async function getDocs(queryObj: any) {
     try {
       snap = await fireGetDocs(queryObj);
     } catch (err: any) {
-      const isOffline = err?.message?.includes('offline') || String(err).includes('offline');
-      if (isOffline) {
+      if (checkIsOfflineError(err)) {
         try {
           const { getDocsFromCache } = await import('firebase/firestore');
           snap = await getDocsFromCache(queryObj);
@@ -470,35 +514,36 @@ export async function getActiveBusinessId(): Promise<string | null> {
       break;
     } catch (err: any) {
       const errMsg = String(err).toLowerCase();
-      const isOfflineOrNetwork = errMsg.includes('offline') || 
-                                 errMsg.includes('unavailable') || 
-                                 errMsg.includes('network') || 
-                                 errMsg.includes('failed to get') ||
+      const isOfflineOrNetwork = checkIsOfflineError(err) || 
                                  errMsg.includes('permission-denied') || 
                                  errMsg.includes('insufficient permissions');
 
-      if (isOfflineOrNetwork && retries > 1) {
-        console.warn(`[Firebase] Transient error resolving business ID (retrying in ${delay}ms, auth state: ${fireAuth.currentUser ? 'signed-in' : 'signed-out'}). Error:`, err);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
-        retries--;
+      if (isOfflineOrNetwork) {
+        if (retries > 1) {
+          console.warn(`[Firebase] Transient error resolving business ID (retrying in ${delay}ms, auth state: ${fireAuth.currentUser ? 'signed-in' : 'signed-out'}). Error:`, err);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+          retries--;
+        } else {
+          console.warn('[Firebase] Client is offline or disconnected. Resolving active business ID from local cache or fallback.');
+          try {
+            const { getDocFromCache } = await import('firebase/firestore');
+            const directDocRef = fireDoc(db, 'business_users', user.uid);
+            const cacheSnap = await getDocFromCache(directDocRef);
+            if (cacheSnap && cacheSnap.exists()) {
+              const bizId = cacheSnap.data()?.business_id;
+              if (bizId) {
+                setActiveBusinessId(bizId);
+                return bizId;
+              }
+            }
+          } catch (cacheErr) {
+            // Ignore cache fetch failures
+          }
+          break;
+        }
       } else {
         console.error('[Firebase] Error auto-resolving active business ID:', err);
-        // Try to retrieve from cache before completely giving up
-        try {
-          const directDocRef = fireDoc(db, 'business_users', user.uid);
-          const { getDocFromCache } = await import('firebase/firestore');
-          const cacheSnap = await getDocFromCache(directDocRef);
-          if (cacheSnap && cacheSnap.exists()) {
-            const bizId = cacheSnap.data()?.business_id;
-            if (bizId) {
-              setActiveBusinessId(bizId);
-              return bizId;
-            }
-          }
-        } catch (cacheErr) {
-          // Ignore cache fetch failures
-        }
         break;
       }
     }
@@ -670,8 +715,7 @@ class SupabaseQueryBuilder {
         try {
           snap = await fireGetDoc(docRef);
         } catch (err: any) {
-          const isOffline = err?.message?.includes('offline') || String(err).includes('offline');
-          if (isOffline) {
+          if (checkIsOfflineError(err)) {
             const { getDocFromCache } = await import('firebase/firestore');
             snap = await getDocFromCache(docRef);
           } else {
@@ -779,8 +823,7 @@ class SupabaseQueryBuilder {
     try {
       querySnap = await fireGetDocs(q);
     } catch (err: any) {
-      const isOffline = err?.message?.includes('offline') || String(err).includes('offline');
-      if (isOffline) {
+      if (checkIsOfflineError(err)) {
         try {
           console.warn(`[Firebase] Client offline, loading query on ${this.table} from cache...`);
           const { getDocsFromCache } = await import('firebase/firestore');

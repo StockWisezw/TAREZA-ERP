@@ -922,7 +922,7 @@ export default function CashManagement() {
                   <div className="text-2xl font-black font-mono text-zinc-950 mt-1.5">
                     -${sessionOutflows.toFixed(2)}
                   </div>
-                  <p className="text-[11px] text-zinc-400 mt-1">Expenses, restocks & collections</p>
+                  <p className="text-[11px] text-zinc-400 mt-1">Expenses & cash collections</p>
                 </CardContent>
               </Card>
 

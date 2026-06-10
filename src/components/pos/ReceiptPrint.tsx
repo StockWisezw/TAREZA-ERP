@@ -118,7 +118,7 @@ export const ReceiptPrint = React.forwardRef<HTMLDivElement, ReceiptPrintProps>(
             <h2 className="font-bold text-lg">{displayBusinessName}</h2>
             <p>{displayBranchName}</p>
             <p>VAT No: {taxNumber}</p>
-            <p className="mt-2 text-xs font-bold">Receipt: {receiptNumber}</p>
+            <p className="mt-2 text-xs font-bold">{sale.status === 'QUOTATION' ? 'Quotation' : 'Receipt'}: {receiptNumber}</p>
             <p>{formattedDate}</p>
             {(sale.customerName || sale.customerId || (sale as any).customer_id) && (
               <p className="mt-1 font-semibold">
@@ -185,42 +185,55 @@ export const ReceiptPrint = React.forwardRef<HTMLDivElement, ReceiptPrintProps>(
             </div>
           </div>
 
-          <div className="mb-4 border-b border-dashed border-zinc-400 pb-2 text-xs">
-            <h3 className="font-bold mb-1">Payments</h3>
-            {payments.map((p: any) => {
-              const method = String(p.method || p.payment_method || "CASH");
-              const amount = Number(p.amount || 0);
-              return (
-                <div key={p.id || Math.random().toString()} className="flex justify-between uppercase text-[11px]">
-                  <span>{method.replace('_', ' ')}</span>
-                  <span>${amount.toFixed(2)}</span>
+          {sale.status === 'QUOTATION' ? (
+            <div className="mb-4 border-b border-dashed border-zinc-400 pb-2 text-xs">
+              <h3 className="font-bold mb-1">PROFORMA ESTIMATE</h3>
+              <p className="text-[10px] text-zinc-500 italic">No payments have been collected against this quotation. Estimate is valid for 30 days.</p>
+            </div>
+          ) : (
+            <div className="mb-4 border-b border-dashed border-zinc-400 pb-2 text-xs">
+              <h3 className="font-bold mb-1">Payments</h3>
+              {payments.map((p: any) => {
+                const method = String(p.method || p.payment_method || "CASH");
+                const amount = Number(p.amount || 0);
+                return (
+                  <div key={p.id || Math.random().toString()} className="flex justify-between uppercase text-[11px]">
+                    <span>{method.replace('_', ' ')}</span>
+                    <span>${amount.toFixed(2)}</span>
+                  </div>
+                );
+              })}
+              {payments.length === 0 && (
+                <div className="flex justify-between uppercase text-[11px]">
+                  <span>{String((sale as any).payment_method || "CASH").toUpperCase()}</span>
+                  <span>${total.toFixed(2)}</span>
                 </div>
-              );
-            })}
-            {payments.length === 0 && (
-              <div className="flex justify-between uppercase text-[11px]">
-                <span>{String((sale as any).payment_method || "CASH").toUpperCase()}</span>
-                <span>${total.toFixed(2)}</span>
-              </div>
-            )}
-            {totalPaid > total && (
-              <div className="flex justify-between uppercase text-[11px] font-bold mt-1">
-                <span>CHANGE</span>
-                <span>${(totalPaid - total).toFixed(2)}</span>
-              </div>
-            )}
-          </div>
+              )}
+              {totalPaid > total && (
+                <div className="flex justify-between uppercase text-[11px] font-bold mt-1">
+                  <span>CHANGE</span>
+                  <span>${(totalPaid - total).toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="text-center mt-4 pb-2">
-            <h3 className="font-bold border-b border-zinc-400 border-solid mb-2 pb-1 text-[10px]">SALES TAX INVOICE</h3>
-            <p className="text-[10px] text-zinc-700 mb-2 font-semibold">Receipt #{receiptNumber}</p>
+            <h3 className="font-bold border-b border-zinc-400 border-solid mb-2 pb-1 text-[10px]">
+              {sale.status === 'QUOTATION' ? 'OFFICIAL QUOTATION / PRICE ESTIMATE' : 'SALES TAX INVOICE'}
+            </h3>
+            <p className="text-[10px] text-zinc-700 mb-2 font-semibold">
+              {sale.status === 'QUOTATION' ? 'Quotation' : 'Receipt'} #{receiptNumber}
+            </p>
             
             <div className="flex justify-center mb-2">
-              <QRCodeSVG value={`RECEIPT-${receiptNumber}-${total}`} size={100} level="M" />
+              <QRCodeSVG value={`QUOTATION-${receiptNumber}-${total}`} size={100} level="M" />
             </div>
             
             <div className="mt-2 text-center text-[10px]">
-              {sale.status === 'offline_pending' ? (
+              {sale.status === 'QUOTATION' ? (
+                <p className="text-blue-650 font-bold uppercase tracking-wider text-[9px]">Draft Estimate</p>
+              ) : sale.status === 'offline_pending' ? (
                 <p className="text-amber-600 font-bold uppercase tracking-wider text-[9px]">Offline Queue - Sync Pending</p>
               ) : (
                 <p className="text-emerald-600 font-bold uppercase tracking-wider text-[9px]">Synced Online</p>

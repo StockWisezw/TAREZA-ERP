@@ -479,331 +479,346 @@ export function Procurement() {
 
       {/* CREATE PO DIALOG */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="sm:max-w-lg bg-white">
-          <DialogHeader>
-            <DialogTitle>Create Purchase Order</DialogTitle>
+        <DialogContent className="max-w-[95vw] md:max-w-4xl h-[90vh] flex flex-col justify-between bg-white p-6 md:p-8">
+          <DialogHeader className="border-b pb-4">
+            <DialogTitle className="text-xl font-bold text-zinc-900">Create Purchase Order (Full Screen Workspace)</DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={handleCreatePO} className="space-y-4 pt-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">PO Number</label>
-                <div className="flex gap-2">
-                  <Input 
-                    value={poNumber} 
-                    onChange={e => setPoNumber(e.target.value)} 
-                    placeholder="PO-EXP-3912"
-                    required
-                  />
-                  <Button type="button" variant="outline" size="sm" onClick={generatePONumber}>Auto</Button>
+          <form onSubmit={handleCreatePO} className="flex-1 flex flex-col justify-between overflow-y-auto min-h-0 space-y-6 py-4">
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">PO Number</label>
+                  <div className="flex gap-2">
+                    <Input 
+                      value={poNumber} 
+                      onChange={e => setPoNumber(e.target.value)} 
+                      placeholder="PO-EXP-3912"
+                      className="bg-white border-zinc-200"
+                      required
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={generatePONumber}>Auto Generate</Button>
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">Supplier</label>
-                <Select value={selectedSupplierId} onValueChange={setSelectedSupplierId}>
-                  <SelectTrigger className="bg-white border-zinc-200">
-                    <SelectValue placeholder="Select Supplier">
-                      {suppliers.find(s => s.id === selectedSupplierId)?.name || 'Select Supplier'}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="bg-white">
-                    {suppliers.map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))}
-                    {suppliers.length === 0 && (
-                      <SelectItem value="none" disabled>No Suppliers Available</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">Order Date</label>
-                <Input 
-                  type="date" 
-                  value={orderDate} 
-                  onChange={e => setOrderDate(e.target.value)} 
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">Expected Delivery</label>
-                <Input 
-                  type="date" 
-                  value={expectedDelivery} 
-                  onChange={e => setExpectedDelivery(e.target.value)} 
-                />
-              </div>
-            </div>
-
-            <div className="border border-zinc-200 rounded-lg p-3 space-y-3 bg-zinc-50/50">
-              <span className="text-xs font-bold text-zinc-750 block">Add Products to Order</span>
-              <div className="flex gap-2 items-end">
-                <div className="flex-1 space-y-1">
-                  <span className="text-[10px] text-zinc-500 font-semibold block">Select Product</span>
-                  <Select value={tempProductId} onValueChange={(val) => {
-                    setTempProductId(val);
-                    const prod = products.find(p => p.id === val);
-                    if (prod) {
-                      setTempPrice((prod.cost_price || prod.retail_price || 0).toString());
-                    }
-                  }}>
-                    <SelectTrigger className="bg-white h-9 text-xs">
-                      <SelectValue placeholder="Pick Product">
-                        {(() => {
-                          const matched = products.find(p => p.id === tempProductId);
-                          return matched ? `${matched.name} ($${Number(matched.cost_price || matched.retail_price || 0).toFixed(2)})` : 'Pick Product';
-                        })()}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Supplier</label>
+                  <Select value={selectedSupplierId} onValueChange={setSelectedSupplierId}>
+                    <SelectTrigger className="bg-white border-zinc-200">
+                      <SelectValue placeholder="Select Supplier">
+                        {suppliers.find(s => s.id === selectedSupplierId)?.name || 'Select Supplier'}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent className="bg-white">
-                      {products.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.name} (${Number(p.cost_price || p.retail_price || 0).toFixed(2)})</SelectItem>
+                      {suppliers.map(s => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))}
+                      {suppliers.length === 0 && (
+                        <SelectItem value="none" disabled>No Suppliers Available</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="w-16 space-y-1">
-                  <span className="text-[10px] text-zinc-500 font-semibold block">Qty</span>
-                  <Input type="number" min="1" value={tempQty} onChange={e => setTempQty(e.target.value)} className="h-9 bg-white text-xs" />
-                </div>
-                <div className="w-20 space-y-1">
-                  <span className="text-[10px] text-zinc-500 font-semibold block">Price ($)</span>
-                  <Input type="number" step="0.01" value={tempPrice} onChange={e => setTempPrice(e.target.value)} className="h-9 bg-white text-xs" />
-                </div>
-                <Button type="button" onClick={handleAddItem} size="sm" className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-white h-9 p-2 text-xs">Add</Button>
               </div>
 
-              {poItems.length > 0 && (
-                <div className="border border-zinc-200 rounded-md bg-white overflow-hidden max-h-[160px] overflow-y-auto shadow-sm">
-                  <table className="w-full text-[11px] text-left">
-                    <thead className="bg-zinc-50 text-[10px] text-zinc-500 font-semibold border-b">
-                      <tr>
-                        <th className="p-2">Product</th>
-                        <th className="p-2 text-center">Qty</th>
-                        <th className="p-2 text-right">Price</th>
-                        <th className="p-2 text-right">Total</th>
-                        <th className="p-2 text-center w-8"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100">
-                      {poItems.map((item, index) => (
-                        <tr key={index}>
-                          <td className="p-2 font-medium truncate max-w-[120px]">{item.product_name}</td>
-                          <td className="p-2 text-center">{item.quantity}</td>
-                          <td className="p-2 text-right">${Number(item.price || 0).toFixed(2)}</td>
-                          <td className="p-2 text-right">${(item.quantity * item.price).toFixed(2)}</td>
-                          <td className="p-2 text-center">
-                            <button type="button" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-700">✕</button>
-                          </td>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Order Date</label>
+                  <Input 
+                    type="date" 
+                    value={orderDate} 
+                    onChange={e => setOrderDate(e.target.value)} 
+                    className="bg-white border-zinc-200"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Expected Delivery</label>
+                  <Input 
+                    type="date" 
+                    value={expectedDelivery} 
+                    onChange={e => setExpectedDelivery(e.target.value)} 
+                    className="bg-white border-zinc-200"
+                  />
+                </div>
+              </div>
+
+              <div className="border border-zinc-200 rounded-xl p-4 space-y-4 bg-zinc-50/50">
+                <span className="text-sm font-bold text-zinc-800 block">Add Products to Order</span>
+                <div className="flex flex-col sm:flex-row gap-3 items-end">
+                  <div className="flex-1 space-y-1.5 w-full">
+                    <span className="text-xs text-zinc-500 font-semibold block">Select Product</span>
+                    <Select value={tempProductId} onValueChange={(val) => {
+                      setTempProductId(val);
+                      const prod = products.find(p => p.id === val);
+                      if (prod) {
+                        setTempPrice((prod.cost_price || prod.retail_price || 0).toString());
+                      }
+                    }}>
+                      <SelectTrigger className="bg-white h-10 text-xs">
+                        <SelectValue placeholder="Pick Product">
+                          {(() => {
+                            const matched = products.find(p => p.id === tempProductId);
+                            return matched ? `${matched.name} ($${Number(matched.cost_price || matched.retail_price || 0).toFixed(2)})` : 'Pick Product';
+                          })()}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="bg-white">
+                        {products.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name} (${Number(p.cost_price || p.retail_price || 0).toFixed(2)})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="w-full sm:w-24 space-y-1.5">
+                    <span className="text-xs text-zinc-500 font-semibold block">Qty Ordered</span>
+                    <Input type="number" min="1" value={tempQty} onChange={e => setTempQty(e.target.value)} className="h-10 bg-white text-xs border-zinc-200" />
+                  </div>
+                  <div className="w-full sm:w-28 space-y-1.5">
+                    <span className="text-xs text-zinc-500 font-semibold block">Cost Unit Price ($)</span>
+                    <Input type="number" step="0.01" value={tempPrice} onChange={e => setTempPrice(e.target.value)} className="h-10 bg-white text-xs border-zinc-200" />
+                  </div>
+                  <Button type="button" onClick={handleAddItem} className="bg-zinc-900 hover:bg-zinc-800 text-white h-10 px-5 text-xs font-semibold rounded-lg w-full sm:w-auto">
+                    Add Item
+                  </Button>
+                </div>
+
+                {poItems.length > 0 && (
+                  <div className="border border-zinc-200 rounded-xl bg-white overflow-hidden max-h-[220px] overflow-y-auto shadow-sm">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-zinc-100 text-[11px] text-zinc-650 font-bold border-b">
+                        <tr>
+                          <th className="p-3">Product Name</th>
+                          <th className="p-3 text-center">Quantity</th>
+                          <th className="p-3 text-right">Unit Price</th>
+                          <th className="p-3 text-right">Line Total</th>
+                          <th className="p-3 text-center w-10">Delete</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100">
+                        {poItems.map((item, index) => (
+                          <tr key={index} className="hover:bg-zinc-50/50">
+                            <td className="p-3 font-medium text-zinc-900 truncate max-w-[200px]">{item.product_name}</td>
+                            <td className="p-3 text-center text-zinc-850 font-semibold">{item.quantity}</td>
+                            <td className="p-3 text-right text-zinc-850 font-mono">${Number(item.price || 0).toFixed(2)}</td>
+                            <td className="p-3 text-right text-zinc-900 font-mono font-bold">${(item.quantity * item.price).toFixed(2)}</td>
+                            <td className="p-3 text-center">
+                              <button type="button" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-700 font-bold text-sm">✕</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-zinc-50 p-4 border rounded-xl">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Calculated Grand Total ($)</label>
+                  <Input 
+                    type="number" 
+                    step="0.01" 
+                    value={totalAmount} 
+                    onChange={e => setTotalAmount(e.target.value)} 
+                    placeholder="0.00"
+                    className="bg-white border-zinc-200 font-mono font-bold text-zinc-900 h-10"
+                    required
+                  />
                 </div>
-              )}
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">Calculated Total Price ($)</label>
-                <Input 
-                  type="number" 
-                  step="0.01" 
-                  value={totalAmount} 
-                  onChange={e => setTotalAmount(e.target.value)} 
-                  placeholder="0.00"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">Status</label>
-                <Select value={poStatus} onValueChange={setPoStatus}>
-                  <SelectTrigger className="bg-white border-zinc-200">
-                    <SelectValue>
-                      {poStatus === 'DRAFT' ? 'Draft' : poStatus === 'PENDING_APPROVAL' ? 'Pending Approval' : poStatus === 'APPROVED' ? 'Approved / Sent' : poStatus === 'RECEIVED' ? 'Fully Received' : poStatus}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="bg-white">
-                    <SelectItem value="DRAFT">Draft</SelectItem>
-                    <SelectItem value="PENDING_APPROVAL">Pending Approval</SelectItem>
-                    <SelectItem value="APPROVED">Approved / Sent</SelectItem>
-                    <SelectItem value="RECEIVED">Fully Received</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Status</label>
+                  <Select value={poStatus} onValueChange={setPoStatus}>
+                    <SelectTrigger className="bg-white border-zinc-200 h-10">
+                      <SelectValue>
+                        {poStatus === 'DRAFT' ? 'Draft' : poStatus === 'PENDING_APPROVAL' ? 'Pending Approval' : poStatus === 'APPROVED' ? 'Approved / Sent' : poStatus === 'RECEIVED' ? 'Fully Received' : poStatus}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <SelectItem value="DRAFT">Draft</SelectItem>
+                      <SelectItem value="PENDING_APPROVAL">Pending Approval</SelectItem>
+                      <SelectItem value="APPROVED">Approved / Sent</SelectItem>
+                      <SelectItem value="RECEIVED">Fully Received</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
-            <DialogFooter className="pt-4 border-t gap-2 sm:gap-0">
+            <DialogFooter className="border-t pt-4 mt-6 gap-2 sm:gap-0">
               <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
-              <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-700">Save Purchase Order</Button>
+              <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-700 font-semibold px-6">Save Purchase Order</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
-
       {/* EDIT PO DIALOG */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-lg bg-white">
-          <DialogHeader>
-            <DialogTitle>Update Purchase Order / Adjust Status</DialogTitle>
+        <DialogContent className="max-w-[95vw] md:max-w-4xl h-[90vh] flex flex-col justify-between bg-white p-6 md:p-8">
+          <DialogHeader className="border-b pb-4">
+            <DialogTitle className="text-xl font-bold text-zinc-900">Update Purchase Order (Full Screen Workspace)</DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={handleEditPO} className="space-y-4 pt-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">PO Number</label>
-                <Input 
-                  value={poNumber} 
-                  onChange={e => setPoNumber(e.target.value)} 
-                  required
-                />
-              </div>
+          <form onSubmit={handleEditPO} className="flex-1 flex flex-col justify-between overflow-y-auto min-h-0 space-y-6 py-4">
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">PO Number</label>
+                  <Input 
+                    value={poNumber} 
+                    onChange={e => setPoNumber(e.target.value)} 
+                    className="bg-white border-zinc-200"
+                    required
+                  />
+                </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">Supplier</label>
-                <Select value={selectedSupplierId} onValueChange={setSelectedSupplierId}>
-                  <SelectTrigger className="bg-white border-zinc-200">
-                    <SelectValue placeholder="Select Supplier">
-                      {suppliers.find(s => s.id === selectedSupplierId)?.name || 'Select Supplier'}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="bg-white">
-                    {suppliers.map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">Order Date</label>
-                <Input 
-                  type="date" 
-                  value={orderDate} 
-                  onChange={e => setOrderDate(e.target.value)} 
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-600">Expected Delivery</label>
-                <Input 
-                  type="date" 
-                  value={expectedDelivery} 
-                  onChange={e => setExpectedDelivery(e.target.value)} 
-                />
-              </div>
-            </div>
-
-            <div className="border border-zinc-200 rounded-lg p-3 space-y-3 bg-zinc-50/50">
-              <span className="text-xs font-bold text-zinc-750 block">Add Products to Order</span>
-              <div className="flex gap-2 items-end">
-                <div className="flex-1 space-y-1">
-                  <span className="text-[10px] text-zinc-500 font-semibold block">Select Product</span>
-                  <Select value={tempProductId} onValueChange={(val) => {
-                    setTempProductId(val);
-                    const prod = products.find(p => p.id === val);
-                    if (prod) {
-                      setTempPrice((prod.cost_price || prod.retail_price || 0).toString());
-                    }
-                  }}>
-                    <SelectTrigger className="bg-white h-9 text-xs">
-                      <SelectValue placeholder="Pick Product">
-                        {(() => {
-                          const matched = products.find(p => p.id === tempProductId);
-                          return matched ? `${matched.name} ($${Number(matched.cost_price || matched.retail_price || 0).toFixed(2)})` : 'Pick Product';
-                        })()}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Supplier</label>
+                  <Select value={selectedSupplierId} onValueChange={setSelectedSupplierId}>
+                    <SelectTrigger className="bg-white border-zinc-200">
+                      <SelectValue placeholder="Select Supplier">
+                        {suppliers.find(s => s.id === selectedSupplierId)?.name || 'Select Supplier'}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent className="bg-white">
-                      {products.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.name} (${Number(p.cost_price || p.retail_price || 0).toFixed(2)})</SelectItem>
+                      {suppliers.map(s => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="w-16 space-y-1">
-                  <span className="text-[10px] text-zinc-500 font-semibold block">Qty</span>
-                  <Input type="number" min="1" value={tempQty} onChange={e => setTempQty(e.target.value)} className="h-9 bg-white text-xs" />
-                </div>
-                <div className="w-20 space-y-1">
-                  <span className="text-[10px] text-zinc-500 font-semibold block">Price ($)</span>
-                  <Input type="number" step="0.01" value={tempPrice} onChange={e => setTempPrice(e.target.value)} className="h-9 bg-white text-xs" />
-                </div>
-                <Button type="button" onClick={handleAddItem} size="sm" className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-white h-9 p-2 text-xs">Add</Button>
               </div>
 
-              {poItems.length > 0 && (
-                <div className="border border-zinc-200 rounded-md bg-white overflow-hidden max-h-[160px] overflow-y-auto shadow-sm">
-                  <table className="w-full text-[11px] text-left">
-                    <thead className="bg-zinc-50 text-[10px] text-zinc-500 font-semibold border-b">
-                      <tr>
-                        <th className="p-2">Product</th>
-                        <th className="p-2 text-center">Qty</th>
-                        <th className="p-2 text-right">Price</th>
-                        <th className="p-2 text-right">Total</th>
-                        <th className="p-2 text-center w-8"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100">
-                      {poItems.map((item, index) => (
-                        <tr key={index}>
-                          <td className="p-2 font-medium truncate max-w-[120px]">{item.product_name}</td>
-                          <td className="p-2 text-center">{item.quantity}</td>
-                          <td className="p-2 text-right">${Number(item.price || 0).toFixed(2)}</td>
-                          <td className="p-2 text-right">${(item.quantity * item.price).toFixed(2)}</td>
-                          <td className="p-2 text-center">
-                            <button type="button" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-700">✕</button>
-                          </td>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Order Date</label>
+                  <Input 
+                    type="date" 
+                    value={orderDate} 
+                    onChange={e => setOrderDate(e.target.value)} 
+                    className="bg-white border-zinc-200"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Expected Delivery</label>
+                  <Input 
+                    type="date" 
+                    value={expectedDelivery} 
+                    onChange={e => setExpectedDelivery(e.target.value)} 
+                    className="bg-white border-zinc-200"
+                  />
+                </div>
+              </div>
+
+              <div className="border border-zinc-200 rounded-xl p-4 space-y-4 bg-zinc-50/50">
+                <span className="text-sm font-bold text-zinc-800 block">Add Products to Order</span>
+                <div className="flex flex-col sm:flex-row gap-3 items-end">
+                  <div className="flex-1 space-y-1.5 w-full">
+                    <span className="text-xs text-zinc-500 font-semibold block">Select Product</span>
+                    <Select value={tempProductId} onValueChange={(val) => {
+                      setTempProductId(val);
+                      const prod = products.find(p => p.id === val);
+                      if (prod) {
+                        setTempPrice((prod.cost_price || prod.retail_price || 0).toString());
+                      }
+                    }}>
+                      <SelectTrigger className="bg-white h-10 text-xs">
+                        <SelectValue placeholder="Pick Product">
+                          {(() => {
+                            const matched = products.find(p => p.id === tempProductId);
+                            return matched ? `${matched.name} ($${Number(matched.cost_price || matched.retail_price || 0).toFixed(2)})` : 'Pick Product';
+                          })()}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="bg-white">
+                        {products.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name} (${Number(p.cost_price || p.retail_price || 0).toFixed(2)})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="w-full sm:w-24 space-y-1.5">
+                    <span className="text-xs text-zinc-500 font-semibold block">Qty Ordered</span>
+                    <Input type="number" min="1" value={tempQty} onChange={e => setTempQty(e.target.value)} className="h-10 bg-white text-xs border-zinc-200" />
+                  </div>
+                  <div className="w-full sm:w-28 space-y-1.5">
+                    <span className="text-xs text-zinc-500 font-semibold block">Cost Unit Price ($)</span>
+                    <Input type="number" step="0.01" value={tempPrice} onChange={e => setTempPrice(e.target.value)} className="h-10 bg-white text-xs border-zinc-200" />
+                  </div>
+                  <Button type="button" onClick={handleAddItem} className="bg-zinc-900 hover:bg-zinc-800 text-white h-10 px-5 text-xs font-semibold rounded-lg w-full sm:w-auto">
+                    Add Item
+                  </Button>
+                </div>
+
+                {poItems.length > 0 && (
+                  <div className="border border-zinc-200 rounded-xl bg-white overflow-hidden max-h-[220px] overflow-y-auto shadow-sm">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-zinc-100 text-[11px] text-zinc-650 font-bold border-b">
+                        <tr>
+                          <th className="p-3">Product Name</th>
+                          <th className="p-3 text-center">Quantity</th>
+                          <th className="p-3 text-right">Unit Price</th>
+                          <th className="p-3 text-right">Line Total</th>
+                          <th className="p-3 text-center w-10">Delete</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100">
+                        {poItems.map((item, index) => (
+                          <tr key={index} className="hover:bg-zinc-50/50">
+                            <td className="p-3 font-medium text-zinc-900 truncate max-w-[200px]">{item.product_name}</td>
+                            <td className="p-3 text-center text-zinc-850 font-semibold">{item.quantity}</td>
+                            <td className="p-3 text-right text-zinc-850 font-mono">${Number(item.price || 0).toFixed(2)}</td>
+                            <td className="p-3 text-right text-zinc-900 font-mono font-bold">${(item.quantity * item.price).toFixed(2)}</td>
+                            <td className="p-3 text-center">
+                              <button type="button" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-700 font-bold text-sm">✕</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-zinc-50 p-4 border rounded-xl">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-650">Total Price ($)</label>
+                  <Input 
+                    type="number" 
+                    step="0.01" 
+                    value={totalAmount} 
+                    onChange={e => setTotalAmount(e.target.value)} 
+                    className="bg-white border-zinc-200 font-mono font-bold text-zinc-900 h-10"
+                    required
+                  />
                 </div>
-              )}
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-650">Total Price ($)</label>
-                <Input 
-                  type="number" 
-                  step="0.01" 
-                  value={totalAmount} 
-                  onChange={e => setTotalAmount(e.target.value)} 
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-650">Status</label>
-                <Select value={poStatus} onValueChange={setPoStatus}>
-                  <SelectTrigger className="bg-white border-zinc-203">
-                    <SelectValue>
-                      {poStatus === 'DRAFT' ? 'Draft' : poStatus === 'PENDING_APPROVAL' ? 'Pending Approval' : poStatus === 'APPROVED' ? 'Approved / Sent' : poStatus === 'RECEIVED' ? 'Fully Received' : poStatus}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="bg-white">
-                    <SelectItem value="DRAFT">Draft</SelectItem>
-                    <SelectItem value="PENDING_APPROVAL">Pending Approval</SelectItem>
-                    <SelectItem value="APPROVED">Approved / Sent</SelectItem>
-                    <SelectItem value="RECEIVED">Fully Received</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-650">Status</label>
+                  <Select value={poStatus} onValueChange={setPoStatus}>
+                    <SelectTrigger className="bg-white border-zinc-200 h-10">
+                      <SelectValue>
+                        {poStatus === 'DRAFT' ? 'Draft' : poStatus === 'PENDING_APPROVAL' ? 'Pending Approval' : poStatus === 'APPROVED' ? 'Approved / Sent' : poStatus === 'RECEIVED' ? 'Fully Received' : poStatus}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <SelectItem value="DRAFT">Draft</SelectItem>
+                      <SelectItem value="PENDING_APPROVAL">Pending Approval</SelectItem>
+                      <SelectItem value="APPROVED">Approved / Sent</SelectItem>
+                      <SelectItem value="RECEIVED">Fully Received</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
-            <DialogFooter className="pt-4 border-t gap-2 sm:gap-0">
+            <DialogFooter className="border-t pt-4 mt-6 gap-2 sm:gap-0">
               <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
-              <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-700">Save Changes</Button>
+              <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-700 font-semibold px-6">Save Changes</Button>
             </DialogFooter>
           </form>
         </DialogContent>
