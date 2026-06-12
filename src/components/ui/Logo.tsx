@@ -108,12 +108,12 @@ export function TarezaLogo({
   // Sizing styles for text layout
   // We specify negative margin-left on the text block to pull 'areza' seamlessly right next to the T.
   const textLayout = size === 'sm' 
-    ? { title: 'text-2xl', subtitle: 'text-[9px] tracking-[0.15em] ml-0.5', textMargin: '-ml-1', labelMargin: 'pl-1.5' }
+    ? { title: 'text-2xl', subtitle: 'text-[9px] tracking-[0.16em] ml-0.5', textMargin: 'ml-1.5', labelMargin: 'pl-1.5' }
     : size === 'lg'
-      ? { title: 'text-5xl', subtitle: 'text-sm tracking-[0.2em] ml-1', textMargin: '-ml-4', labelMargin: 'pl-3' }
+      ? { title: 'text-5xl', subtitle: 'text-sm tracking-[0.22em] ml-1', textMargin: 'ml-3', labelMargin: 'pl-3' }
       : size === 'xl'
-        ? { title: 'text-7xl', subtitle: 'text-xl tracking-[0.25em] ml-2', textMargin: '-ml-7', labelMargin: 'pl-5' }
-        : { title: 'text-4xl', subtitle: 'text-[11px] tracking-[0.18em] ml-0.5', textMargin: '-ml-2.5', labelMargin: 'pl-2' }; // md (default)
+        ? { title: 'text-7xl', subtitle: 'text-xl tracking-[0.26em] ml-2', textMargin: 'ml-4', labelMargin: 'pl-5' }
+        : { title: 'text-4xl', subtitle: 'text-[11px] tracking-[0.2em] ml-0.5', textMargin: 'ml-2', labelMargin: 'pl-2' }; // md (default)
 
   return (
     <div className={`inline-flex flex-col ${className}`}>
@@ -124,12 +124,12 @@ export function TarezaLogo({
           {/* Logo Name Display 'areza' with zero gap next to the cropped T symbol */}
           <div className="flex items-baseline leading-none">
             <span className={`${textLayout.title} font-black tracking-tight ${textClass} font-sans`}>
-              areza
+              a<span className="text-cyan-500 dark:text-cyan-400">r</span>eza
             </span>
           </div>
           {showSubtitle && (
             <span className={`${textLayout.subtitle} font-bold uppercase mt-1 leading-none ${subtitleClass}`}>
-              Enterprise Resource Planning
+              TECHNOLOGIES
             </span>
           )}
         </div>

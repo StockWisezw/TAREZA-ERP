@@ -359,8 +359,8 @@ export function MarketingAssets() {
     const priceVal = parseFloat(customPrice) || 3.50;
     
     const wrapperClass = isLightbox 
-      ? "w-full h-full min-h-[460px] max-h-[70vh] flex flex-col items-center justify-center relative select-none animate-fade-in text-white overflow-hidden p-6 bg-slate-950"
-      : "w-full h-full absolute inset-0 flex flex-col items-center justify-center select-none text-white overflow-hidden p-4 bg-slate-950 animate-fade-in";
+      ? "w-full h-full min-h-[460px] max-h-[70vh] flex flex-col items-center justify-center relative select-none animate-fade-in text-zinc-900 border border-zinc-200/80 overflow-hidden p-6 bg-zinc-50 rounded-2xl"
+      : "w-full h-full absolute inset-0 flex flex-col items-center justify-center select-none text-zinc-900 overflow-hidden p-4 bg-zinc-50 border border-zinc-200 animate-fade-in rounded-xl";
 
     const isFacebookAd = asset.id === 'facebook-ad' || asset.id === 'first-advert-retail';
     const isFacebookCover = asset.id === 'facebook-cover';
@@ -370,34 +370,34 @@ export function MarketingAssets() {
 
     if (isFacebookAd) {
       return (
-        <div className={`${wrapperClass} bg-gradient-to-tr from-slate-950 via-zinc-900 to-indigo-950`}>
+        <div className={`${wrapperClass} bg-gradient-to-tr from-slate-50 via-indigo-50/50 to-cyan-50/45`}>
           {/* Top Branding Bar */}
           <div className="absolute top-3 left-4 right-4 flex justify-between items-center z-10">
-            <TarezaLogo size="sm" showSubtitle={false} variant="dark" />
-            <span className="text-[9px] font-bold py-1 px-2 rounded-full flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono tracking-wide uppercase">
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+            <TarezaLogo size="sm" showSubtitle={false} variant="light" />
+            <span className="text-[9px] font-bold py-1 px-2 rounded-full flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-550/20 text-emerald-700 font-mono tracking-wide uppercase">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
               100% Offline Active
             </span>
           </div>
 
           {/* Headline copy */}
           <div className="text-center space-y-1.5 my-3 mt-10 max-w-sm px-2">
-            <h4 className="text-xl md:text-2xl font-black font-sans leading-tight tracking-tight uppercase bg-gradient-to-r from-white via-zinc-200 to-zinc-400 bg-clip-text text-transparent">
+            <h4 className="text-xl md:text-2xl font-black font-sans leading-tight tracking-tight uppercase text-zinc-900">
               No Network? Keep Selling.
             </h4>
-            <p className="text-[10px] md:text-xs text-zinc-400 tracking-wide font-sans">
+            <p className="text-[10px] md:text-xs text-zinc-650 tracking-wide font-sans font-medium">
               Track multi-currency cash flows, prevent cashier leakages & sync instantly.
             </p>
           </div>
 
           {/* POS Terminal Screen Simulation */}
-          <div className="flex-1 w-full max-w-md bg-zinc-900/90 rounded-2xl border border-zinc-850 shadow-2xl p-4 flex flex-col justify-between overflow-hidden relative">
-            <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
+          <div className="flex-1 w-full max-w-md bg-white border border-zinc-250 shadow-lg p-4 flex flex-col justify-between overflow-hidden relative rounded-2xl">
+            <div className="absolute inset-0 bg-gradient-to-b from-zinc-500/5 to-transparent pointer-events-none" />
             
             {/* App Mock Header */}
-            <div className="flex justify-between items-center border-b border-zinc-800 pb-2 mb-2 font-mono text-[9px] text-zinc-500">
-              <span className="font-bold text-zinc-400 flex items-center gap-1">
-                <Store className="w-3 h-3 text-indigo-400" />
+            <div className="flex justify-between items-center border-b border-zinc-150 pb-2 mb-2 font-mono text-[9px] text-zinc-500">
+              <span className="font-bold text-zinc-700 flex items-center gap-1">
+                <Store className="w-3 h-3 text-indigo-600" />
                 {customBusiness || "Primary Outlet"}
               </span>
               <span>Register 01 • Cashier: {customCashier}</span>
@@ -407,61 +407,61 @@ export function MarketingAssets() {
             <div className="flex-1 space-y-2 py-1 max-h-[120px] overflow-y-auto pr-1">
               <div className="flex justify-between items-center text-xs font-sans">
                 <div className="flex items-center gap-1.5">
-                  <span className="p-1 bg-indigo-500/10 text-indigo-400 rounded-md font-mono font-bold text-[9px]">x6</span>
-                  <span className="font-medium text-zinc-200">{customProduct}</span>
+                  <span className="p-1 bg-indigo-500/10 text-indigo-700 rounded-md font-mono font-bold text-[9px]">x6</span>
+                  <span className="font-bold text-zinc-800">{customProduct}</span>
                 </div>
-                <span className="font-mono text-zinc-300 font-bold">${(priceVal * 6).toFixed(2)} USD</span>
+                <span className="font-mono text-zinc-900 font-black">${(priceVal * 6).toFixed(2)} USD</span>
               </div>
 
-              <div className="flex justify-between items-center text-xs font-sans border-t border-zinc-850 pt-2">
+              <div className="flex justify-between items-center text-xs font-sans border-t border-zinc-150 pt-2">
                 <div className="flex items-center gap-1.5">
-                  <span className="p-1 bg-indigo-500/10 text-indigo-400 rounded-md font-mono font-bold text-[9px]">x2</span>
-                  <span className="font-medium text-zinc-200">Red Seal Roller Meal 10kg</span>
+                  <span className="p-1 bg-indigo-500/10 text-indigo-700 rounded-md font-mono font-bold text-[9px]">x2</span>
+                  <span className="font-bold text-zinc-800">Red Seal Roller Meal 10kg</span>
                 </div>
-                <span className="font-mono text-zinc-300 font-bold">$13.00 USD</span>
+                <span className="font-mono text-zinc-900 font-bold">$13.00 USD</span>
               </div>
 
-              <div className="flex justify-between items-center text-xs font-sans border-t border-zinc-850 pt-2 border-dashed">
+              <div className="flex justify-between items-center text-xs font-sans border-t border-zinc-150 pt-2 border-dashed">
                 <div className="flex items-center gap-1.5">
-                  <span className="p-1 bg-emerald-500/10 text-emerald-400 rounded-md font-mono font-bold text-[9px]">biller</span>
-                  <span className="font-medium text-zinc-250">InnBucks Business Payment</span>
+                  <span className="p-1 bg-emerald-500/10 text-emerald-700 rounded-md font-mono font-bold text-[9px]">biller</span>
+                  <span className="font-bold text-zinc-700">InnBucks Business Payment</span>
                 </div>
-                <span className="font-mono text-emerald-400 font-bold">-$1.50 Promo Fee</span>
+                <span className="font-mono text-emerald-600 font-bold">-$1.50 Promo Fee</span>
               </div>
             </div>
 
             {/* Inbuilt Receipts Checker Summary */}
-            <div className="mt-3 border-t-2 border-dashed border-zinc-800 pt-3 flex flex-col gap-2">
-              <div className="flex justify-between items-end bg-black/45 p-3 rounded-xl border border-zinc-850">
+            <div className="mt-3 border-t-2 border-dashed border-zinc-200 pt-3 flex flex-col gap-2">
+              <div className="flex justify-between items-end bg-zinc-50 border border-zinc-150 p-3 rounded-xl">
                 <div>
-                  <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest font-mono">Invoice Due Total</span>
-                  <p className="text-xl font-mono font-black text-emerald-400 leading-none mt-1">
-                    ${((priceVal * 6) + 13.00 - 1.50).toFixed(2)} <span className="text-xs font-bold text-zinc-400 font-sans">USD</span>
+                  <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest font-mono">Invoice Due Total</span>
+                  <p className="text-xl font-mono font-black text-emerald-700 leading-none mt-1">
+                    ${((priceVal * 6) + 13.00 - 1.50).toFixed(2)} <span className="text-xs font-bold text-zinc-500 font-sans">USD</span>
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest font-mono">Convert Rate @ {customRate}</span>
-                  <p className="text-sm font-mono font-bold text-cyan-400 mt-1">
-                    {(((priceVal * 6) + 13.00 - 1.50) * rateVal).toFixed(2)} <span className="text-[9px] text-zinc-400 uppercase">ZiG</span>
+                  <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest font-mono">Convert Rate @ {customRate}</span>
+                  <p className="text-sm font-mono font-bold text-indigo-600 mt-1">
+                    {(((priceVal * 6) + 13.00 - 1.50) * rateVal).toFixed(2)} <span className="text-[9px] text-zinc-500 uppercase">ZiG</span>
                   </p>
                 </div>
               </div>
 
-              <div className="flex justify-between items-center text-[9px] font-mono text-zinc-400 mt-1">
-                <span className="flex items-center gap-1 text-emerald-450 font-bold">
+              <div className="flex justify-between items-center text-[9px] font-mono text-zinc-500 mt-1">
+                <span className="flex items-center gap-1 text-emerald-600 font-bold">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
                   No Cash shortages
                 </span>
-                <span className="text-zinc-500">Receipt: TZ-6051 • Auto-Logged</span>
+                <span className="text-zinc-400">Receipt: TZ-6051 • Auto-Logged</span>
               </div>
             </div>
           </div>
 
           <div className="absolute bottom-3 left-4 right-4 flex justify-between items-center pointer-events-none font-sans">
-            <span className="text-[9px] text-zinc-400 tracking-wide font-medium">Zimbabwe&apos;s Premium POS Ecosystem</span>
-            <span className="text-[10px] uppercase font-bold text-indigo-400 tracking-widest flex items-center gap-1">
+            <span className="text-[9px] text-zinc-505 tracking-wide font-medium">Zimbabwe&apos;s Premium POS Ecosystem</span>
+            <span className="text-[10px] uppercase font-bold text-indigo-600 tracking-widest flex items-center gap-1">
               tareza-pos.co.zw
-              <ArrowRight className="w-3 h-3 text-indigo-455" />
+              <ArrowRight className="w-3 h-3 text-indigo-600" />
             </span>
           </div>
         </div>
@@ -470,71 +470,71 @@ export function MarketingAssets() {
 
     if (isFacebookCover) {
       return (
-        <div className={`${wrapperClass} bg-gradient-to-r from-zinc-950 via-slate-900 to-zinc-950 p-6 flex flex-row items-center gap-6`}>
+        <div className={`${wrapperClass} bg-gradient-to-r from-zinc-50 via-white to-indigo-50/30 p-6 flex flex-row items-center gap-6`}>
           <div className="w-1/2 flex flex-col justify-center space-y-4 text-left z-10 pr-4">
-            <TarezaLogo size="sm" showSubtitle={true} variant="dark" />
+            <TarezaLogo size="sm" showSubtitle={true} variant="light" />
             <div className="space-y-1.5">
-              <h4 className="text-xl md:text-2xl font-black tracking-tight leading-none text-white uppercase font-sans">
+              <h4 className="text-xl md:text-2xl font-black tracking-tight leading-none text-zinc-900 uppercase font-sans">
                 Unified Retail OS & Metric Suite
               </h4>
-              <p className="text-[10px] md:text-xs text-zinc-400 font-medium leading-tight">
+              <p className="text-[10px] md:text-xs text-zinc-600 font-semibold leading-tight animate-fade-in">
                 Complete corporate oversight from cashier shifts to central warehouse depots.
               </p>
             </div>
             <div className="space-y-1">
-              <div className="flex items-center gap-2 text-[9px] text-zinc-300 font-sans font-semibold">
-                <Check className="w-3 h-3 text-indigo-400 shrink-0" />
+              <div className="flex items-center gap-2 text-[9px] text-zinc-700 font-sans font-bold">
+                <Check className="w-3 h-3 text-indigo-650 shrink-0" />
                 <span>Zero Sales Shortages or Stock Leakage</span>
               </div>
-              <div className="flex items-center gap-2 text-[9px] text-zinc-300 font-sans font-semibold">
-                <Check className="w-3 h-3 text-indigo-400 shrink-0" />
+              <div className="flex items-center gap-2 text-[9px] text-zinc-700 font-sans font-bold">
+                <Check className="w-3 h-3 text-indigo-650 shrink-0" />
                 <span>Multi-Warehouse Transfers & Audits</span>
               </div>
             </div>
           </div>
 
           <div className="w-1/2 grid grid-cols-2 gap-3 z-10">
-            <div className="bg-zinc-900/90 border border-zinc-800/80 p-3 rounded-xl space-y-2 col-span-2 shadow-lg">
-              <span className="text-[8px] font-mono font-bold text-zinc-400 uppercase tracking-widest flex items-center justify-between">
+            <div className="bg-white border border-zinc-200 p-3 rounded-xl space-y-2 col-span-2 shadow-sm">
+              <span className="text-[8px] font-mono font-bold text-zinc-500 uppercase tracking-widest flex items-center justify-between">
                 <span>Branch Profit Comparison</span>
-                <span className="text-emerald-400 font-bold flex items-center gap-0.5">
+                <span className="text-emerald-650 font-bold flex items-center gap-0.5">
                   <TrendingUp className="w-2.5 h-2.5" />
                   +18.4%
                 </span>
               </span>
               <div className="space-y-1">
                 <div className="flex justify-between items-center text-[10px]">
-                  <span className="text-zinc-400 font-sans font-medium truncate max-w-[120px]">{customBusiness}</span>
-                  <span className="font-mono font-bold text-zinc-200">$4,320.00 USD</span>
+                  <span className="text-zinc-600 font-sans font-medium truncate max-w-[124px]">{customBusiness}</span>
+                  <span className="font-mono font-bold text-zinc-850">$4,320.00 USD</span>
                 </div>
-                <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
-                  <div className="bg-indigo-500 h-full rounded-full" style={{ width: '85%' }} />
+                <div className="w-full bg-zinc-100 h-1 rounded-full overflow-hidden">
+                  <div className="bg-indigo-600 h-full rounded-full" style={{ width: '85%' }} />
                 </div>
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between items-center text-[10px]">
-                  <span className="text-zinc-400 font-sans font-medium">Bulawayo Store Depot</span>
-                  <span className="font-mono font-bold text-zinc-200">$2,410.50 USD</span>
+                  <span className="text-zinc-650 font-sans font-medium">Bulawayo Store Depot</span>
+                  <span className="font-mono font-bold text-zinc-850">$2,410.50 USD</span>
                 </div>
-                <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
-                  <div className="bg-cyan-400 h-full rounded-full" style={{ width: '55%' }} />
+                <div className="w-full bg-zinc-100 h-1 rounded-full overflow-hidden">
+                  <div className="bg-cyan-500 h-full rounded-full" style={{ width: '55%' }} />
                 </div>
               </div>
             </div>
 
-            <div className="bg-zinc-900/90 border border-zinc-800 p-2.5 rounded-xl flex flex-col justify-between shadow-lg">
-              <span className="text-[7.5px] font-mono font-bold text-zinc-500 uppercase tracking-widest">Active Cashier</span>
+            <div className="bg-white border border-zinc-200 p-2.5 rounded-xl flex flex-col justify-between shadow-xs">
+              <span className="text-[7.5px] font-mono font-bold text-zinc-550 uppercase tracking-widest">Active Cashier</span>
               <div className="mt-1">
-                <p className="text-[10px] font-bold text-zinc-200 truncate">{customCashier}</p>
-                <p className="text-[9px] font-mono text-emerald-400 font-bold">$1,540.80</p>
+                <p className="text-[10px] font-bold text-zinc-800 truncate">{customCashier}</p>
+                <p className="text-[9px] font-mono text-emerald-600 font-black">$1,540.80</p>
               </div>
             </div>
 
-            <div className="bg-zinc-900/90 border border-zinc-800 p-2.5 rounded-xl flex flex-col justify-between shadow-lg">
-              <span className="text-[7.5px] font-mono font-bold text-zinc-500 uppercase tracking-widest">Depot Alert</span>
+            <div className="bg-white border border-zinc-200 p-2.5 rounded-xl flex flex-col justify-between shadow-xs">
+              <span className="text-[7.5px] font-mono font-bold text-zinc-550 uppercase tracking-widest">Depot Alert</span>
               <div className="mt-1">
-                <p className="text-[9px] font-bold text-amber-400 truncate leading-tight">{customProduct}</p>
-                <p className="text-[8px] font-mono text-zinc-400">14 bags left</p>
+                <p className="text-[9px] font-bold text-amber-600 truncate leading-tight">{customProduct}</p>
+                <p className="text-[8px] font-mono text-zinc-500">14 bags left</p>
               </div>
             </div>
           </div>
@@ -544,53 +544,53 @@ export function MarketingAssets() {
 
     if (isYoutubeAd) {
       return (
-        <div className={`${wrapperClass} bg-gradient-to-br from-indigo-950 via-slate-900 to-zinc-950 p-6 flex flex-row items-center gap-6`}>
+        <div className={`${wrapperClass} bg-gradient-to-br from-indigo-50/40 via-zinc-50 to-white p-6 flex flex-row items-center gap-6`}>
           <div className="w-3/5 text-left space-y-4 z-10 pr-2">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-650 font-bold font-mono text-[9px] uppercase tracking-wider animate-pulse">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-red-650 text-white font-bold font-mono text-[9px] uppercase tracking-wider animate-pulse font-bold">
               <Video className="w-3 h-3 shrink-0" />
               On-demand masterclass
             </span>
             <div className="space-y-1">
-              <h4 className="text-xl md:text-2xl font-black tracking-tight leading-tight uppercase font-sans text-white">
+              <h4 className="text-xl md:text-2xl font-black tracking-tight leading-tight uppercase font-sans text-zinc-900">
                 Onboard Cashiers in 60 seconds
               </h4>
-              <p className="text-[10px] md:text-xs text-indigo-200">
+              <p className="text-[10px] md:text-xs text-zinc-650 font-semibold animate-fade-in">
                 Configure registers, set security groups & lock drawer access PINs.
               </p>
             </div>
             <div className="flex gap-2">
-              <span className="bg-white/10 backdrop-blur-sm border border-white/15 text-white font-mono font-semibold text-[8px] px-2 py-0.5 rounded">
+              <span className="bg-zinc-100 border border-zinc-200 text-zinc-700 font-mono font-bold text-[8px] px-2 py-0.5 rounded">
                 No Void Access Limit
               </span>
-              <span className="bg-white/10 backdrop-blur-sm border border-white/15 text-white font-mono font-semibold text-[8px] px-2 py-0.5 rounded">
+              <span className="bg-zinc-100 border border-zinc-200 text-zinc-700 font-mono font-bold text-[8px] px-2 py-0.5 rounded">
                 Strict Drawer Float checks
               </span>
             </div>
           </div>
 
-          <div className="w-2/5 aspect-[4/3] bg-zinc-900/95 border border-zinc-800 rounded-xl p-3 shadow-2xl flex flex-col justify-between z-10 text-[10px] font-sans">
-            <div className="flex justify-between items-center border-b border-zinc-850 pb-1.5 font-mono text-[7.5px] text-zinc-400">
+          <div className="w-2/5 aspect-[4/3] bg-white border border-zinc-205 rounded-xl p-3 shadow-xl flex flex-col justify-between z-10 text-[10px] font-sans">
+            <div className="flex justify-between items-center border-b border-zinc-100 pb-1.5 font-mono text-[7.5px] text-zinc-405">
               <span>👤 System Add Employee</span>
-              <span className="text-emerald-450 font-bold ring-1 ring-emerald-500/20 px-1 py-0.2 rounded bg-emerald-500/5">Verified</span>
+              <span className="text-emerald-700 font-extrabold ring-1 ring-emerald-500/20 px-1 py-0.2 rounded bg-emerald-50">Verified</span>
             </div>
             
             <div className="space-y-1.5 py-1">
               <div className="space-y-0.5">
-                <span className="text-[7.5px] text-zinc-500 font-medium font-mono uppercase">Operator Name</span>
-                <p className="bg-zinc-950 px-2 py-0.5 rounded border border-zinc-850 font-semibold truncate text-[10.5px]">{customCashier}</p>
+                <span className="text-[7.5px] text-zinc-450 font-bold font-mono uppercase">Operator Name</span>
+                <p className="bg-zinc-50 px-2 py-0.5 rounded border border-zinc-150 font-bold truncate text-[10.5px] text-zinc-800">{customCashier}</p>
               </div>
               <div className="space-y-0.5">
-                <span className="text-[7.5px] text-zinc-500 font-medium font-mono uppercase">Assigned pincode</span>
-                <p className="bg-zinc-950 px-2 py-0.5 rounded border border-zinc-850 font-mono tracking-widest text-indigo-400">•••• (secured)</p>
+                <span className="text-[7.5px] text-zinc-450 font-bold font-mono uppercase">Assigned pincode</span>
+                <p className="bg-zinc-50 px-2 py-0.5 rounded border border-zinc-150 font-mono tracking-widest text-indigo-600">•••• (secured)</p>
               </div>
               <div className="space-y-0.5">
-                <span className="text-[7.5px] text-zinc-500 font-medium font-mono uppercase">Register assigned</span>
-                <p className="bg-zinc-950 px-2 py-0.5 rounded border border-zinc-850 font-mono text-[8.5px] text-cyan-400 truncate">Register Alpha - {customBusiness}</p>
+                <span className="text-[7.5px] text-zinc-450 font-bold font-mono uppercase">Register assigned</span>
+                <p className="bg-zinc-50 px-2 py-0.5 rounded border border-zinc-150 font-mono text-[8.5px] text-cyan-600 truncate">Register Alpha - {customBusiness}</p>
               </div>
             </div>
 
-            <div className="pt-1 border-t border-zinc-850 flex justify-between items-center font-mono text-[8px] text-zinc-500">
-              <span className="flex items-center gap-1 font-bold text-emerald-400 uppercase">
+            <div className="pt-1 border-t border-zinc-150 flex justify-between items-center font-mono text-[8px] text-zinc-400">
+              <span className="flex items-center gap-1 font-bold text-emerald-600 uppercase">
                 <UserCheck className="w-3 h-3 text-emerald-500 shrink-0" />
                 Active profile
               </span>
@@ -603,24 +603,24 @@ export function MarketingAssets() {
 
     if (isYoutubeCover) {
       return (
-        <div className={`${wrapperClass} bg-gradient-to-tr from-cyan-950 via-zinc-950 to-indigo-950 p-6 flex flex-col justify-between`}>
+        <div className={`${wrapperClass} bg-gradient-to-tr from-cyan-50/20 via-white to-indigo-50/20 p-6 flex flex-col justify-between`}>
           <div className="flex justify-between items-start w-full">
-            <TarezaLogo size="sm" showSubtitle={true} variant="dark" />
-            <span className="text-[9px] font-mono tracking-widest uppercase font-bold text-cyan-400 border border-cyan-400/20 bg-cyan-400/5 px-2.5 py-1 rounded-full">
+            <TarezaLogo size="sm" showSubtitle={true} variant="light" />
+            <span className="text-[9px] font-mono tracking-widest uppercase font-bold text-indigo-700 border border-indigo-200 bg-indigo-50 px-2.5 py-1 rounded-full">
               Academy Channel Art
             </span>
           </div>
 
           <div className="my-auto text-center space-y-2 px-2">
-            <h4 className="text-xl md:text-3xl font-black font-sans leading-none tracking-tight uppercase bg-gradient-to-r from-zinc-50 to-white bg-clip-text text-transparent">
+            <h4 className="text-xl md:text-3xl font-black font-sans leading-none tracking-tight uppercase text-zinc-900">
               The Smart POS Masterclass
             </h4>
-            <p className="text-xs text-zinc-400 max-w-lg mx-auto leading-relaxed">
+            <p className="text-xs text-zinc-650 max-w-lg mx-auto leading-relaxed font-semibold">
               Master cash desk security, daily sales reconciliation reports, multi-depot inventory valuation, and physical audit stocktakes.
             </p>
           </div>
 
-          <div className="w-full flex justify-between items-center border-t border-zinc-900 pt-3 text-[9px] font-mono text-zinc-500">
+          <div className="w-full flex justify-between items-center border-t border-zinc-200 pt-3 text-[9px] font-mono text-zinc-400">
             <span>🎥 New Video Training Weekly</span>
             <span>Security & Fraud Prevention Systems</span>
           </div>
@@ -630,40 +630,40 @@ export function MarketingAssets() {
 
     if (isWhatsappAd) {
       return (
-        <div className={`${wrapperClass} bg-zinc-950 p-6 flex flex-row items-center gap-6 border border-zinc-800`}>
+        <div className={`${wrapperClass} bg-indigo-50/20 p-6 flex flex-row items-center gap-6 border border-zinc-205`}>
           <div className="w-1/2 text-left space-y-3 z-10">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold font-mono text-[9px] uppercase tracking-wider">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 font-bold font-mono text-[9px] uppercase tracking-wider">
               <Smartphone className="w-3.5 h-3.5" />
               Easy Mobile POS
             </span>
             <div className="space-y-1">
-              <h4 className="text-lg md:text-xl font-black tracking-tight uppercase leading-tight font-sans text-white">
+              <h4 className="text-lg md:text-xl font-black tracking-tight uppercase leading-tight font-sans text-zinc-900">
                 300% Checkout Speed
               </h4>
-              <p className="text-[10px] md:text-xs text-zinc-400 leading-snug">
+              <p className="text-[10px] md:text-xs text-zinc-650 font-semibold leading-snug">
                 No receipt books, no wait-lines. Tap items on any phone or check out bulk six-packs instantly.
               </p>
             </div>
           </div>
 
-          <div className="w-1/2 p-3 border border-zinc-850 rounded-xl bg-zinc-900/90 flex flex-col justify-between shadow-xl min-h-[120px] font-mono text-[10px] space-y-2">
-            <div className="flex justify-between items-center border-b border-zinc-800 pb-1.5 text-zinc-400">
-              <span className="text-[8px] uppercase tracking-widest text-zinc-500">Checkout success</span>
-              <span className="font-bold text-teal-400">ZiG {Math.ceil(priceVal * rateVal)}</span>
+          <div className="w-1/2 p-3 border border-zinc-200 rounded-xl bg-white flex flex-col justify-between shadow-lg min-h-[120px] font-mono text-[10px] space-y-2">
+            <div className="flex justify-between items-center border-b border-zinc-100 pb-1.5 text-zinc-400">
+              <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">Checkout success</span>
+              <span className="font-bold text-teal-600">ZiG {Math.ceil(priceVal * rateVal)}</span>
             </div>
 
-            <div className="flex-1 flex flex-col gap-1 justify-center">
-              <div className="flex justify-between text-[11px] font-sans font-medium text-zinc-300">
+            <div className="flex-1 flex flex-col gap-0.5 justify-center">
+              <div className="flex justify-between text-[11px] font-sans font-extrabold text-zinc-800">
                 <span className="truncate max-w-[100px]">{customProduct}</span>
-                <span className="font-mono font-bold text-white">${priceVal} USD</span>
+                <span className="font-mono font-black text-zinc-900">${priceVal} USD</span>
               </div>
-              <div className="flex justify-between text-[10px] font-sans font-medium text-zinc-500 border-t border-zinc-850 pt-1">
+              <div className="flex justify-between text-[10px] font-sans font-semibold text-zinc-500 border-t border-zinc-100 pt-1">
                 <span>Rate Auto-Sync:</span>
-                <span className="font-mono font-bold text-cyan-400">1: {customRate} ZiG</span>
+                <span className="font-mono font-bold text-indigo-650">1: {customRate} ZiG</span>
               </div>
             </div>
 
-            <div className="pt-1.5 border-t border-zinc-800 text-[7.5px] text-zinc-650 text-right">
+            <div className="pt-1.5 border-t border-zinc-100 text-[7.5px] text-zinc-400 text-right font-medium">
               Outlet: {customBusiness}
             </div>
           </div>
@@ -673,8 +673,8 @@ export function MarketingAssets() {
 
     return (
       <div className={wrapperClass}>
-        <TarezaLogo size="md" variant="dark" />
-        <p className="text-xs text-zinc-400 mt-2">Custom Flyer Ready</p>
+        <TarezaLogo size="md" variant="light" />
+        <p className="text-xs text-zinc-500 mt-2">Custom Flyer Ready</p>
       </div>
     );
   };

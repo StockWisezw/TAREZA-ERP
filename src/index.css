@@ -47,6 +47,24 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+
+    /* Dynamic themes: override tailwind's default indigo palette so all indigo classes mapped throughout the app automatically inherit the selected workspace theme's colors! */
+    --color-indigo-50: color-mix(in srgb, var(--primary) 8%, #ffffff);
+    --color-indigo-100: color-mix(in srgb, var(--primary) 15%, #ffffff);
+    --color-indigo-250: color-mix(in srgb, var(--primary) 20%, #ffffff);
+    --color-indigo-200: color-mix(in srgb, var(--primary) 30%, #ffffff);
+    --color-indigo-300: color-mix(in srgb, var(--primary) 50%, #ffffff);
+    --color-indigo-400: color-mix(in srgb, var(--primary) 70%, #ffffff);
+    --color-indigo-500: var(--primary);
+    --color-indigo-550: var(--primary);
+    --color-indigo-600: var(--primary);
+    --color-indigo-605: var(--primary);
+    --color-indigo-650: color-mix(in srgb, var(--primary) 92%, #000000);
+    --color-indigo-700: color-mix(in srgb, var(--primary) 85%, #000000);
+    --color-indigo-750: color-mix(in srgb, var(--primary) 78%, #000000);
+    --color-indigo-800: color-mix(in srgb, var(--primary) 70%, #000000);
+    --color-indigo-900: color-mix(in srgb, var(--primary) 50%, #000000);
+    --color-indigo-950: color-mix(in srgb, var(--primary) 30%, #000000);
 }
 
 :root {
@@ -100,7 +118,6 @@
     --popover: #222222;
     --popover-foreground: #F5F6F8;
     
-    --primary: #7c3aed;
     --primary-foreground: #FFFFFF;
     
     --secondary: #0b0f19;
@@ -115,9 +132,7 @@
     --destructive: #ef4444;
     --border: #333333;
     --input: #333333;
-    --ring: #7c3aed;
     
-    --chart-1: #7c3aed;
     --chart-2: #06b6d4;
     --chart-3: #FFFFFF;
     --chart-4: #9CA3AF;

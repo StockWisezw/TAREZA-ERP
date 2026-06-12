@@ -432,30 +432,70 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-background flex animate-fade-in">
-      {/* Left Pane - Branding */}
-      <div className="hidden lg:flex flex-col flex-1 bg-secondary text-secondary-foreground p-12 justify-between relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?q=80&w=2000&auto=format&fit=crop')] opacity-[0.03] bg-cover bg-center mix-blend-overlay"></div>
-        <div className="absolute inset-0 bg-gradient-to-t from-secondary via-secondary/95 to-secondary/80"></div>
-        
-        <div className="relative z-10 flex items-center">
-          <TarezaLogo size="md" variant="dark" />
+      {/* Left Pane - Branding (Engaging, modern and bright) */}
+      <div className="hidden lg:flex flex-col flex-1 bg-gradient-to-br from-zinc-50 via-indigo-50 to-zinc-100 text-zinc-900 p-12 justify-between relative overflow-hidden">
+        {/* Elegant geometric grid overlay */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:16px_16px] opacity-100"></div>
+        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-indigo-200/35 blur-3xl" />
+        <div className="absolute -bottom-20 -left-20 w-96 h-96 rounded-full bg-cyan-200/30 blur-3xl" />
+        <div className="absolute top-1/4 left-1/3 w-80 h-80 rounded-full bg-purple-200/20 blur-3xl" />
+
+        <div className="relative z-10 flex items-center bg-white/40 p-3 px-4 rounded-2xl border border-white/60 shadow-sm backdrop-blur-md max-w-fit">
+          <TarezaLogo size="md" variant="light" />
         </div>
         
-        <div className="relative z-10 space-y-6 max-w-lg mb-12">
-          <h1 className="text-5xl font-semibold leading-[1.1] tracking-tight">
+        {/* Center Live Sandbox Stats Box Draft */}
+        <div className="relative z-10 mx-auto w-full max-w-md bg-white/80 backdrop-blur-lg border border-white rounded-2xl p-6 shadow-xl space-y-4">
+          <div className="flex justify-between items-center border-b border-zinc-150 pb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest font-mono">Live Demo Analytics</span>
+            </div>
+            <span className="text-[10px] font-mono text-indigo-700 font-extrabold bg-indigo-50 px-2 py-0.5 rounded-full">Harare HQ</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-zinc-50/80 border border-zinc-100 p-3.5 rounded-xl">
+              <span className="text-[10px] text-zinc-500 block font-semibold">Today's Net Sales</span>
+              <span className="text-xl font-black text-zinc-900 block mt-0.5">$1,842.50</span>
+              <span className="text-[9px] text-emerald-600 font-bold font-mono">↑ 18.5% today</span>
+            </div>
+            <div className="bg-zinc-50/80 border border-zinc-100 p-3.5 rounded-xl">
+              <span className="text-[10px] text-zinc-500 block font-semibold">Offline Defense Status</span>
+              <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 mt-1.5 font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                SECURED & SYNCED
+              </span>
+              <span className="text-[9px] text-zinc-400 font-medium block mt-1">Ready for load shedding</span>
+            </div>
+          </div>
+
+          <div className="p-3 bg-indigo-50/55 border border-indigo-100/60 rounded-xl space-y-1">
+            <div className="flex justify-between text-[11px] font-mono font-bold text-indigo-950">
+              <span>Biller Multi-Currency Sync:</span>
+              <span className="text-indigo-650">EcoCash + InnBucks</span>
+            </div>
+            <p className="text-[10px] text-indigo-850/80 leading-normal">
+              Internal ZiG currency calculator synchronized automatically to primary exchange slider.
+            </p>
+          </div>
+        </div>
+        
+        <div className="relative z-10 space-y-4 max-w-lg">
+          <h1 className="text-4xl font-extrabold leading-[1.1] tracking-tight text-zinc-900">
             The integrated cloud ERP for fast-growing businesses.
           </h1>
-          <p className="text-zinc-400 text-lg">
+          <p className="text-zinc-600 text-sm font-medium leading-relaxed">
             Manage your inventory, process sales, oversee procurement, and generate compliant financial reports effortlessly.
           </p>
           
-          <div className="flex space-x-6 pt-8">
-            <div className="flex items-center space-x-2 text-sm font-medium text-white">
-              <ShieldCheck className="w-5 h-5 text-primary" />
+          <div className="flex space-x-6 pt-2">
+            <div className="flex items-center space-x-2 text-sm font-bold text-zinc-700">
+              <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0" />
               <span>Enterprise Grade</span>
             </div>
-            <div className="flex items-center space-x-2 text-sm font-medium text-white">
-              <TrendingUp className="w-5 h-5 text-primary" />
+            <div className="flex items-center space-x-2 text-sm font-bold text-zinc-700">
+              <TrendingUp className="w-5 h-5 text-cyan-600 shrink-0" />
               <span>Real-time Reports & Insights</span>
             </div>
           </div>
