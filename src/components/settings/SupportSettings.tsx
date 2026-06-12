@@ -91,6 +91,24 @@ export function SupportSettings() {
       const { error } = await supabase.from('support_tickets').insert([newTicket]);
       if (error) throw error;
 
+      // Dispatch real alert notifications to WhatsApp & Email in the background
+      fetch('/api/notifications/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'ticket',
+          payload: {
+            id: newTicket.id,
+            user_email: newTicket.user_email,
+            business_name: newTicket.business_name,
+            subject: newTicket.subject,
+            category: newTicket.category,
+            priority: newTicket.priority,
+            description: newTicket.description
+          }
+        })
+      }).catch(err => console.error("Ticket alert dispatch failed:", err));
+
       toast.success("Support ticket created successfully! Our systems developer will analyze and reply shortly.");
       setSubject('');
       setDescription('');

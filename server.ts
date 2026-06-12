@@ -4,8 +4,10 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { Paynow } from "paynow";
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, updateDoc, collection, addDoc } from "firebase/firestore";
+import { getFirestore, doc, updateDoc, collection, addDoc, getDoc } from "firebase/firestore";
 import { GoogleGenAI } from "@google/genai";
+import { dispatchAlert, notificationAuditLogs } from "./server-notification-service.js";
+import { initBackgroundStockTracker, checkLowStockAndNotify } from "./server-stock-checker.js";
 
 interface RateLimitRecord {
   hits: number;
@@ -70,6 +72,41 @@ async function startServer() {
 
   const firebaseApp = initializeApp(firebaseConfig);
   const firestoreDb = getFirestore(firebaseApp, (firebaseConfig as any).firestoreDatabaseId);
+
+  // Initialize automated background stock replenishment tracker
+  initBackgroundStockTracker(firestoreDb);
+
+  // 0. Notifications Integration Endpoint
+  app.post("/api/notifications/notify", async (req, res) => {
+    const { type, payload } = req.body;
+    if (!type || !payload) {
+      return res.status(400).json({ error: "Missing type or payload" });
+    }
+
+    try {
+      const result = await dispatchAlert(type, payload);
+      return res.json({ success: true, result });
+    } catch (err: any) {
+      console.error("Error processing notification route:", err);
+      return res.status(500).json({ error: err.message || "Failed to dispatch alert" });
+    }
+  });
+
+  // Notifications Audit Logs Endpoint for Developer Panel
+  app.get("/api/notifications/logs", (req, res) => {
+    res.json({ logs: notificationAuditLogs });
+  });
+
+  // Manual low-stock reorder limits alert checker
+  app.post("/api/inventory/check-low-stock", async (req, res) => {
+    try {
+      const result = await checkLowStockAndNotify(firestoreDb);
+      return res.json(result);
+    } catch (err: any) {
+      console.error("Manual stock checker endpoint failed:", err);
+      return res.status(500).json({ success: false, error: err.message || "Internal stock verify error" });
+    }
+  });
 
   // 1. Paynow Initiation Endpoint
   app.post("/api/paynow/initiate", async (req, res) => {
@@ -163,6 +200,27 @@ async function startServer() {
           system_admin_key: "paynow_secure_bypass_3892"
         });
 
+        // Fetch business metadata for rich notification formatting
+        let bName = "Pro Business Workspace";
+        try {
+          const bSnap = await getDoc(businessRef);
+          if (bSnap.exists()) {
+            bName = bSnap.data()?.name || "Pro Business Workspace";
+          }
+        } catch (bErr) {
+          console.error("Failed to fetch business name for notification", bErr);
+        }
+
+        // Send Email and WhatsApp Alert
+        dispatchAlert("subscription", {
+          business_id: business_id,
+          business_name: bName,
+          plan_name: "pro",
+          status: "active",
+          amount: 30,
+          paynow_reference: `POLL-${business_id}-${Date.now()}`
+        }).catch(err => console.error("Billing notification failed", err));
+
         return res.json({ success: true, status: "Paid", message: "Subscription activated successfully!" });
       }
 
@@ -211,6 +269,27 @@ async function startServer() {
           });
 
           console.log(`Successfully updated subscription for tenant business: ${businessId}`);
+
+          // Fetch business metadata for rich callback alerts
+          let bName = "Pro Business Workspace";
+          try {
+            const bSnap = await getDoc(businessRef);
+            if (bSnap.exists()) {
+              bName = bSnap.data()?.name || "Pro Business Workspace";
+            }
+          } catch (bErr) {
+            console.error("Failed to fetch business name for callback notification", bErr);
+          }
+
+          // Trigger email + WhatsApp notifications
+          dispatchAlert("subscription", {
+            business_id: businessId,
+            business_name: bName,
+            plan_name: "pro",
+            status: "active",
+            amount: 30,
+            paynow_reference: reference || `CB-${businessId}`
+          }).catch(err => console.error("Billing callback notification failed", err));
         }
       }
 

@@ -12,7 +12,9 @@ import {
   Sparkles, 
   FileText, 
   ArrowRight,
-  Info 
+  Info,
+  RotateCcw,
+  History
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -108,6 +110,240 @@ export function BulkImport() {
 
     loadConfig();
   }, []);
+
+  // Download active catalog template
+  const downloadActiveCatalogTemplate = async () => {
+    try {
+      if (!businessId) {
+        toast.error("Business context not loaded yet.");
+        return;
+      }
+      toast.info("Generating template from active catalog...");
+      
+      const { data: activeProducts, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('business_id', businessId)
+        .eq('is_active', true)
+        .limit(105);
+
+      if (error) throw error;
+
+      const headers = ['Product Name', 'SKU', 'Barcode', 'Category', 'Retail Price', 'Wholesale Price', 'Cost Price', 'Opening Stock'];
+      let rows: string[][] = [];
+
+      if (activeProducts && activeProducts.length > 0) {
+        const catMap = new Map<string, string>();
+        existingCategories.forEach(c => catMap.set(c.id, c.name));
+
+        rows = activeProducts.map(p => [
+          p.name || '',
+          p.sku || '',
+          p.barcode || '',
+          catMap.get(p.category_id) || '',
+          (p.retail_price || 0).toString(),
+          (p.wholesale_price || 0).toString(),
+          (p.cost_price || 0).toString(),
+          '0'
+        ]);
+      } else {
+        rows = [
+          ['Mazoe Blackberry 2L', 'BV-MZB-2L', '6001234567890', 'Beverages', '3.50', '3.15', '2.45', '100']
+        ];
+      }
+
+      const csvContent = "\uFEFF" + headers.join(',') + "\n" + rows.map(row => row.map(val => `"${val.replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `catalog_import_template_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success("Ready! Dynamic catalog template downloaded.");
+    } catch (err: any) {
+      toast.error(`Could not generate template: ${err.message}`);
+    }
+  };
+
+  // Dry run state
+  const [dryRunReport, setDryRunReport] = useState<{
+    total: number;
+    creates: number;
+    updates: number;
+    skips: number;
+    merges: number;
+    errors: number;
+    errorRate: number;
+    diagnosticsRun: boolean;
+  } | null>(null);
+
+  // Dynamic Dry Run calculation
+  useEffect(() => {
+    if (parsedItems.length === 0) {
+      setDryRunReport(null);
+      return;
+    }
+
+    const runDiagnostics = async () => {
+      try {
+        const { data: prods } = await supabase
+          .from('products')
+          .select('sku, barcode, name')
+          .eq('business_id', businessId)
+          .eq('is_active', true);
+
+        const skuSet = new Set((prods || []).map(p => (p.sku || '').trim().toUpperCase()));
+        const barcodeSet = new Set((prods || []).map(p => (p.barcode || '').trim().toUpperCase()).filter(Boolean));
+        const nameSet = new Set((prods || []).map(p => (p.name || '').trim().toLowerCase()));
+
+        let creates = 0;
+        let updates = 0;
+        let skips = 0;
+        let merges = 0;
+        let errors = 0;
+
+        parsedItems.forEach(item => {
+          if (item.validationError) {
+            errors++;
+            return;
+          }
+
+          const cleanSku = (item.sku || '').trim().toUpperCase();
+          const cleanBarcode = (item.barcode || '').trim().toUpperCase();
+          const cleanName = (item.name || '').trim().toLowerCase();
+
+          const match = (cleanSku && skuSet.has(cleanSku)) || 
+                        (cleanBarcode && barcodeSet.has(cleanBarcode)) || 
+                        (cleanName && nameSet.has(cleanName));
+
+          if (match) {
+            if (importStrategy === 'create') {
+              skips++;
+            } else if (importStrategy === 'update') {
+              updates++;
+            } else if (importStrategy === 'merge') {
+              merges++;
+            }
+          } else {
+            creates++;
+          }
+        });
+
+        const total = parsedItems.length;
+        const errorRate = Math.round((errors / total) * 100);
+
+        setDryRunReport({
+          total,
+          creates,
+          updates,
+          skips,
+          merges,
+          errors,
+          errorRate,
+          diagnosticsRun: true
+        });
+      } catch (err) {
+        console.error("Dry run simulation error:", err);
+      }
+    };
+
+    runDiagnostics();
+  }, [parsedItems, importStrategy, businessId]);
+
+  // Import History State
+  const [importHistory, setImportHistory] = useState<Array<{
+    timestamp: string;
+    productIdsAdded: string[];
+    priorStateUpdated: Array<{
+      id: string;
+      name: string;
+      retail_price: number;
+      wholesale_price: number;
+      cost_price: number;
+      barcode?: string;
+    }>;
+    priorInventoryUpdated: Array<{
+      id: string;
+      product_id: string;
+      branch_id: string;
+      quantity: number;
+    }>;
+  }>>([]);
+
+  const [isUndoing, setIsUndoing] = useState(false);
+
+  useEffect(() => {
+    if (!businessId) return;
+    const stored = localStorage.getItem(`import_history_${businessId}`);
+    if (stored) {
+      try {
+        setImportHistory(JSON.parse(stored));
+      } catch (e) {
+        console.error("Failed parsing stored import history", e);
+      }
+    }
+  }, [businessId]);
+
+  const saveToHistory = (entry: any) => {
+    const updated = [entry, ...importHistory].slice(0, 5);
+    setImportHistory(updated);
+    if (businessId) {
+      localStorage.setItem(`import_history_${businessId}`, JSON.stringify(updated));
+    }
+  };
+
+  const handleUndoImport = async (historyIndex: number) => {
+    const target = importHistory[historyIndex];
+    if (!target) {
+      toast.error("Import record not found");
+      return;
+    }
+    try {
+      setIsUndoing(true);
+      toast.info("Rolling back import batch changes...");
+
+      if (target.productIdsAdded.length > 0) {
+        for (const pId of target.productIdsAdded) {
+          await supabase.from('inventory').delete().eq('product_id', pId);
+          const { error: delError } = await supabase.from('products').delete().eq('id', pId);
+          if (delError) {
+            await supabase.from('products').update({ is_active: false }).eq('id', pId);
+          }
+        }
+      }
+
+      for (const prior of target.priorStateUpdated) {
+        await supabase.from('products').update({
+          name: prior.name,
+          retail_price: prior.retail_price,
+          wholesale_price: prior.wholesale_price,
+          cost_price: prior.cost_price,
+          barcode: prior.barcode
+        }).eq('id', prior.id);
+      }
+
+      for (const priorInv of target.priorInventoryUpdated) {
+        await supabase.from('inventory').update({
+          quantity: priorInv.quantity
+        }).eq('id', priorInv.id);
+      }
+
+      const updated = importHistory.filter((_, idx) => idx !== historyIndex);
+      setImportHistory(updated);
+      if (businessId) {
+        localStorage.setItem(`import_history_${businessId}`, JSON.stringify(updated));
+      }
+
+      toast.success("Successfully rolled back all catalog and stock adjustments for this session!");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Rollback failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsUndoing(false);
+    }
+  };
 
   // Download template
   const downloadTemplate = () => {
@@ -325,6 +561,10 @@ export function BulkImport() {
       setIsSaving(true);
       setSaveProgress({ current: 0, total: validItems.length });
 
+      const productIdsAdded: string[] = [];
+      const priorStateUpdated: any[] = [];
+      const priorInventoryUpdated: any[] = [];
+
       // Fetch all existing products to check for duplicates by SKU, Barcode, or Name (case-insensitive)
       const { data: existingProducts, error: extProdsErr } = await supabase
         .from('products')
@@ -454,6 +694,15 @@ export function BulkImport() {
 
           // Update/Merge details of existing product
           prodId = existingProd.id;
+          priorStateUpdated.push({
+            id: existingProd.id,
+            name: existingProd.name,
+            retail_price: existingProd.retail_price,
+            wholesale_price: existingProd.wholesale_price,
+            cost_price: existingProd.cost_price,
+            barcode: existingProd.barcode
+          });
+
           const { error: updateErr } = await supabase.from('products').update({
             name: item.name.trim(),
             barcode: item.barcode.trim() || null,
@@ -486,6 +735,8 @@ export function BulkImport() {
         } else {
           // Insert new product
           prodId = crypto.randomUUID();
+          productIdsAdded.push(prodId);
+
           const newProductRecord = {
             id: prodId,
             business_id: businessId,
@@ -522,6 +773,13 @@ export function BulkImport() {
           if (importStrategy === 'merge') {
             newQty = (existingInv.quantity || 0) + stockQty;
           }
+
+          priorInventoryUpdated.push({
+            id: existingInv.id,
+            product_id: prodId,
+            branch_id: selectedBranchId,
+            quantity: existingInv.quantity
+          });
 
           const { error: invErr } = await supabase.from('inventory').update({
             quantity: newQty,
@@ -606,6 +864,13 @@ export function BulkImport() {
       msg += `Adjusted initial warehouse stock records for ${inventoryUpdatedCount} items.`;
       
       toast.success(msg);
+
+      saveToHistory({
+        timestamp: new Date().toLocaleString(),
+        productIdsAdded,
+        priorStateUpdated,
+        priorInventoryUpdated
+      });
       
       // Reset state based on tabs
       if (activeSubTab === 'csv') {
@@ -653,9 +918,12 @@ export function BulkImport() {
           </h2>
           <p className="text-sm text-zinc-500 mt-1">Incorporate multiple catalog listings simultaneously via spreadsheet layouts or structured CSV uploads.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" className="bg-white shadow-sm" onClick={downloadTemplate}>
-            <Download className="mr-2 h-4 w-4" /> Download Ingestion Template
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" className="bg-white shadow-sm border-zinc-200 text-xs text-zinc-650 h-9 rounded-xl" onClick={downloadTemplate}>
+            <Download className="mr-1.5 h-3.5 w-3.5" /> Blank Template
+          </Button>
+          <Button variant="default" size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs h-9 rounded-xl shadow-xs" onClick={downloadActiveCatalogTemplate}>
+            <Sparkles className="mr-1.5 h-3.5 w-3.5 text-indigo-200" /> Template filled from Active Catalog
           </Button>
         </div>
       </div>
@@ -831,12 +1099,41 @@ export function BulkImport() {
               </div>
             </div>
           ) : (
-            <Card className="border-zinc-200">
-              <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-zinc-50/80 border-b pb-4">
-                <div>
-                  <CardTitle className="text-lg">CSV Review & Validate</CardTitle>
-                  <CardDescription>Verify raw contents extracted from file. Click rows to edit values directly, then click finalize.</CardDescription>
+            <div className="space-y-4">
+              {dryRunReport && (
+                <div className="bg-zinc-50 border border-zinc-200/80 p-4.5 rounded-2xl grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div className="flex flex-col p-2.5 bg-white rounded-xl border border-zinc-150 shadow-xxs">
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Total Rows</span>
+                    <span className="text-xl font-bold text-zinc-800">{dryRunReport.total}</span>
+                  </div>
+                  <div className="flex flex-col p-2.5 bg-white rounded-xl border border-zinc-150 shadow-xxs">
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Creates (New)</span>
+                    <span className="text-xl font-bold text-emerald-600">+{dryRunReport.creates}</span>
+                  </div>
+                  <div className="flex flex-col p-2.5 bg-white rounded-xl border border-zinc-150 shadow-xxs">
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Updates/Merges</span>
+                    <span className="text-xl font-bold text-indigo-650">~{dryRunReport.updates + dryRunReport.merges}</span>
+                  </div>
+                  <div className="flex flex-col p-2.5 bg-white rounded-xl border border-zinc-150 shadow-xxs">
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Skips (Ignored)</span>
+                    <span className="text-xl font-bold text-amber-600">-{dryRunReport.skips}</span>
+                  </div>
+                  <div className="flex flex-col p-2.5 bg-white rounded-xl border border-zinc-150 shadow-xxs relative overflow-hidden">
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider flex items-center justify-between">
+                      <span>Errors</span>
+                      {dryRunReport.errorRate > 0 && <span className="text-[10px] text-red-650 bg-red-50 font-bold px-1 rounded animate-pulse">{dryRunReport.errorRate}% rate</span>}
+                    </span>
+                    <span className={`text-xl font-bold ${dryRunReport.errors > 0 ? 'text-red-500' : 'text-zinc-500'}`}>{dryRunReport.errors}</span>
+                  </div>
                 </div>
+              )}
+
+              <Card className="border-zinc-200">
+                <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-zinc-50/80 border-b pb-4">
+                  <div>
+                    <CardTitle className="text-lg">CSV Review & Validate</CardTitle>
+                    <CardDescription>Verify raw contents extracted from file. Click cells to edit values directly, then click finalize.</CardDescription>
+                  </div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => {
                     setParsedItems([]);
@@ -978,6 +1275,7 @@ export function BulkImport() {
                 </table>
               </CardContent>
             </Card>
+            </div>
           )}
         </div>
       )}
@@ -1127,6 +1425,69 @@ export function BulkImport() {
           </CardContent>
         </Card>
       )}
+
+      {/* Dynamic Session Import History with Undo Capabilities */}
+      <Card className="border-zinc-200 mt-6 shadow-sm">
+        <CardHeader className="bg-zinc-50/50 border-b py-3.5 px-4 flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-sm font-bold text-zinc-800 flex items-center gap-1.5">
+              <History className="w-4 h-4 text-zinc-500" />
+              Session Ingestion Audit Logs
+            </CardTitle>
+            <CardDescription className="text-xs text-zinc-500">
+              Track and undo prior import batches. You can rollback and reverse the last 5 catalog actions.
+            </CardDescription>
+          </div>
+          <Badge variant="outline" className="text-[10px] bg-zinc-100/50 border-0 px-2 py-0.5 text-zinc-500 font-semibold">
+            Rolling Undo Cache
+          </Badge>
+        </CardHeader>
+        <CardContent className="p-0">
+          {importHistory.length === 0 ? (
+            <div className="p-5 text-center text-xs text-zinc-400">
+              No recent bulk import sessions recorded in this browser yet.
+            </div>
+          ) : (
+            <div className="divide-y divide-zinc-150">
+              {importHistory.map((hist, index) => (
+                <div key={index} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3.5 px-4 gap-3 bg-white hover:bg-zinc-50/20 transition-all">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-zinc-800">Batch #{importHistory.length - index}</span>
+                      <span className="text-[10px] text-zinc-400 font-medium font-mono">Completed: {hist.timestamp}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-1 text-[10px]">
+                      <Badge className="bg-emerald-50 text-emerald-800 border-emerald-100 font-medium py-0 px-1.5 h-4 text-[9px] hover:bg-emerald-50">
+                        {hist.productIdsAdded.length} added
+                      </Badge>
+                      <Badge className="bg-indigo-50 text-indigo-800 border-indigo-100 font-medium py-0 px-1.5 h-4 text-[9px] hover:bg-indigo-50">
+                        {hist.priorStateUpdated.length} updated
+                      </Badge>
+                      <Badge className="bg-amber-50 text-amber-800 border-amber-100 font-medium py-0 px-1.5 h-4 text-[9px] hover:bg-amber-50">
+                        {hist.priorInventoryUpdated.length} stocks modified
+                      </Badge>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-8 rounded-xl border-zinc-200 text-xs font-semibold text-red-600 hover:text-red-750 hover:bg-red-50/50 cursor-pointer shadow-xs whitespace-nowrap"
+                    onClick={() => handleUndoImport(index)}
+                    disabled={isUndoing}
+                  >
+                    {isUndoing ? (
+                      <Loader2 className="h-3.5 w-3.5 text-red-500 animate-spin mr-1.5" />
+                    ) : (
+                      <RotateCcw className="h-3.5 w-3.5 text-red-500 mr-1.5" />
+                    )}
+                    Undo & Rollback Import
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

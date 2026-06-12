@@ -3,9 +3,9 @@ import { z } from 'zod';
 // Zod validation schemas for server & client alignment
 export const ProductSchema = z.object({
   name: z.string()
+    .trim()
     .min(1, 'Product name is required')
-    .max(255, 'Product name is too long')
-    .trim(),
+    .max(255, 'Product name is too long'),
   
   description: z.string()
     .max(5000, 'Description is too long')

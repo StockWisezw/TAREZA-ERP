@@ -19,6 +19,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { supabase } from '../../lib/firebaseClient';
 import { toast } from 'sonner';
+import { ProductSchema } from '../../utils/validation';
 
 const getPackSize = (sku: string | undefined): number => {
   if (!sku) return 1;
@@ -101,6 +102,49 @@ export function ProductList({ onImportClick }: ProductListProps) {
   const [adjustingProduct, setAdjustingProduct] = useState<any | null>(null);
   const [adjType, setAdjType] = useState<'add' | 'subtract' | 'set'>('add');
   const [adjQty, setAdjQty] = useState('1');
+
+  // Real-time Validation States
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!isAddOpen) {
+      setValidationErrors({});
+      return;
+    }
+
+    const dataToValidate = {
+      name: newProductName,
+      sku: newProductSKU || 'SKU-TEMP',
+      retail_price: parseFloat(newProductPrice) || 0,
+      wholesale_price: isPack ? (parseFloat(wholesalePrice) || undefined) : undefined,
+      cost_price: newProductCostPrice ? (parseFloat(newProductCostPrice) || undefined) : undefined,
+    };
+
+    const result = ProductSchema.safeParse(dataToValidate);
+    const newErrors: Record<string, string> = {};
+
+    if (!result.success) {
+      result.error.issues.forEach(issue => {
+        const path = issue.path[0] as string;
+        newErrors[path] = issue.message;
+      });
+    }
+
+    if (!newProductName.trim()) {
+      newErrors.name = 'Product name is required';
+    }
+    if (!newProductPrice) {
+      newErrors.retail_price = 'Retail price is required';
+    } else if (isNaN(parseFloat(newProductPrice)) || parseFloat(newProductPrice) <= 0) {
+      newErrors.retail_price = 'Retail price must be positive';
+    }
+
+    if (newProductCostPrice && (isNaN(parseFloat(newProductCostPrice)) || parseFloat(newProductCostPrice) <= 0)) {
+      newErrors.cost_price = 'Cost price must be positive';
+    }
+
+    setValidationErrors(newErrors);
+  }, [newProductName, newProductSKU, newProductPrice, wholesalePrice, newProductCostPrice, isAddOpen, isPack]);
 
   const fetchProducts = async () => {
     try {
@@ -905,52 +949,133 @@ export function ProductList({ onImportClick }: ProductListProps) {
             <DialogTrigger asChild>
               <Button className="shadow-sm"><Plus className="mr-2 h-4 w-4" /> Add Product</Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-md bg-white border-zinc-200">
               <DialogHeader>
-                <DialogTitle>Add New Product</DialogTitle>
+                <DialogTitle className="text-lg font-bold text-zinc-900">Add New Product</DialogTitle>
+                <div className="mt-2.5 pb-1 flex items-center justify-between">
+                  {(() => {
+                    const unfilled = [
+                      !!newProductName.trim(),
+                      !!newProductPrice && !isNaN(parseFloat(newProductPrice)) && parseFloat(newProductPrice) > 0
+                    ].filter(x => !x).length;
+                    return unfilled > 0 ? (
+                      <div className="w-full flex items-center justify-between bg-amber-50 border border-amber-250/60 p-2.5 rounded-xl text-[11px] text-amber-800 animate-in fade-in slide-in-from-top-1">
+                        <span className="font-semibold flex items-center gap-1.5">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
+                          {unfilled} required field{unfilled > 1 ? 's' : ''} left to fill
+                        </span>
+                        <span className="font-mono text-[10px] bg-amber-100 px-1.5 py-0.5 rounded font-bold">Progress: {((2 - unfilled) / 2 * 100).toFixed(0)}%</span>
+                      </div>
+                    ) : (
+                      <div className="w-full flex items-center justify-between bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl text-[11px] text-emerald-800 animate-in fade-in zoom-in-95">
+                        <span className="font-semibold flex items-center gap-1.5">
+                          ✓ All core information validated!
+                        </span>
+                        <span className="font-mono text-[10px] bg-emerald-100 px-1.5 py-0.5 rounded font-bold">Ready</span>
+                      </div>
+                    );
+                  })()}
+                </div>
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 <div className="space-y-2">
-                  <Label>Product Name *</Label>
-                  <Input value={newProductName} onChange={e => setNewProductName(e.target.value)} placeholder="e.g. Mazoe Blackberry 2L" />
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-2">
-                    <Label>SKU</Label>
-                    <Input value={newProductSKU} onChange={e => setNewProductSKU(e.target.value)} placeholder="e.g. BV-MZB-2L" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Cost Price ($)</Label>
-                    <Input type="number" step="0.01" value={newProductCostPrice} onChange={e => setNewProductCostPrice(e.target.value)} placeholder="0.00" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Retail Price ($) *</Label>
-                    <Input type="number" step="0.01" value={newProductPrice} onChange={e => setNewProductPrice(e.target.value)} placeholder="0.00" />
-                  </div>
+                  <Label className="text-xs font-semibold text-zinc-650 flex items-center justify-between">
+                    <span>Product Name *</span>
+                    {validationErrors.name && (
+                      <span className="text-[10px] text-red-500 font-medium font-sans animate-pulse">{validationErrors.name}</span>
+                    )}
+                  </Label>
+                  <Input 
+                    value={newProductName} 
+                    onChange={e => setNewProductName(e.target.value)} 
+                    className={`bg-white h-10 rounded-xl transition-all ${validationErrors.name ? 'border-red-400 focus-visible:ring-red-400 bg-red-50/10' : 'border-zinc-200'}`} 
+                    placeholder="e.g. Mazoe Blackberry 2L" 
+                  />
                 </div>
                 
-                <div className="flex items-center space-x-2 pt-2">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-zinc-650">SKU</Label>
+                    <Input 
+                      value={newProductSKU} 
+                      onChange={e => setNewProductSKU(e.target.value)} 
+                      className="bg-white h-10 rounded-xl border-zinc-200 font-mono text-xs" 
+                      placeholder="e.g. BV-MZB-2L" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-zinc-650 flex items-center justify-between">
+                      <span>Cost ($)</span>
+                    </Label>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      value={newProductCostPrice} 
+                      onChange={e => setNewProductCostPrice(e.target.value)} 
+                      onBlur={() => {
+                        const parsed = parseFloat(newProductCostPrice);
+                        if (!isNaN(parsed)) setNewProductCostPrice(parsed.toFixed(2));
+                      }}
+                      className={`bg-white h-10 rounded-xl transition-all font-mono text-center ${validationErrors.cost_price ? 'border-red-400' : 'border-zinc-200'}`} 
+                      placeholder="0.00" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-zinc-650 flex items-center justify-between">
+                      <span>Retail ($)*</span>
+                    </Label>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      value={newProductPrice} 
+                      onChange={e => setNewProductPrice(e.target.value)} 
+                      onBlur={() => {
+                        const parsed = parseFloat(newProductPrice);
+                        if (!isNaN(parsed)) setNewProductPrice(parsed.toFixed(2));
+                      }}
+                      className={`bg-white h-10 rounded-xl transition-all font-mono text-center ${validationErrors.retail_price ? 'border-red-400 focus-visible:ring-red-400 bg-red-50/10' : 'border-zinc-200'}`} 
+                      placeholder="0.00" 
+                    />
+                  </div>
+                </div>
+
+                {validationErrors.retail_price && (
+                  <p className="text-[10px] text-red-500 font-medium text-right -mt-1.5 animate-pulse">{validationErrors.retail_price}</p>
+                )}
+                
+                <div className="flex items-center space-x-2 pt-1">
                   <input type="checkbox" id="isPack" checked={isPack} onChange={(e) => setIsPack(e.target.checked)} className="h-4 w-4 text-primary rounded border-zinc-300" />
-                  <Label htmlFor="isPack" className="font-semibold cursor-pointer">Configure as Bundle/Pack</Label>
+                  <Label htmlFor="isPack" className="font-semibold cursor-pointer text-xs text-zinc-700">Configure as Bundle/Pack</Label>
                 </div>
 
                 {isPack && (
-                  <div className="grid grid-cols-2 gap-4 p-4 bg-purple-50 rounded-lg border border-purple-100">
+                  <div className="grid grid-cols-2 gap-4 p-4 bg-purple-50/40 rounded-xl border border-purple-100">
                     <div className="space-y-2">
-                      <Label>Pack Size (Units)</Label>
-                      <Input type="number" value={packSize} onChange={e => setPackSize(e.target.value)} placeholder="e.g. 10" />
+                      <Label className="text-xs font-semibold text-purple-950">Pack Size (Units)</Label>
+                      <Input type="number" value={packSize} onChange={e => setPackSize(e.target.value)} placeholder="e.g. 10" className="h-9 text-xs border-purple-200/85" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Wholesale Pack Price ($)</Label>
-                      <Input type="number" step="0.01" value={wholesalePrice} onChange={e => setWholesalePrice(e.target.value)} placeholder="0.00" />
+                      <Label className="text-xs font-semibold text-purple-950">Wholesale Price ($)</Label>
+                      <Input 
+                        type="number" 
+                        step="0.01" 
+                        value={wholesalePrice} 
+                        onChange={e => setWholesalePrice(e.target.value)} 
+                        onBlur={() => {
+                          const parsed = parseFloat(wholesalePrice);
+                          if (!isNaN(parsed)) setWholesalePrice(parsed.toFixed(2));
+                        }}
+                        placeholder="0.00" 
+                        className="h-9 text-xs border-purple-200/85 font-mono" 
+                      />
                     </div>
                   </div>
                 )}
                 
                 <div className="space-y-2">
-                  <Label>Initial Stock Quantity</Label>
-                  <Input type="number" value={newProductStock} onChange={e => setNewProductStock(e.target.value)} placeholder="0" />
-                  {isPack && <p className="text-xs text-zinc-500">Stock is measured in units. If you have 5 packs of 10, enter 50.</p>}
+                  <Label className="text-xs font-semibold text-zinc-650">Initial Stock Quantity</Label>
+                  <Input type="number" value={newProductStock} onChange={e => setNewProductStock(e.target.value)} className="bg-white h-10 rounded-xl border-zinc-200" placeholder="0" />
+                  {isPack && <p className="text-[10px] text-zinc-450 -mt-1">Stock is measured in units. If you have 5 packs of 10, enter 50.</p>}
                 </div>
 
                 {/* Custom Bundles section */}
@@ -1016,6 +1141,10 @@ export function ProductList({ onImportClick }: ProductListProps) {
                           placeholder="0.00" 
                           value={newBundlePrice} 
                           onChange={e => setNewBundlePrice(e.target.value)}
+                          onBlur={() => {
+                            const parsed = parseFloat(newBundlePrice);
+                            if (!isNaN(parsed)) setNewBundlePrice(parsed.toFixed(2));
+                          }}
                           className="h-7 text-xs px-2 bg-white font-mono"
                         />
                       </div>
@@ -1031,8 +1160,14 @@ export function ProductList({ onImportClick }: ProductListProps) {
                 </div>
               </div>
               <DialogFooter className="mt-6">
-                <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
-                <Button onClick={handleAddProduct}>Save Product</Button>
+                <Button variant="outline" className="rounded-xl" onClick={() => setIsAddOpen(false)}>Cancel</Button>
+                <Button 
+                  onClick={handleAddProduct} 
+                  disabled={Object.keys(validationErrors).length > 0}
+                  className="bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl"
+                >
+                  Save Product
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

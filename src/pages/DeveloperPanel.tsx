@@ -49,7 +49,7 @@ const supabaseConfig = { storageBucket: 'tareza-backups' };
 export default function DeveloperPanel() {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
-  const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw' || user?.email === 'dev@tarezaerp.co.zw';
+  const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw' || user?.email === 'dev@tarezaerp.co.zw' || user?.email === 'tapsforex@gmail.com';
 
   const [businesses, setBusinesses] = useState<any[]>([]);
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
@@ -74,11 +74,31 @@ export default function DeveloperPanel() {
   const [revealKey, setRevealKey] = useState(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
+  // Notifications state
+  const [notifLogs, setNotifLogs] = useState<any[]>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+
+  const fetchNotificationLogs = async () => {
+    setNotifLoading(true);
+    try {
+      const res = await fetch('/api/notifications/logs');
+      if (res.ok) {
+        const data = await res.json();
+        setNotifLogs(data.logs || []);
+      }
+    } catch (err) {
+      console.error("Failed to load notifications audit trail", err);
+    } finally {
+      setNotifLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isDeveloper) {
       fetchBusinessesAndSubscriptions();
       fetchBackupLogs();
       fetchSupportTickets();
+      fetchNotificationLogs();
     }
   }, [isDeveloper]);
 
@@ -958,6 +978,128 @@ export default function DeveloperPanel() {
                                 : 'bg-rose-50 text-rose-700 dark:bg-rose-955/20 dark:text-rose-400 hover:bg-rose-50 uppercase text-[10px] font-bold shadow-none'
                             }>
                               {log.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Real-time Dispatch Alerts & Notification Monitor */}
+        <Card className="font-sans bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-850 shadow-sm mt-6">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0 pb-4 border-b border-zinc-100 dark:border-zinc-800">
+            <div className="space-y-0.5">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-emerald-500" />
+                Real-time System Dispatch Alerts & Notifications (Email / WhatsApp)
+              </CardTitle>
+              <CardDescription className="text-xs text-zinc-550 dark:text-zinc-450">
+                Monitor live signals, WhatsApp templates to 0784553570, and automated SMTP email logs dispatched to tapsforex@gmail.com.
+              </CardDescription>
+            </div>
+            <div>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={fetchNotificationLogs}
+                disabled={notifLoading}
+                className="text-xs h-8 rounded-lg cursor-pointer hover:bg-zinc-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${notifLoading ? 'animate-spin' : ''}`} />
+                Reload Alert Log Timeline
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="p-3 border border-zinc-100 dark:border-zinc-800 rounded-xl bg-zinc-50/50 dark:bg-zinc-950/20">
+                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider font-mono">Alert WhatsApp Recipient</span>
+                <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 mt-1 font-mono flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                  +263 784 553 570
+                </p>
+                <p className="text-[9px] text-zinc-500 dark:text-zinc-450 mt-1">Country code normalized for standard Zimbabwe delivery routing.</p>
+              </div>
+              <div className="p-3 border border-zinc-100 dark:border-zinc-800 rounded-xl bg-zinc-50/50 dark:bg-zinc-950/20">
+                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider font-mono">Notification Receiver Email</span>
+                <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 mt-1 font-mono flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>
+                  tapsforex@gmail.com
+                </p>
+                <p className="text-[9px] text-zinc-500 dark:text-zinc-450 mt-1">SMTP carbon copy alerts triggered in tandem with messaging blocks.</p>
+              </div>
+              <div className="p-3 border border-zinc-100 dark:border-zinc-800 rounded-xl bg-zinc-50/50 dark:bg-zinc-950/20">
+                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider font-mono">API Connection Mode</span>
+                <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 mt-1 font-mono">
+                  SMTP & Callmebot / Twilio Gateway
+                </p>
+                <p className="text-[9px] text-zinc-500 dark:text-zinc-450 mt-1">Integrates live in SaaS environment securely from system backend secrets.</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-bold text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 font-mono">
+                Recent Dispatched Signals Logs
+              </h4>
+
+              {notifLoading && notifLogs.length === 0 ? (
+                <div className="py-6 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-primary" />
+                  Requesting notification logs stream...
+                </div>
+              ) : notifLogs.length === 0 ? (
+                <div className="py-8 text-center text-xs text-zinc-500 dark:text-zinc-400 border border-zinc-100 dark:border-zinc-800 rounded-xl bg-zinc-50/20">
+                  No notifications recorded during this server session. Trigger any signup or raise a support ticket to generate activity!
+                </div>
+              ) : (
+                <div className="border border-zinc-200 dark:border-zinc-805 rounded-xl overflow-hidden shadow-xs">
+                  <Table>
+                    <TableHeader className="bg-zinc-50/50 dark:bg-zinc-855/10">
+                      <TableRow>
+                        <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Timestamp</TableHead>
+                        <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Event</TableHead>
+                        <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Channel</TableHead>
+                        <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Target Recipient</TableHead>
+                        <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Message Summary</TableHead>
+                        <TableHead className="text-xs font-bold text-zinc-700 dark:text-zinc-300 text-right">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="text-xs">
+                      {notifLogs.map((log, offset) => (
+                        <TableRow key={offset} className="hover:bg-zinc-50/20">
+                          <TableCell className="font-medium whitespace-nowrap text-zinc-900 dark:text-zinc-100 font-mono">
+                            {log.timestamp}
+                          </TableCell>
+                          <TableCell className="font-bold whitespace-nowrap">
+                            {log.type === "signup" && <span className="text-indigo-650">🚀 New Signup</span>}
+                            {log.type === "ticket" && <span className="text-amber-650">🛠️ Ticket Raised</span>}
+                            {log.type === "subscription" && <span className="text-emerald-650">💳 Subscription</span>}
+                          </TableCell>
+                          <TableCell className="font-semibold whitespace-nowrap">
+                            {log.channel === "whatsapp" ? (
+                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 font-mono text-[9px] shadow-none py-0 px-1.5 h-4 border border-emerald-100 uppercase">WhatsApp</Badge>
+                            ) : (
+                              <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50 font-mono text-[9px] shadow-none py-0 px-1.5 h-4 border border-blue-100 uppercase">Email</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-zinc-600 dark:text-zinc-400 font-mono">
+                            {log.recipient}
+                          </TableCell>
+                          <TableCell className="text-zinc-700 dark:text-zinc-300 font-sans max-w-xs truncate" title={log.message}>
+                            {log.message}
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            <Badge className={
+                              log.success 
+                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 uppercase text-[9px] font-bold shadow-none' 
+                                : 'bg-rose-50 text-rose-700 hover:bg-rose-50 uppercase text-[9px] font-bold shadow-none'
+                            }>
+                              {log.success ? 'DISPATCHED' : 'FAILED'}
                             </Badge>
                           </TableCell>
                         </TableRow>

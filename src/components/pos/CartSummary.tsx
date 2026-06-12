@@ -4,7 +4,8 @@ import {
   UserPlus, 
   X, 
   ShoppingCart, 
-  Trash2 
+  Trash2,
+  Search
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -20,6 +21,7 @@ import {
   DialogFooter 
 } from '../ui/dialog';
 import { getPackSize, CartItem, Customer } from '../../store/posStore';
+import { cn } from '../../lib/utils';
 
 interface CartSummaryProps {
   cart: CartItem[];
@@ -48,6 +50,7 @@ interface CartSummaryProps {
   handleCreateQuotation: () => void;
   cartContainerRef: React.RefObject<HTMLDivElement>;
   setShowPayment: (show: boolean) => void;
+  className?: string;
 }
 
 export const CartSummary: React.FC<CartSummaryProps> = ({
@@ -76,16 +79,19 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
   setQuoteNotes,
   handleCreateQuotation,
   cartContainerRef,
-  setShowPayment
+  setShowPayment,
+  className
 }) => {
+  const [customerSearch, setCustomerSearch] = React.useState('');
+
   return (
-    <div className="w-full lg:w-[400px] xl:w-[460px] flex flex-col gap-2 h-full overflow-hidden justify-between">
+    <div className={cn("w-full md:w-[325px] lg:w-[400px] xl:w-[460px] flex flex-col gap-2 h-full overflow-hidden justify-between", className)}>
       
       {/* Customer Panel */}
       <Card className="border-zinc-200 shadow-sm shrink-0">
         <CardContent className="p-2">
           {currentCustomer ? (
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center bg-zinc-55/40 p-1.5 rounded-lg border border-zinc-150">
               <div>
                 <h3 className="font-bold text-xs text-zinc-805 flex items-center gap-1">
                   <User className="w-3 h-3 text-zinc-500" />
@@ -105,27 +111,54 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
               </Button>
             </div>
           ) : (
-            <Dialog>
+            <Dialog onOpenChange={(open) => { if (!open) setCustomerSearch(''); }}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="w-full h-8 text-xs border-dashed border-zinc-300 text-zinc-500 hover:text-zinc-950 hover:border-zinc-400 hover:bg-zinc-50 bg-white shadow-none cursor-pointer">
                   <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Select Customer
                 </Button>
               </DialogTrigger>
-              <DialogContent className="bg-white text-zinc-90 w">
+              <DialogContent className="bg-white text-zinc-90 w max-w-sm rounded-2xl border-zinc-200">
                 <DialogHeader>
                   <DialogTitle className="text-sm font-extrabold text-zinc-900">Select Customer Account</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-2 mt-4 max-h-[60vh] overflow-y-auto">
-                  {customers.map(c => (
-                    <div 
-                      key={c.id} 
-                      className="flex justify-between items-center p-3 border border-zinc-150 rounded-xl hover:bg-zinc-50 cursor-pointer" 
-                      onClick={() => setCurrentCustomer(c)}
-                    >
-                      <span className="font-bold text-xs text-zinc-800">{c.name}</span>
-                      <span className="font-mono text-xs text-zinc-500">Bal: ${c.balance.toFixed(2)}</span>
-                    </div>
-                  ))}
+                <div className="space-y-3 mt-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
+                    <Input 
+                      placeholder="Type name, ID, or phone..." 
+                      className="pl-8.5 bg-zinc-55/60 text-xs h-9 border-zinc-205 rounded-xl placeholder:text-zinc-400"
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="space-y-1.5 max-h-[40vh] overflow-y-auto pr-1">
+                    {(() => {
+                      const list = customers.filter(c => 
+                        c.name.toLowerCase().includes(customerSearch.toLowerCase()) || 
+                        (c.id && c.id.toLowerCase().includes(customerSearch.toLowerCase()))
+                      );
+                      if (list.length === 0) {
+                        return <p className="text-center text-xs text-zinc-400 py-6">No matching customers found.</p>;
+                      }
+                      return list.map(c => (
+                        <div 
+                          key={c.id} 
+                          className="flex justify-between items-center p-2.5 border border-zinc-150 rounded-xl hover:bg-indigo-50/20 hover:border-indigo-200/50 transition-all cursor-pointer" 
+                          onClick={() => {
+                            setCurrentCustomer(c);
+                            setCustomerSearch('');
+                          }}
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-bold text-xs text-zinc-805">{c.name}</span>
+                            <span className="text-[10px] text-zinc-400 font-mono">Code: {c.id || 'N/A'}</span>
+                          </div>
+                          <span className="font-mono text-xs text-zinc-500 font-bold bg-zinc-50 px-1.5 py-0.5 rounded border border-zinc-100/50">Bal: ${c.balance.toFixed(2)}</span>
+                        </div>
+                      ));
+                    })()}
+                  </div>
                 </div>
               </DialogContent>
             </Dialog>

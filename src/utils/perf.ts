@@ -1,78 +1,51 @@
-import { logger } from './logger';
-
-export class PerformanceMonitor {
-  private static instance: PerformanceMonitor;
-  private marks = new Map<string, number>();
-
-  private constructor() {}
-
-  public static getInstance(): PerformanceMonitor {
-    if (!PerformanceMonitor.instance) {
-      PerformanceMonitor.instance = new PerformanceMonitor();
-    }
-    return PerformanceMonitor.instance;
+/**
+ * Custom performance metrics and telemetry reporter
+ */
+export const reportWebVital = (name: string, value: number, rating?: string) => {
+  console.log(`[Web Vital] Metric: ${name} | Value: ${Math.round(value)}ms | Rating: ${rating || 'N/A'}`);
+  
+  // Connect with Google Analytics event reporter if available in window context
+  if ((window as any).gtag) {
+    (window as any).gtag('event', name, {
+      value: Math.round(value),
+      rating: rating,
+      event_category: 'web_vitals'
+    });
   }
+};
 
-  startMeasure(name: string) {
-    if (typeof performance !== 'undefined') {
-      this.marks.set(name, performance.now());
-    }
-  }
-
-  endMeasure(name: string): number {
-    if (typeof performance === 'undefined') return 0;
-    
-    const start = this.marks.get(name);
-    if (start === undefined) {
-      console.warn(`[PERF] No start mark registered for: ${name}`);
-      return 0;
-    }
-
-    const duration = performance.now() - start;
-    this.marks.delete(name);
-
-    if (duration > 1000) {
-      logger.warn(`[SLOW OPERATION] ${name} execution took too long: ${duration.toFixed(2)}ms`, { duration });
-    } else {
-      logger.debug(`[PERF] ${name} executed in ${duration.toFixed(2)}ms`, { duration });
-    }
-
-    return duration;
-  }
-}
-
-export const perfMonitor = PerformanceMonitor.getInstance();
-
-// Web Vitals telemetry logging setup
-export function reportWebVitals() {
-  if (typeof window === 'undefined' || typeof PerformanceObserver === 'undefined') return;
-
+/**
+ * Measures the loading duration of the POS catalogue list or search routines
+ */
+export const measurePOSLoad = async (fetchAction: () => Promise<any>): Promise<any> => {
+  const start = performance.now();
   try {
-    // 1. Largest Contentful Paint (LCP)
-    const lcpObserver = new PerformanceObserver((list) => {
-      const entries = list.getEntries();
-      const lastEntry = entries[entries.length - 1] as any;
-      const lcp = lastEntry.renderTime || lastEntry.loadTime || 0;
-      logger.info(`[METRIC] LCP (Largest Contentful Paint) stable: ${lcp.toFixed(2)}ms`, { lcp });
-    });
-    lcpObserver.observe({ entryTypes: ['largest-contentful-paint'] });
-
-    // 2. Cumulative Layout Shift (CLS)
-    let clsValue = 0;
-    const clsObserver = new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        if (!(entry as any).hadRecentInput) {
-          clsValue += (entry as any).value;
-          logger.info(`[METRIC] CLS (Cumulative Layout Shift) update: ${clsValue.toFixed(4)}`, { cls: clsValue });
-        }
-      }
-    });
-    clsObserver.observe({ entryTypes: ['layout-shift'] });
+    const data = await fetchAction();
+    const duration = performance.now() - start;
+    const rating = duration < 1200 ? 'good' : duration < 2500 ? 'needs-improvement' : 'poor';
+    
+    reportWebVital('pos_catalog_load_time', duration, rating);
+    return data;
   } catch (err) {
-    // Graceful catch for legacy browsers/iframes missing observers
+    const duration = performance.now() - start;
+    reportWebVital('pos_catalog_load_failed', duration, 'error');
+    throw err;
   }
-}
+};
 
-if (typeof window !== 'undefined') {
-  window.addEventListener('load', reportWebVitals);
-}
+/**
+ * Measures database sync operation latency
+ */
+export const measureSyncLatency = async <T,>(syncLabel: string, syncAction: () => Promise<T>): Promise<T> => {
+  const start = performance.now();
+  try {
+    const result = await syncAction();
+    const duration = performance.now() - start;
+    reportWebVital(`sync_latency_${syncLabel}`, duration, duration < 3000 ? 'good' : 'slow');
+    return result;
+  } catch (err) {
+    const duration = performance.now() - start;
+    reportWebVital(`sync_failed_${syncLabel}`, duration, 'error');
+    throw err;
+  }
+};

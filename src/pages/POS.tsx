@@ -33,6 +33,7 @@ import { QuotationManager } from '../components/pos/QuotationManager';
 import { PaymentFlow } from '../components/pos/PaymentFlow';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
+import { cn } from '../lib/utils';
 import { useReactToPrint } from 'react-to-print';
 import { useNavigate } from 'react-router-dom';
 import { Package, Tag, ShoppingCart, HelpCircle } from 'lucide-react';
@@ -107,6 +108,7 @@ export default function POS() {
   const [isQuotesListOpen, setIsQuotesListOpen] = useState(false);
   const [dbQuotes, setDbQuotes] = useState<any[]>([]);
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
+  const [activeMobileTab, setActiveMobileTab] = useState<'catalog' | 'cart'>('catalog');
 
   // refs
   const receiptRef = useRef<HTMLDivElement>(null);
@@ -1013,86 +1015,113 @@ export default function POS() {
 
   // Active cashier view grid container
   return (
-    <div className="flex flex-col lg:flex-row h-full lg:h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] gap-4 pb-2">
+    <div className="flex flex-col h-full overflow-hidden select-none">
       
-      {/* LEFT COLUMN: Products & Search */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        
-        {/* Header toolbar */}
-        <div className="flex justify-between items-center mb-3">
-          <h1 className="text-xl font-black tracking-tight text-zinc-900">Point of Sale</h1>
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => {
-                setShowShiftDetails(true);
-                refreshActiveSession();
-              }}
-              className="border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 font-bold border-dashed text-xs shadow-none cursor-pointer rounded-xl"
-            >
-              Shift Controls
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => {
-                fetchQuotations();
-                setIsQuotesListOpen(true);
-              }}
-              className="border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 font-bold border-dashed text-xs shadow-none cursor-pointer rounded-xl"
-            >
-              Load Quote
-            </Button>
-          </div>
-        </div>
-
-        {/* Dynamic products catalog list cards */}
-        <ProductGrid 
-          products={products}
-          categories={categories}
-          activeCategory={activeCategory}
-          setActiveCategory={setActiveCategory}
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          isListening={isListening}
-          speechSupported={speechSupported}
-          startVoiceSearch={startVoiceSearch}
-          addToCart={addToCart}
-          isLoading={isLoading}
-          filteredProducts={filteredProducts}
-        />
+      {/* Mobile Tab Selector - Hidden on desktop/tablets (md+) */}
+      <div className="flex select-none bg-zinc-100 dark:bg-zinc-900 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 md:hidden justify-between w-full max-w-sm mx-auto mb-3 gap-1 shrink-0 animate-fade-in">
+        <button
+          type="button"
+          onClick={() => setActiveMobileTab('catalog')}
+          className={`flex-1 py-1.8 px-4 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${activeMobileTab === 'catalog' ? 'bg-white dark:bg-zinc-800 shadow-xs text-blue-600 dark:text-blue-400' : 'text-zinc-500 hover:text-zinc-750'}`}
+        >
+          Browse Products
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveMobileTab('cart')}
+          className={`flex-1 py-1.8 px-4 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 text-center ${activeMobileTab === 'cart' ? 'bg-white dark:bg-zinc-800 shadow-xs text-blue-600 dark:text-blue-400' : 'text-zinc-500 hover:text-zinc-750'}`}
+        >
+          Cart Summary
+          {cart.length > 0 && (
+            <span className="bg-rose-500 text-white rounded-full text-[9px] w-4.5 h-4.5 flex items-center justify-center font-bold">
+              {cart.reduce((sum, item) => sum + item.quantity, 0)}
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* RIGHT COLUMN: Active shopping Cart and total prices panels */}
-      <CartSummary 
-        cart={cart}
-        currentCustomer={currentCustomer}
-        setCurrentCustomer={setCurrentCustomer}
-        customers={customers}
-        selectedCartItemId={selectedCartItemId}
-        setSelectedCartItemId={setSelectedCartItemId}
-        setIsNewInput={setIsNewInput}
-        setItemPricingTier={setItemPricingTier}
-        updateQuantity={updateQuantity}
-        removeFromCart={removeFromCart}
-        clearCart={clearCart}
-        parkSale={parkSale}
-        totals={totals}
-        vatEnabled={vatEnabled}
-        numpadMode={numpadMode}
-        setNumpadMode={setNumpadMode}
-        handleNumpadKey={handleNumpadKey}
-        isQuoteDialogOpen={isQuoteDialogOpen}
-        setIsQuoteDialogOpen={setIsQuoteDialogOpen}
-        quoteCustomerName={quoteCustomerName}
-        setQuoteCustomerName={setQuoteCustomerName}
-        quoteNotes={quoteNotes}
-        setQuoteNotes={setQuoteNotes}
-        handleCreateQuotation={handleCreateQuotation}
-        cartContainerRef={cartContainerRef}
-        setShowPayment={setShowPayment}
-      />
+      <div className="flex-1 flex flex-col md:flex-row h-full md:h-[calc(100vh-5.5rem)] max-h-[calc(100vh-5.5rem)] gap-4 pb-2 overflow-hidden">
+        
+        {/* LEFT COLUMN: Products & Search */}
+        <div className={cn("flex-1 flex flex-col h-full overflow-hidden animate-fade-in", activeMobileTab !== 'catalog' && "hidden md:flex")}>
+          
+          {/* Header toolbar */}
+          <div className="flex justify-between items-center mb-3">
+            <h1 className="text-xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">Point of Sale</h1>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  setShowShiftDetails(true);
+                  refreshActiveSession();
+                }}
+                className="border-zinc-200 bg-white dark:bg-zinc-900 border-dashed text-xs shadow-none cursor-pointer rounded-xl font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100"
+              >
+                Shift Controls
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  fetchQuotations();
+                  setIsQuotesListOpen(true);
+                }}
+                className="border-zinc-200 bg-white dark:bg-zinc-900 border-dashed text-xs shadow-none cursor-pointer rounded-xl font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100"
+              >
+                Load Quote
+              </Button>
+            </div>
+          </div>
+
+          {/* Dynamic products catalog list cards */}
+          <ProductGrid 
+            products={products}
+            categories={categories}
+            activeCategory={activeCategory}
+            setActiveCategory={setActiveCategory}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            isListening={isListening}
+            speechSupported={speechSupported}
+            startVoiceSearch={startVoiceSearch}
+            addToCart={addToCart}
+            isLoading={isLoading}
+            filteredProducts={filteredProducts}
+          />
+        </div>
+
+        {/* RIGHT COLUMN: Active shopping Cart and total prices panels */}
+        <CartSummary 
+          className={cn(activeMobileTab !== 'cart' && "hidden md:flex")}
+          cart={cart}
+          currentCustomer={currentCustomer}
+          setCurrentCustomer={setCurrentCustomer}
+          customers={customers}
+          selectedCartItemId={selectedCartItemId}
+          setSelectedCartItemId={setSelectedCartItemId}
+          setIsNewInput={setIsNewInput}
+          setItemPricingTier={setItemPricingTier}
+          updateQuantity={updateQuantity}
+          removeFromCart={removeFromCart}
+          clearCart={clearCart}
+          parkSale={parkSale}
+          totals={totals}
+          vatEnabled={vatEnabled}
+          numpadMode={numpadMode}
+          setNumpadMode={setNumpadMode}
+          handleNumpadKey={handleNumpadKey}
+          isQuoteDialogOpen={isQuoteDialogOpen}
+          setIsQuoteDialogOpen={setIsQuoteDialogOpen}
+          quoteCustomerName={quoteCustomerName}
+          setQuoteCustomerName={setQuoteCustomerName}
+          quoteNotes={quoteNotes}
+          setQuoteNotes={setQuoteNotes}
+          handleCreateQuotation={handleCreateQuotation}
+          cartContainerRef={cartContainerRef}
+          setShowPayment={setShowPayment}
+        />
+      </div>
 
       {/* Hidden and external modals including receipts and shift closing */}
       <PaymentFlow 

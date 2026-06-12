@@ -38,6 +38,8 @@ import { OfflineStatusBadge } from './OfflineStatusBadge';
 import { TarezaLogo } from './ui/Logo';
 import { AIAssistant } from './AIAssistant';
 import { supabase } from '../lib/firebaseClient';
+import { Breadcrumbs } from './Breadcrumbs';
+import { CommandPalette } from './CommandPalette';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -109,7 +111,7 @@ export default function Layout() {
   const { signOut, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw' || user?.email === 'dev@tarezaerp.co.zw';
+  const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw' || user?.email === 'dev@tarezaerp.co.zw' || user?.email === 'tapsforex@gmail.com';
   // Screen lock removed per user request
   const isLocked = false;
   const [businessName, setBusinessName] = React.useState<string>('');
@@ -336,12 +338,15 @@ export default function Layout() {
                 </SheetContent>
               </Sheet>
               
-              <div className="hidden sm:flex relative w-64 max-w-md ml-2">
+              <div 
+                className="hidden sm:flex relative w-64 max-w-md ml-2 cursor-pointer"
+                onClick={() => window.dispatchEvent(new CustomEvent('open-command-palette'))}
+              >
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                <Input 
-                  type="search" 
-                  placeholder="Search products, customers, reports..." 
-                  className="pl-9 bg-zinc-100/50 dark:bg-zinc-900/50 border-transparent focus-visible:bg-white dark:focus-visible:bg-zinc-900 focus-visible:border-blue-500/50 shadow-none h-10 rounded-full text-sm" 
+                <input 
+                  type="button" 
+                  value="Search features... (⌘K)" 
+                  className="pl-9 pr-4 text-left bg-zinc-100/50 dark:bg-zinc-900/50 border-transparent focus-visible:bg-white dark:focus-visible:bg-zinc-900 focus-visible:border-blue-500/50 shadow-none h-10 rounded-full text-xs text-zinc-500 font-medium cursor-pointer w-full text-ellipsis overflow-hidden whitespace-nowrap outline-none" 
                 />
               </div>
             </div>
@@ -499,12 +504,14 @@ export default function Layout() {
 
           <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
             <div className="mx-auto max-w-[1400px]">
+              <Breadcrumbs />
               <Outlet />
             </div>
           </main>
         </div>
       </div>
       <AIAssistant />
+      <CommandPalette />
     </div>
   );
 }

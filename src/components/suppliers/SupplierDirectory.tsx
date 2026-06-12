@@ -174,21 +174,54 @@ export function SupplierDirectory() {
       </div>
 
       <Sheet open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <SheetContent className="w-full sm:max-w-md">
+        <SheetContent className="w-full sm:max-w-md bg-white border-l">
           <SheetHeader>
-            <SheetTitle>Add Supplier</SheetTitle>
-            <SheetDescription>Enter the details for the new supplier.</SheetDescription>
+            <SheetTitle className="text-lg font-bold text-zinc-900">Add Supplier</SheetTitle>
+            <SheetDescription className="text-sm text-zinc-500">Enter the details for the new supplier.</SheetDescription>
+            <div className="mt-2 text-[11px]">
+              {(!newSupplierName.trim()) ? (
+                <div className="bg-amber-50 text-amber-805 border border-amber-200/60 p-2 rounded-xl flex items-center gap-1.5 font-semibold">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
+                  1 required field remaining (Company Name)
+                </div>
+              ) : (
+                <div className="bg-emerald-50 text-emerald-805 border border-emerald-200/60 p-2 rounded-xl flex items-center gap-1.5 font-semibold">
+                  ✓ Supplier validated and ready
+                </div>
+              )}
+            </div>
           </SheetHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Company Name</label>
-              <Input value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} placeholder="Acme Logistics" />
+          <div className="space-y-4 py-5 font-sans">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-650 flex items-center justify-between">
+                <span>Company Name *</span>
+                {!newSupplierName.trim() && (
+                  <span className="text-[10px] text-red-500 font-medium">Required</span>
+                )}
+              </label>
+              <Input 
+                value={newSupplierName} 
+                onChange={(e) => setNewSupplierName(e.target.value)} 
+                className={`bg-white h-10 rounded-xl transition-all ${!newSupplierName.trim() ? 'border-red-300 focus-visible:ring-red-300' : 'border-zinc-200'}`}
+                placeholder="Acme Logistics Ltd" 
+              />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Contact Person</label>
-              <Input value={newSupplierContact} onChange={(e) => setNewSupplierContact(e.target.value)} placeholder="John Doe" />
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-650">Contact Person</label>
+              <Input 
+                value={newSupplierContact} 
+                onChange={(e) => setNewSupplierContact(e.target.value)} 
+                className="bg-white h-10 rounded-xl border-zinc-200" 
+                placeholder="John Doe" 
+              />
             </div>
-            <Button className="w-full" onClick={handleAddSupplier}>Save Supplier</Button>
+            <Button 
+              className="w-full h-11 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl mt-4" 
+              disabled={!newSupplierName.trim()} 
+              onClick={handleAddSupplier}
+            >
+              Save Supplier
+            </Button>
           </div>
         </SheetContent>
       </Sheet>

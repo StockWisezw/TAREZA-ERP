@@ -260,6 +260,22 @@ export default function Login() {
           { business_id: newBusinessId, name: 'General' }
         ]);
 
+        // Trigger email and WhatsApp signup alerts in background securely
+        fetch('/api/notifications/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'signup',
+            payload: {
+              email: email,
+              firstName: firstName,
+              lastName: lastName,
+              businessName: businessName,
+              plan: planChoice === 'TRIAL' ? '14-Day Free Trial' : '30-Day Pro Plan'
+            }
+          })
+        }).catch(err => console.error("Signup notification dispatch failed", err));
+
         toast.success('Signup successful! Welcome to Tareza ERP.');
         navigate('/dashboard');
       } catch (error: any) {

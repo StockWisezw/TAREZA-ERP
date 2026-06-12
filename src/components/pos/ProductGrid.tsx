@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Search, 
   Mic, 
@@ -42,6 +42,15 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   isLoading,
   filteredProducts
 }) => {
+  const [gridScale, setGridScale] = useState<'cozy' | 'comfortable' | 'compact'>('comfortable');
+
+  let gridColsClass = "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4";
+  if (gridScale === 'compact') {
+    gridColsClass = "grid-cols-3 sm:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6";
+  } else if (gridScale === 'cozy') {
+    gridColsClass = "grid-cols-2 sm:grid-cols-2 xl:grid-cols-3";
+  }
+
   return (
     <div className="flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden h-full">
       {/* Top Search Bar Area */}
@@ -75,28 +84,57 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
           </Button>
         </div>
         
-        {/* Categories */}
-        <div className="flex gap-1.5 mt-2 overflow-x-auto pb-1.5 scrollbar-hide">
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
-              className={`flex items-center gap-1.5 py-1 px-3.5 rounded-lg border text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
-                activeCategory === cat.id 
-                ? 'border-zinc-900 bg-zinc-90 w text-white dark:bg-zinc-100 dark:text-zinc-950 shadow-sm' 
-                : 'border-zinc-200 bg-white text-zinc-650 hover:border-zinc-300 hover:bg-zinc-50/80'
-              }`}
+        {/* Categories & Density Controls */}
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 mt-2">
+          <div className="flex-1 flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-hide">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id)}
+                className={`flex items-center gap-1.5 py-1 px-3.5 rounded-lg border text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
+                  activeCategory === cat.id 
+                  ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 shadow-sm' 
+                  : 'border-zinc-200 bg-white text-zinc-650 hover:border-zinc-300 hover:bg-zinc-50/80'
+                }`}
+              >
+                <span className="scale-75 text-zinc-400 opacity-80">{cat.icon}</span>
+                <span>{cat.name}</span>
+              </button>
+            ))}
+          </div>
+          
+          <div className="shrink-0 flex items-center bg-zinc-100 p-0.5 rounded-lg select-none self-end sm:self-auto border border-zinc-200">
+            <button 
+              type="button" 
+              onClick={() => setGridScale('cozy')}
+              className={`px-2 py-1 text-[9px] font-black rounded-md cursor-pointer transition-all ${gridScale === 'cozy' ? 'bg-white text-zinc-900 shadow-xs' : 'text-zinc-500 hover:text-zinc-705'}`}
+              title="Cozy Grid (Larger Display)"
             >
-              <span className="scale-75 text-zinc-400 opacity-80">{cat.icon}</span>
-              <span>{cat.name}</span>
+              Cozy
             </button>
-          ))}
+            <button 
+              type="button" 
+              onClick={() => setGridScale('comfortable')}
+              className={`px-2 py-1 text-[9px] font-black rounded-md cursor-pointer transition-all ${gridScale === 'comfortable' ? 'bg-white text-zinc-900 shadow-xs' : 'text-zinc-500 hover:text-zinc-705'}`}
+              title="Fit Grid (Standard Display)"
+            >
+              Fit
+            </button>
+            <button 
+              type="button" 
+              onClick={() => setGridScale('compact')}
+              className={`px-2 py-1 text-[9px] font-black rounded-md cursor-pointer transition-all ${gridScale === 'compact' ? 'bg-white text-zinc-900 shadow-xs' : 'text-zinc-500 hover:text-zinc-705'}`}
+              title="Tiny Grid (Most Products)"
+            >
+              Tiny
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Main product catalogue view area */}
       <ScrollArea className="flex-1 p-3">
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 bg-white">
+        <div className={`grid ${gridColsClass} gap-3 bg-white`}>
           {isLoading && filteredProducts.length === 0 ? (
             Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="animate-pulse bg-white border border-zinc-150 rounded-xl overflow-hidden flex flex-col h-[180px]">
