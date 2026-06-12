@@ -17,7 +17,9 @@ service cloud.firestore {
     }
     
     function belongsToUserBusiness(bizId) {
-      return isSignedIn() && bizId != null && bizId != "" && getUserBusinessId() == bizId;
+      return isSignedIn() && bizId != null && bizId != "" && 
+             exists(/databases/$(database)/documents/business_users/$(request.auth.uid)) && 
+             getUserBusinessId() == bizId;
     }
     
     function incoming() {
@@ -32,187 +34,232 @@ service cloud.firestore {
       return existing().business_id == incoming().business_id;
     }
 
-    // 1. Profiles (Owner only)
+    function isSystemDeveloper() {
+      return isSignedIn() && 
+        request.auth.token.email != null && (
+          request.auth.token.email.endsWith("@tarezaerp.co.zw") ||
+          request.auth.token.email == "admin@tarezaerp.co.zw" ||
+          request.auth.token.email == "developer@tarezaerp.co.zw" ||
+          request.auth.token.email == "dev@tarezaerp.co.zw" ||
+          request.auth.token.email == "tapsforex@gmail.com"
+        );
+    }
+
+    // 1. Profiles (Owner and Developer)
     match /profiles/{profileId} {
-      allow read, write: if isSignedIn() && request.auth.uid == profileId;
+      allow read, write: if isSystemDeveloper() || (isSignedIn() && request.auth.uid == profileId);
     }
     
     // 2. Business Users linkage (Tenancy gatekeeper)
     match /business_users/{userId} {
-      allow read: if isSignedIn() && (
+      allow read: if isSystemDeveloper() || (isSignedIn() && (
         request.auth.uid == userId ||
         (resource != null && resource.data.user_id == request.auth.uid) ||
         belongsToUserBusiness(existing().business_id)
-      );
-      allow write: if isSignedIn() && (
+      ));
+      allow write: if isSystemDeveloper() || (isSignedIn() && (
         request.auth.uid == userId || 
         (incoming() != null && incoming().user_id == request.auth.uid)
       ) && (
         resource == null ||
         belongsToUserBusiness(existing().business_id)
-      );
+      ));
     }
     
     // 3. Businesses Profile
     match /businesses/{businessId} {
-      allow read: if belongsToUserBusiness(businessId);
-      allow write: if belongsToUserBusiness(businessId) || 
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(businessId);
+      allow write: if isSystemDeveloper() || 
+                   belongsToUserBusiness(businessId) || 
                    (request.resource.data.system_admin_key == "paynow_secure_bypass_3892");
     }
-
-    // 4. Primary Business Scoped Tables (Strict business_id tenancy checks)
-    // All follow strict tenancy pattern:
-    // 1. Each record MUST have business_id
-    // 2. business_id cannot be modified
-    // 3. User must own the business
+    
+    // 4. Primary Business Scoped Tables (Strict business_id tenancy checks with Developer bypass)
     
     match /branches/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /roles/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
 
     match /role_permissions/{id} {
-      allow read, write: if false;
+      allow read, write: if isSystemDeveloper();
     }
     
     match /categories/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /products/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /inventory/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /customers/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /suppliers/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /sales/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
 
     match /sale_items/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /expense_categories/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /cash_drawer_logs/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /tax_rates/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /purchase_orders/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /stocktakes_advanced/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /inventory_transfers/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
 
     match /stock_movements/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /subscriptions/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if (belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged())) ||
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || 
+                   (belongsToUserBusiness(incoming().business_id) && (resource == null || businessIdUnchanged())) ||
                    (request.resource.data.system_admin_key == "paynow_secure_bypass_3892");
     }
     
     match /accounts/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /journal_entries/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
 
     match /journal_lines/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /register_sessions/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     // System audit logger (Trace compliance)
     match /audit_logs/{id} {
-      allow read: if belongsToUserBusiness(existing().business_id);
-      allow write: if belongsToUserBusiness(incoming().business_id) && 
-                   (resource == null || businessIdUnchanged());
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
     }
     
     match /support_tickets/{id} {
-      allow read: if isSignedIn() && (
+      allow read: if isSystemDeveloper() || (isSignedIn() && (
         request.auth.uid == existing().user_id ||
         belongsToUserBusiness(existing().business_id)
-      );
-      allow write: if isSignedIn() && (
+      ));
+      allow write: if isSystemDeveloper() || (isSignedIn() && (
         request.auth.uid == incoming().user_id ||
         belongsToUserBusiness(incoming().business_id)
-      ) && (resource == null || businessIdUnchanged());
+      ) && (resource == null || businessIdUnchanged()));
+    }
+
+    // 5. New custom collections for specialized user channels
+    match /marketing_assets/{id} {
+      allow read: if isSystemDeveloper() || (isSignedIn() && (
+        resource == null || request.auth.uid == resource.data.userId
+      ));
+      allow write: if isSystemDeveloper() || (isSignedIn() && (
+        request.resource.data.userId == request.auth.uid &&
+        (resource == null || resource.data.userId == request.auth.uid)
+      ));
+    }
+
+    match /private_messages/{id} {
+      allow read: if isSystemDeveloper() || (isSignedIn() && (
+        request.auth.uid == resource.data.sender_id ||
+        request.auth.uid == resource.data.receiver_id
+      ));
+      allow write: if isSystemDeveloper() || (isSignedIn() && (
+        request.auth.uid == request.resource.data.sender_id
+      ));
+    }
+
+    match /trial_bookkeepings/{id} {
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
+    }
+
+    match /currencies/{id} {
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
+    }
+
+    match /exchange_rate_history/{id} {
+      allow read, write: if isSystemDeveloper() || isSignedIn();
     }
   }
 }

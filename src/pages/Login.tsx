@@ -503,33 +503,40 @@ export default function Login() {
       </div>
 
       {/* Right Pane - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-card relative">
-        <div className="absolute top-8 left-8">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-gradient-to-br from-slate-50 via-indigo-50/10 to-purple-50/20 relative overflow-hidden">
+        {/* Lighter, brand-inspired background element layers */}
+        <div className="absolute -top-10 -right-10 w-96 h-96 rounded-full bg-indigo-200/25 blur-3xl pointer-events-none" />
+        <div className="absolute top-1/2 left-1/3 w-80 h-80 rounded-full bg-purple-200/15 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 w-96 h-96 rounded-full bg-cyan-200/15 blur-3xl pointer-events-none" />
+
+        <div className="absolute top-8 left-8 z-20">
           <Button 
             variant="ghost" 
             size="sm" 
             onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-150 font-semibold rounded-xl text-xs sm:flex hidden"
+            className="flex items-center gap-2 text-zinc-500 hover:text-zinc-950 font-semibold rounded-xl text-xs"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Home
           </Button>
         </div>
-        <div className="absolute top-8 right-8 flex items-center lg:hidden font-sans">
-          <TarezaLogo size="sm" showSubtitle={false} />
-        </div>
-        <Card className="w-full max-w-md border-0 shadow-none sm:border sm:shadow-lg sm:rounded-2xl overflow-hidden font-sans">
-          <CardHeader className="space-y-2 pb-8 pt-8 px-8 border-b border-border/40 bg-zinc-50/50">
-            <CardTitle className="text-2xl font-bold tracking-tight">
-              {isForgotPassword 
-                ? 'Reset Password' 
-                : (isSignUp ? 'Create an account' : 'Welcome back')}
-            </CardTitle>
-            <CardDescription className="text-sm">
-              {isForgotPassword 
-                ? 'Enter your email address and we\'ll send you a link to reset your password.' 
-                : (isSignUp ? 'Enter your details to get started' : 'Enter your email and password to access your account')}
-            </CardDescription>
+
+        <Card className="w-full max-w-md border border-zinc-200/80 shadow-2xl rounded-2xl overflow-hidden font-sans bg-white/95 backdrop-blur-md relative z-10">
+          <CardHeader className="space-y-4 pb-6 pt-8 px-8 border-b border-border/40 bg-zinc-50/40 flex flex-col items-center">
+            {/* Centered professional brand logo */}
+            <TarezaLogo size="md" showSubtitle={true} className="mb-1" />
+            <div className="space-y-1.5 text-center w-full">
+              <CardTitle className="text-2xl font-black tracking-tight text-zinc-900">
+                {isForgotPassword 
+                  ? 'Reset Password' 
+                  : (isSignUp ? 'Create an account' : 'Welcome back')}
+              </CardTitle>
+              <CardDescription className="text-sm text-zinc-500 font-medium">
+                {isForgotPassword 
+                  ? 'Enter your email address and we\'ll send you a link to reset your password.' 
+                  : (isSignUp ? 'Enter your details to get started' : 'Enter your email and password to access your account')}
+              </CardDescription>
+            </div>
           </CardHeader>
 
           {/* Quick Demo Portals Switcher */}

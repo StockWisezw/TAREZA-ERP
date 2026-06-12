@@ -210,6 +210,35 @@
         "created_at": { "type": "string" }
       },
       "required": ["id", "business_id", "supplier_id"]
+    },
+    "Currency": {
+      "title": "Currency",
+      "description": "Custom transaction and billing currency for multi-currency compliance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "business_id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "symbol": { "type": "string" },
+        "exchange_rate": { "type": "number" },
+        "is_base": { "type": "boolean" },
+        "is_active": { "type": "boolean" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "business_id", "code", "exchange_rate"]
+    },
+    "ExchangeRateHistory": {
+      "title": "ExchangeRateHistory",
+      "description": "Audit and timeline log of historical exchange rate updates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "currency_id": { "type": "string" },
+        "rate": { "type": "number" },
+        "effective_date": { "type": "string" }
+      },
+      "required": ["id", "currency_id", "rate", "effective_date"]
     }
   },
   "firestore": {
@@ -260,6 +289,14 @@
     "/support_tickets/{ticketId}": {
       "schema": "SupportTicket",
       "description": "Log of client help desk tickets"
+    },
+    "/currencies/{currencyId}": {
+      "schema": "Currency",
+      "description": "Corporate or multi-currency definitions"
+    },
+    "/exchange_rate_history/{historyId}": {
+      "schema": "ExchangeRateHistory",
+      "description": "Historic ledger exchange rates references"
     }
   }
 }

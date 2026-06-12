@@ -3,8 +3,8 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { Paynow } from "paynow";
-import { initializeApp } from "firebase/app";
-import { getFirestore, doc, updateDoc, collection, addDoc, getDoc } from "firebase/firestore";
+import { initializeApp as initAdminApp } from "firebase-admin/app";
+import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { GoogleGenAI } from "@google/genai";
 import { dispatchAlert, notificationAuditLogs } from "./server-notification-service.js";
 import { initBackgroundStockTracker, checkLowStockAndNotify } from "./server-stock-checker.js";
@@ -70,8 +70,10 @@ async function startServer() {
     };
   }
 
-  const firebaseApp = initializeApp(firebaseConfig);
-  const firestoreDb = getFirestore(firebaseApp, (firebaseConfig as any).firestoreDatabaseId);
+  const adminApp = initAdminApp({
+    projectId: (firebaseConfig as any).projectId,
+  });
+  const firestoreDb = getAdminFirestore(adminApp, (firebaseConfig as any).firestoreDatabaseId);
 
   // Initialize automated background stock replenishment tracker
   initBackgroundStockTracker(firestoreDb);
@@ -183,16 +185,16 @@ async function startServer() {
         expiryDate.setDate(expiryDate.getDate() + 30);
 
         // Update businesses table in Firestore
-        const businessRef = doc(firestoreDb, "businesses", business_id);
-        await updateDoc(businessRef, {
+        const businessRef = firestoreDb.doc(`businesses/${business_id}`);
+        await businessRef.update({
           subscription_status: "ACTIVE",
           subscription_end_date: expiryDate.toISOString(),
           system_admin_key: "paynow_secure_bypass_3892"
         });
 
         // Add to subscriptions collection if not already there
-        const subscriptionsCol = collection(firestoreDb, "subscriptions");
-        await addDoc(subscriptionsCol, {
+        const subscriptionsCol = firestoreDb.collection("subscriptions");
+        await subscriptionsCol.add({
           business_id: business_id,
           plan_name: "pro",
           status: "active",
@@ -203,8 +205,8 @@ async function startServer() {
         // Fetch business metadata for rich notification formatting
         let bName = "Pro Business Workspace";
         try {
-          const bSnap = await getDoc(businessRef);
-          if (bSnap.exists()) {
+          const bSnap = await businessRef.get();
+          if (bSnap.exists) {
             bName = bSnap.data()?.name || "Pro Business Workspace";
           }
         } catch (bErr) {
@@ -252,15 +254,15 @@ async function startServer() {
           const expiryDate = new Date();
           expiryDate.setDate(expiryDate.getDate() + 30);
 
-          const businessRef = doc(firestoreDb, "businesses", businessId);
-          await updateDoc(businessRef, {
+          const businessRef = firestoreDb.doc(`businesses/${businessId}`);
+          await businessRef.update({
             subscription_status: "ACTIVE",
             subscription_end_date: expiryDate.toISOString(),
             system_admin_key: "paynow_secure_bypass_3892"
           });
 
-          const subscriptionsCol = collection(firestoreDb, "subscriptions");
-          await addDoc(subscriptionsCol, {
+          const subscriptionsCol = firestoreDb.collection("subscriptions");
+          await subscriptionsCol.add({
             business_id: businessId,
             plan_name: "pro",
             status: "active",
@@ -273,8 +275,8 @@ async function startServer() {
           // Fetch business metadata for rich callback alerts
           let bName = "Pro Business Workspace";
           try {
-            const bSnap = await getDoc(businessRef);
-            if (bSnap.exists()) {
+            const bSnap = await businessRef.get();
+            if (bSnap.exists) {
               bName = bSnap.data()?.name || "Pro Business Workspace";
             }
           } catch (bErr) {

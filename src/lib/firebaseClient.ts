@@ -202,15 +202,30 @@ export interface FirestoreErrorInfo {
   authInfo: {
     userId?: string | null;
     email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
   }
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const currentUser = fireAuth.currentUser;
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
+      userId: currentUser?.uid || null,
+      email: currentUser?.email || null,
+      emailVerified: currentUser?.emailVerified || null,
+      isAnonymous: currentUser?.isAnonymous || null,
+      tenantId: (currentUser as any)?.tenantId || null,
+      providerInfo: currentUser?.providerData?.map((p: any) => ({
+        providerId: p.providerId,
+        email: p.email
+      })) || []
     },
     operationType,
     path
@@ -262,7 +277,10 @@ const ALLOWED_KEYS: Record<string, string[]> = {
   journal_lines: ['id', 'business_id', 'journal_entry_id', 'account_id', 'debit', 'credit', 'description'],
   register_sessions: ['id', 'business_id', 'branch_id', 'user_id', 'opening_balance', 'closing_balance', 'expected_balance', 'variance', 'status', 'opened_at', 'closed_at', 'sales_count', 'sales_total', 'refunds_total', 'payouts_total', 'created_at'],
   audit_logs: ['id', 'business_id', 'user_id', 'user_email', 'action', 'module', 'old_value', 'new_value', 'created_at'],
-  support_tickets: ['id', 'user_id', 'user_email', 'business_id', 'business_name', 'subject', 'category', 'priority', 'status', 'description', 'response', 'created_at', 'updated_at']
+  support_tickets: ['id', 'user_id', 'user_email', 'business_id', 'business_name', 'subject', 'category', 'priority', 'status', 'description', 'response', 'created_at', 'updated_at'],
+  trial_bookkeepings: ['id', 'business_id', 'branch_id', 'account_id', 'debit', 'credit', 'amount', 'type', 'created_at'],
+  currencies: ['id', 'business_id', 'code', 'name', 'symbol', 'exchange_rate', 'is_base', 'is_active', 'created_at'],
+  exchange_rate_history: ['id', 'currency_id', 'rate', 'effective_date']
 };
 
 function normalizeInput(item: any, table: string): any {

@@ -42,15 +42,54 @@ export function usePOSSession() {
           .maybeSingle();
         if (userBusiness?.business_id) {
           const activeRS = await getOpenRegisterSession(userBusiness.business_id, userContext.user.id);
-          if (activeRS) {
-            setActiveSession(activeRS);
-          }
+          setActiveSession(activeRS || null);
         }
       }
     } catch (e) {
       console.error("Failed to refresh active session metrics:", e);
     }
   };
+
+  // Check and load active register session on mount
+  useEffect(() => {
+    let active = true;
+    const initSession = async () => {
+      try {
+        setSessionLoading(true);
+        const { data: userContext } = await supabase.auth.getUser();
+        if (!active) return;
+        if (userContext?.user) {
+          const { data: userBusiness } = await supabase
+            .from('business_users')
+            .select('business_id')
+            .eq('user_id', userContext.user.id)
+            .limit(1)
+            .maybeSingle();
+          if (!active) return;
+          if (userBusiness?.business_id) {
+            const activeRS = await getOpenRegisterSession(userBusiness.business_id, userContext.user.id);
+            if (!active) return;
+            setActiveSession(activeRS || null);
+          } else {
+            setActiveSession(null);
+          }
+        } else {
+          setActiveSession(null);
+        }
+      } catch (e) {
+        console.error("Failed to load active register session on mount:", e);
+      } finally {
+        if (active) {
+          setSessionLoading(false);
+        }
+      }
+    };
+
+    initSession();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const handleSessionRefresh = () => {
