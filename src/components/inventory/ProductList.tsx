@@ -106,6 +106,21 @@ export function ProductList({ onImportClick }: ProductListProps) {
   // Real-time Validation States
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
+  // User Font Sizing & Table Density Fit Settings
+  const [fontSize, setFontSize] = useState<number>(() => {
+    const val = localStorage.getItem('products_font_size');
+    return val ? parseInt(val, 10) : 11; // Default to 11px for a clean, highly compact look
+  });
+  const [rowPadding, setRowPadding] = useState<'normal' | 'compact' | 'supertyght'>(() => {
+    return (localStorage.getItem('products_row_density') as 'normal' | 'compact' | 'supertyght') || 'supertyght'; // Default to supertyght to fit everything on one page immediately
+  });
+  const [fitToScreen, setFitToScreen] = useState<boolean>(() => {
+    return localStorage.getItem('products_fit_to_screen') !== 'false'; // Defaults to true to stay on a single screen
+  });
+  const [showImages, setShowImages] = useState<boolean>(() => {
+    return localStorage.getItem('products_show_images') === 'true'; // Default to false to fit better on one page, toggleable in View menu
+  });
+
   useEffect(() => {
     if (!isAddOpen) {
       setValidationErrors({});
@@ -859,6 +874,35 @@ export function ProductList({ onImportClick }: ProductListProps) {
 
   return (
     <div className="space-y-4">
+      {/* 🚀 Dynamic High-Fidelity Custom style block for screen-fitting and font-sizes */}
+      <style>{`
+        .dense-table-custom th, 
+        .dense-table-custom td {
+          font-size: ${fontSize}px !important;
+        }
+        .dense-table-custom td {
+          padding-top: ${rowPadding === 'supertyght' ? '3px' : rowPadding === 'compact' ? '6px' : '12px'} !important;
+          padding-bottom: ${rowPadding === 'supertyght' ? '3px' : rowPadding === 'compact' ? '6px' : '12px'} !important;
+          height: auto !important;
+        }
+        .dense-table-custom td input {
+          font-size: ${fontSize}px !important;
+          height: ${rowPadding === 'supertyght' ? '22px' : rowPadding === 'compact' ? '28px' : '36px'} !important;
+          padding-top: 2px !important;
+          padding-bottom: 2px !important;
+        }
+        .dense-table-custom th {
+          padding-top: ${rowPadding === 'supertyght' ? '4px' : rowPadding === 'compact' ? '7px' : '12px'} !important;
+          padding-bottom: ${rowPadding === 'supertyght' ? '4px' : rowPadding === 'compact' ? '7px' : '12px'} !important;
+          font-size: ${fontSize}px !important;
+        }
+        ${!showImages ? `
+          .dense-table-custom th:nth-child(2), 
+          .dense-table-custom td:nth-child(2) {
+            display: none !important;
+          }
+        ` : ''}
+      `}</style>
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div className="flex flex-col sm:flex-row gap-2 w-full lg:max-w-xl">
           <div className="relative flex-1">
@@ -943,7 +987,109 @@ export function ProductList({ onImportClick }: ProductListProps) {
           <Button variant="outline" className="bg-white shadow-sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Print</Button>
           <Button variant="outline" className="bg-white shadow-sm" onClick={exportCSV}><Download className="mr-2 h-4 w-4" /> Export</Button>
           <Button variant="outline" className="bg-white shadow-sm"><Filter className="mr-2 h-4 w-4" /> Filter</Button>
-          <Button variant="outline" className="bg-white shadow-sm"><Settings2 className="mr-2 h-4 w-4" /> View</Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger render={
+              <Button variant="outline" className="bg-white shadow-sm hover:bg-zinc-50 flex items-center gap-1.5 h-9 text-xs">
+                <Settings2 className="h-4 w-4 text-zinc-500" />
+                <span>View Options</span>
+              </Button>
+            } />
+            <DropdownMenuContent align="end" className="w-80 bg-white dark:bg-zinc-900 border border-zinc-250 dark:border-zinc-800 p-4 shadow-xl rounded-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-zinc-150 dark:border-zinc-800 pb-2">
+                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider flex items-center gap-1.5">
+                  <Settings2 className="w-3.5 h-3.5 text-indigo-500 animate-spin" style={{ animationDuration: '3s' }} /> Page Fit Optimizer
+                </span>
+                <span className="text-[10px] text-zinc-400 font-mono">Real-time Layout</span>
+              </div>
+
+              {/* 1. Fit to Screen Switch */}
+              <div className="flex items-center justify-between py-1 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                <div className="flex flex-col gap-0.5 max-w-[80%]">
+                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1">
+                    Fit perfectly on one page
+                  </span>
+                  <span className="text-[10px] text-zinc-400 leading-normal">
+                    Lock body view to screen height with internal scrolling
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  className="h-4.5 w-4.5 text-indigo-600 rounded border-zinc-300 bg-white focus:ring-indigo-550 cursor-pointer shrink-0"
+                  checked={fitToScreen}
+                  onChange={(e) => {
+                    setFitToScreen(e.target.checked);
+                    localStorage.setItem('products_fit_to_screen', String(e.target.checked));
+                  }}
+                />
+              </div>
+
+              {/* 2. Font Size scale slider */}
+              <div className="space-y-2 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">Font Sizing</span>
+                  <span className="font-mono font-black text-indigo-650 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded text-[11px] leading-none">
+                    {fontSize}px
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] text-zinc-400 font-semibold uppercase font-mono">A- (10)</span>
+                  <input
+                    type="range"
+                    min="10"
+                    max="15"
+                    step="1"
+                    value={fontSize}
+                    onChange={(e) => {
+                      setFontSize(Number(e.target.value));
+                      localStorage.setItem('products_font_size', e.target.value);
+                    }}
+                    className="w-full h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg cursor-pointer accent-indigo-605"
+                  />
+                  <span className="text-xs font-bold text-zinc-400 font-mono">A+ (15)</span>
+                </div>
+              </div>
+
+              {/* 3. Padding density */}
+              <div className="space-y-2 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 block">Row Packing Density</span>
+                <div className="grid grid-cols-3 gap-1.5 bg-zinc-50 dark:bg-zinc-950 p-1 rounded-xl border border-zinc-200/60 dark:border-zinc-850">
+                  {(['normal', 'compact', 'supertyght'] as const).map((density) => (
+                    <button
+                      key={density}
+                      onClick={() => {
+                        setRowPadding(density);
+                        localStorage.setItem('products_row_density', density);
+                      }}
+                      className={`text-[10px] font-bold py-1.5 px-2 rounded-lg capitalize transition-all ${
+                        rowPadding === density
+                          ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm font-black border border-zinc-200/50'
+                          : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
+                      }`}
+                    >
+                      {density === 'supertyght' ? 'Ultra Compact' : density}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 4. Optional images toggle */}
+              <div className="flex items-center justify-between py-1">
+                <div className="flex flex-col gap-0.5 max-w-[80%]">
+                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">Show Product Images</span>
+                  <span className="text-[10px] text-zinc-400">Omit to save screen space</span>
+                </div>
+                <input
+                  type="checkbox"
+                  className="h-4.5 w-4.5 text-indigo-600 rounded border-zinc-300 bg-white focus:ring-indigo-550 cursor-pointer shrink-0"
+                  checked={showImages}
+                  onChange={(e) => {
+                    setShowImages(e.target.checked);
+                    localStorage.setItem('products_show_images', String(e.target.checked));
+                  }}
+                />
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
           
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
@@ -1175,10 +1321,10 @@ export function ProductList({ onImportClick }: ProductListProps) {
         </div>
       </div>
 
-      <Card className="border-zinc-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+      <Card className={`border-zinc-200 shadow-sm overflow-hidden dense-table-custom ${fitToScreen ? 'flex flex-col' : ''}`}>
+        <div className={fitToScreen ? "overflow-auto max-h-[calc(100vh-280px)] sm:max-h-[calc(100vh-320px)] relative" : "overflow-x-auto"}>
           <ShadcnTable>
-            <TableHeader className="bg-zinc-50/80 border-b border-zinc-200">
+            <TableHeader className="bg-zinc-50/95 dark:bg-zinc-900/95 border-b border-zinc-200 sticky top-0 z-10">
               <TableRow>
                 <TableHead className="w-[45px] px-3">
                   <input

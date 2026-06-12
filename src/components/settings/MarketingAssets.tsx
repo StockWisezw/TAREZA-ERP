@@ -29,7 +29,28 @@ import {
   BookOpen,
   Palette,
   Layers,
-  Type
+  Type,
+  TrendingUp,
+  Smartphone,
+  Shield,
+  Clock,
+  CreditCard,
+  Activity,
+  ArrowRight,
+  UserCheck,
+  Percent,
+  ShoppingBag,
+  Store,
+  Users,
+  CheckCircle2,
+  Calculator,
+  Settings,
+  Play,
+  Pause,
+  Volume2,
+  Laptop,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { TarezaLogo } from '../ui/Logo';
 import { db } from '../../lib/firebaseClient';
@@ -56,6 +77,125 @@ interface MarketingAsset {
   isCustom?: boolean;
   versions?: AssetVersion[];
 }
+
+export interface PlayableVideoScript {
+  id: string;
+  title: string;
+  duration: string;
+  tagline: string;
+  platform: 'YouTube Walkthrough' | 'Facebook Video Ad' | 'YouTube & Facebook Reels';
+  steps: {
+    subtitle: string;
+    animationState: string;
+    focusElement?: string;
+  }[];
+  caption: string;
+  tags: string[];
+}
+
+export const PLAYABLE_VIDEOS: PlayableVideoScript[] = [
+  {
+    id: 'cashier-onboarding',
+    title: 'The 60-Second Cashier Speed Onboarding',
+    duration: '0:12',
+    tagline: 'Streamline checkout workforce & prevent leakage with compliance-ready setup',
+    platform: 'Facebook Video Ad',
+    steps: [
+      {
+        subtitle: "Auntie shops and wholesale centers lose up to 15% to manual cashier leakage.",
+        animationState: "leakage_warning"
+      },
+      {
+        subtitle: "With Tareza ERP, onboarding a cashier takes less than 60 seconds. Set up names and private passcodes.",
+        animationState: "add_employee_form"
+      },
+      {
+        subtitle: "Assign safe registers (e.g. Register Alpha) and assign specific branches, safeguarding your drawer float levels.",
+        animationState: "register_assigned"
+      },
+      {
+        subtitle: "Track live session audit logs, prevent fraudulent voids, and enjoy 100% accountable retail operations!",
+        animationState: "completed_dashboard_audit"
+      }
+    ],
+    caption: `🎥 Video Tour Masterclass: Watch how Tareza ERP eliminates human errors in under 60 seconds! 
+
+Ensure total transparency in your shop today. Onboard employees, manage register floats, and control sales channels. Check out here:
+👉 Website: tareza-pos.co.zw
+👉 WhatsApp setup: +263 77 123 4567
+
+#TarezaERP #CashierOnboarding #PosSecurity #RetailZimbabwe #AccountingEngine`,
+    tags: ['social-video', 'cashier-setup', 'transparency-audit']
+  },
+  {
+    id: 'offline-defense',
+    title: 'The Offline Sales Defense Suite',
+    duration: '0:12',
+    tagline: 'Survive power cuts & grid dropouts with real-time caching & sync storage',
+    platform: 'YouTube Walkthrough',
+    steps: [
+      {
+        subtitle: "Frequent power cuts and internet drops in Harare can halt retail operations.",
+        animationState: "online_stable"
+      },
+      {
+        subtitle: "Oh no! Your internet connection has dropped entirely. But wait—the terminal doesn't crash!",
+        animationState: "offline_blackout"
+      },
+      {
+        subtitle: "Your cashier keeps checking out Mazoe Peach Syrup 2L. Sales securely log to local device storage.",
+        animationState: "offline_selling_saved"
+      },
+      {
+        subtitle: "Internet restored! With 1-second auto-sync, client data flushes safely back to Firestore. No sales lost!",
+        animationState: "synced_success"
+      }
+    ],
+    caption: `🔌 HARARE ELECTRICITY DROP SADDLES YOUR RETAIL SHOP? NOT ANYMORE!
+
+Say hello to uninterrupted offline POS checkout by Tareza ERP. Learn how our client-state caching saves transactions locally and uploads them dynamically when connection is back!
+
+Watch full session details:
+📺 Channel: YouTube.com/TarezaPOS
+
+#OfflinePointOfSale #ZESAOutages #BusinessContinuity #ZimbabweERP #FastCheckout`,
+    tags: ['offline-first', 'automatic-autosync', 'zero-leakage']
+  },
+  {
+    id: 'dual-pricing-rate',
+    title: 'Dual-Pricing & Exchange Rate Alignment',
+    duration: '0:12',
+    tagline: 'Auto-convert EcoCash, InnBucks, USD & ZiG base rates automatically',
+    platform: 'YouTube & Facebook Reels',
+    steps: [
+      {
+        subtitle: "Running multi-currency pricing in Zimbabwe is an absolute bookkeeping nightmare.",
+        animationState: "pricing_nightmare"
+      },
+      {
+        subtitle: "With Tareza ERP, set one unified USD price on your product (e.g., $3.50 base rate).",
+        animationState: "usd_base_set"
+      },
+      {
+        subtitle: "Adjust our real-time exchange rate slider down to 1:13.50. The terminal instantly recalculates in ZiG!",
+        animationState: "zig_rate_calculated"
+      },
+      {
+        subtitle: "Inbuilt EcoCash Biller and InnBucks Merchant calculations handle rest of the invoice. 100% accurate cashier totals!",
+        animationState: "currency_grand_total"
+      }
+    ],
+    caption: `💵 AUTOMATE YOUR USD TO ZiG SALES CALCULATIONS INSTANTLY!
+
+No more manual conversion charts on shop counters. Watch how Tareza ERP auto-calculates multi-currency totals based on fluctuating rates instantly.
+
+Get started with our dual-pricing engine:
+👉 Link: tareza-pos.co.zw/pos
+
+#MultiCurrencyPOS #ZiGExchangeRates #EcoCashBiller #ZimbabweMerchants #TarezaPOS`,
+    tags: ['multicurrency-audit', 'zig-recalculator', 'dual-pricing']
+  }
+];
 
 const DEFAULT_ASSETS: MarketingAsset[] = [
   {
@@ -155,6 +295,46 @@ Get Tareza POS: https://tareza-pos.co.zw
 export function MarketingAssets() {
   const { user } = useAuth();
   const [assets, setAssets] = useState<MarketingAsset[]>([]);
+  
+  // Real-Time CSS Poster Customizer States
+  const [viewMode, setViewMode] = useState<'live' | 'static'>('live');
+  const [customBusiness, setCustomBusiness] = useState('Tareza Labs Harare');
+  const [customRate, setCustomRate] = useState('13.50');
+  const [customCashier, setCustomCashier] = useState('Tinashe Moyo');
+  const [customProduct, setCustomProduct] = useState('Mazoe Peach Syrup 2L');
+  const [customPrice, setCustomPrice] = useState('3.50');
+
+  // 🎥 Interactive Walkthrough Video Simulator States
+  const [activeVideoIndex, setActiveVideoIndex] = useState<number>(0);
+  const [videoPlayProgress, setVideoPlayProgress] = useState<number>(0);
+  const [videoPlaying, setVideoPlaying] = useState<boolean>(false);
+  const [videoStep, setVideoStep] = useState<number>(0);
+
+  useEffect(() => {
+    let interval: any = null;
+    if (videoPlaying) {
+      interval = setInterval(() => {
+        setVideoPlayProgress((prev) => {
+          const next = prev + 4;
+          if (next >= 100) {
+            setVideoPlaying(false);
+            return 100;
+          }
+          return next;
+        });
+      }, 500); // Ticks every 0.5s. Hits 100% in 12.5 seconds (perfect walk-through timing)
+    } else {
+      if (interval) clearInterval(interval);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [videoPlaying]);
+
+  useEffect(() => {
+    const step = Math.min(3, Math.floor(videoPlayProgress / 25));
+    setVideoStep(step);
+  }, [videoPlayProgress]);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedCaptionId, setCopiedCaptionId] = useState<string | null>(null);
@@ -172,6 +352,332 @@ export function MarketingAssets() {
   const [newAssetCaption, setNewAssetCaption] = useState('');
   const [newAssetTags, setNewAssetTags] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+
+  // Beautiful dynamic HTML/CSS advertisement rendering engine
+  const renderLivePoster = (asset: MarketingAsset, isLightbox: boolean = false) => {
+    const rateVal = parseFloat(customRate) || 13.50;
+    const priceVal = parseFloat(customPrice) || 3.50;
+    
+    const wrapperClass = isLightbox 
+      ? "w-full h-full min-h-[460px] max-h-[70vh] flex flex-col items-center justify-center relative select-none animate-fade-in text-white overflow-hidden p-6 bg-slate-950"
+      : "w-full h-full absolute inset-0 flex flex-col items-center justify-center select-none text-white overflow-hidden p-4 bg-slate-950 animate-fade-in";
+
+    const isFacebookAd = asset.id === 'facebook-ad' || asset.id === 'first-advert-retail';
+    const isFacebookCover = asset.id === 'facebook-cover';
+    const isYoutubeAd = asset.id === 'youtube-ad';
+    const isYoutubeCover = asset.id === 'youtube-cover';
+    const isWhatsappAd = asset.id === 'first-advert-whatsapp';
+
+    if (isFacebookAd) {
+      return (
+        <div className={`${wrapperClass} bg-gradient-to-tr from-slate-950 via-zinc-900 to-indigo-950`}>
+          {/* Top Branding Bar */}
+          <div className="absolute top-3 left-4 right-4 flex justify-between items-center z-10">
+            <TarezaLogo size="sm" showSubtitle={false} variant="dark" />
+            <span className="text-[9px] font-bold py-1 px-2 rounded-full flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono tracking-wide uppercase">
+              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+              100% Offline Active
+            </span>
+          </div>
+
+          {/* Headline copy */}
+          <div className="text-center space-y-1.5 my-3 mt-10 max-w-sm px-2">
+            <h4 className="text-xl md:text-2xl font-black font-sans leading-tight tracking-tight uppercase bg-gradient-to-r from-white via-zinc-200 to-zinc-400 bg-clip-text text-transparent">
+              No Network? Keep Selling.
+            </h4>
+            <p className="text-[10px] md:text-xs text-zinc-400 tracking-wide font-sans">
+              Track multi-currency cash flows, prevent cashier leakages & sync instantly.
+            </p>
+          </div>
+
+          {/* POS Terminal Screen Simulation */}
+          <div className="flex-1 w-full max-w-md bg-zinc-900/90 rounded-2xl border border-zinc-850 shadow-2xl p-4 flex flex-col justify-between overflow-hidden relative">
+            <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
+            
+            {/* App Mock Header */}
+            <div className="flex justify-between items-center border-b border-zinc-800 pb-2 mb-2 font-mono text-[9px] text-zinc-500">
+              <span className="font-bold text-zinc-400 flex items-center gap-1">
+                <Store className="w-3 h-3 text-indigo-400" />
+                {customBusiness || "Primary Outlet"}
+              </span>
+              <span>Register 01 • Cashier: {customCashier}</span>
+            </div>
+
+            {/* Cart Table list */}
+            <div className="flex-1 space-y-2 py-1 max-h-[120px] overflow-y-auto pr-1">
+              <div className="flex justify-between items-center text-xs font-sans">
+                <div className="flex items-center gap-1.5">
+                  <span className="p-1 bg-indigo-500/10 text-indigo-400 rounded-md font-mono font-bold text-[9px]">x6</span>
+                  <span className="font-medium text-zinc-200">{customProduct}</span>
+                </div>
+                <span className="font-mono text-zinc-300 font-bold">${(priceVal * 6).toFixed(2)} USD</span>
+              </div>
+
+              <div className="flex justify-between items-center text-xs font-sans border-t border-zinc-850 pt-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="p-1 bg-indigo-500/10 text-indigo-400 rounded-md font-mono font-bold text-[9px]">x2</span>
+                  <span className="font-medium text-zinc-200">Red Seal Roller Meal 10kg</span>
+                </div>
+                <span className="font-mono text-zinc-300 font-bold">$13.00 USD</span>
+              </div>
+
+              <div className="flex justify-between items-center text-xs font-sans border-t border-zinc-850 pt-2 border-dashed">
+                <div className="flex items-center gap-1.5">
+                  <span className="p-1 bg-emerald-500/10 text-emerald-400 rounded-md font-mono font-bold text-[9px]">biller</span>
+                  <span className="font-medium text-zinc-250">InnBucks Business Payment</span>
+                </div>
+                <span className="font-mono text-emerald-400 font-bold">-$1.50 Promo Fee</span>
+              </div>
+            </div>
+
+            {/* Inbuilt Receipts Checker Summary */}
+            <div className="mt-3 border-t-2 border-dashed border-zinc-800 pt-3 flex flex-col gap-2">
+              <div className="flex justify-between items-end bg-black/45 p-3 rounded-xl border border-zinc-850">
+                <div>
+                  <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest font-mono">Invoice Due Total</span>
+                  <p className="text-xl font-mono font-black text-emerald-400 leading-none mt-1">
+                    ${((priceVal * 6) + 13.00 - 1.50).toFixed(2)} <span className="text-xs font-bold text-zinc-400 font-sans">USD</span>
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest font-mono">Convert Rate @ {customRate}</span>
+                  <p className="text-sm font-mono font-bold text-cyan-400 mt-1">
+                    {(((priceVal * 6) + 13.00 - 1.50) * rateVal).toFixed(2)} <span className="text-[9px] text-zinc-400 uppercase">ZiG</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center text-[9px] font-mono text-zinc-400 mt-1">
+                <span className="flex items-center gap-1 text-emerald-450 font-bold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
+                  No Cash shortages
+                </span>
+                <span className="text-zinc-500">Receipt: TZ-6051 • Auto-Logged</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="absolute bottom-3 left-4 right-4 flex justify-between items-center pointer-events-none font-sans">
+            <span className="text-[9px] text-zinc-400 tracking-wide font-medium">Zimbabwe&apos;s Premium POS Ecosystem</span>
+            <span className="text-[10px] uppercase font-bold text-indigo-400 tracking-widest flex items-center gap-1">
+              tareza-pos.co.zw
+              <ArrowRight className="w-3 h-3 text-indigo-455" />
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    if (isFacebookCover) {
+      return (
+        <div className={`${wrapperClass} bg-gradient-to-r from-zinc-950 via-slate-900 to-zinc-950 p-6 flex flex-row items-center gap-6`}>
+          <div className="w-1/2 flex flex-col justify-center space-y-4 text-left z-10 pr-4">
+            <TarezaLogo size="sm" showSubtitle={true} variant="dark" />
+            <div className="space-y-1.5">
+              <h4 className="text-xl md:text-2xl font-black tracking-tight leading-none text-white uppercase font-sans">
+                Unified Retail OS & Metric Suite
+              </h4>
+              <p className="text-[10px] md:text-xs text-zinc-400 font-medium leading-tight">
+                Complete corporate oversight from cashier shifts to central warehouse depots.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-[9px] text-zinc-300 font-sans font-semibold">
+                <Check className="w-3 h-3 text-indigo-400 shrink-0" />
+                <span>Zero Sales Shortages or Stock Leakage</span>
+              </div>
+              <div className="flex items-center gap-2 text-[9px] text-zinc-300 font-sans font-semibold">
+                <Check className="w-3 h-3 text-indigo-400 shrink-0" />
+                <span>Multi-Warehouse Transfers & Audits</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="w-1/2 grid grid-cols-2 gap-3 z-10">
+            <div className="bg-zinc-900/90 border border-zinc-800/80 p-3 rounded-xl space-y-2 col-span-2 shadow-lg">
+              <span className="text-[8px] font-mono font-bold text-zinc-400 uppercase tracking-widest flex items-center justify-between">
+                <span>Branch Profit Comparison</span>
+                <span className="text-emerald-400 font-bold flex items-center gap-0.5">
+                  <TrendingUp className="w-2.5 h-2.5" />
+                  +18.4%
+                </span>
+              </span>
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-[10px]">
+                  <span className="text-zinc-400 font-sans font-medium truncate max-w-[120px]">{customBusiness}</span>
+                  <span className="font-mono font-bold text-zinc-200">$4,320.00 USD</span>
+                </div>
+                <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
+                  <div className="bg-indigo-500 h-full rounded-full" style={{ width: '85%' }} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-[10px]">
+                  <span className="text-zinc-400 font-sans font-medium">Bulawayo Store Depot</span>
+                  <span className="font-mono font-bold text-zinc-200">$2,410.50 USD</span>
+                </div>
+                <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
+                  <div className="bg-cyan-400 h-full rounded-full" style={{ width: '55%' }} />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-zinc-900/90 border border-zinc-800 p-2.5 rounded-xl flex flex-col justify-between shadow-lg">
+              <span className="text-[7.5px] font-mono font-bold text-zinc-500 uppercase tracking-widest">Active Cashier</span>
+              <div className="mt-1">
+                <p className="text-[10px] font-bold text-zinc-200 truncate">{customCashier}</p>
+                <p className="text-[9px] font-mono text-emerald-400 font-bold">$1,540.80</p>
+              </div>
+            </div>
+
+            <div className="bg-zinc-900/90 border border-zinc-800 p-2.5 rounded-xl flex flex-col justify-between shadow-lg">
+              <span className="text-[7.5px] font-mono font-bold text-zinc-500 uppercase tracking-widest">Depot Alert</span>
+              <div className="mt-1">
+                <p className="text-[9px] font-bold text-amber-400 truncate leading-tight">{customProduct}</p>
+                <p className="text-[8px] font-mono text-zinc-400">14 bags left</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (isYoutubeAd) {
+      return (
+        <div className={`${wrapperClass} bg-gradient-to-br from-indigo-950 via-slate-900 to-zinc-950 p-6 flex flex-row items-center gap-6`}>
+          <div className="w-3/5 text-left space-y-4 z-10 pr-2">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-650 font-bold font-mono text-[9px] uppercase tracking-wider animate-pulse">
+              <Video className="w-3 h-3 shrink-0" />
+              On-demand masterclass
+            </span>
+            <div className="space-y-1">
+              <h4 className="text-xl md:text-2xl font-black tracking-tight leading-tight uppercase font-sans text-white">
+                Onboard Cashiers in 60 seconds
+              </h4>
+              <p className="text-[10px] md:text-xs text-indigo-200">
+                Configure registers, set security groups & lock drawer access PINs.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <span className="bg-white/10 backdrop-blur-sm border border-white/15 text-white font-mono font-semibold text-[8px] px-2 py-0.5 rounded">
+                No Void Access Limit
+              </span>
+              <span className="bg-white/10 backdrop-blur-sm border border-white/15 text-white font-mono font-semibold text-[8px] px-2 py-0.5 rounded">
+                Strict Drawer Float checks
+              </span>
+            </div>
+          </div>
+
+          <div className="w-2/5 aspect-[4/3] bg-zinc-900/95 border border-zinc-800 rounded-xl p-3 shadow-2xl flex flex-col justify-between z-10 text-[10px] font-sans">
+            <div className="flex justify-between items-center border-b border-zinc-850 pb-1.5 font-mono text-[7.5px] text-zinc-400">
+              <span>👤 System Add Employee</span>
+              <span className="text-emerald-450 font-bold ring-1 ring-emerald-500/20 px-1 py-0.2 rounded bg-emerald-500/5">Verified</span>
+            </div>
+            
+            <div className="space-y-1.5 py-1">
+              <div className="space-y-0.5">
+                <span className="text-[7.5px] text-zinc-500 font-medium font-mono uppercase">Operator Name</span>
+                <p className="bg-zinc-950 px-2 py-0.5 rounded border border-zinc-850 font-semibold truncate text-[10.5px]">{customCashier}</p>
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[7.5px] text-zinc-500 font-medium font-mono uppercase">Assigned pincode</span>
+                <p className="bg-zinc-950 px-2 py-0.5 rounded border border-zinc-850 font-mono tracking-widest text-indigo-400">•••• (secured)</p>
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[7.5px] text-zinc-500 font-medium font-mono uppercase">Register assigned</span>
+                <p className="bg-zinc-950 px-2 py-0.5 rounded border border-zinc-850 font-mono text-[8.5px] text-cyan-400 truncate">Register Alpha - {customBusiness}</p>
+              </div>
+            </div>
+
+            <div className="pt-1 border-t border-zinc-850 flex justify-between items-center font-mono text-[8px] text-zinc-500">
+              <span className="flex items-center gap-1 font-bold text-emerald-400 uppercase">
+                <UserCheck className="w-3 h-3 text-emerald-500 shrink-0" />
+                Active profile
+              </span>
+              <span>v1.2 compliant</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (isYoutubeCover) {
+      return (
+        <div className={`${wrapperClass} bg-gradient-to-tr from-cyan-950 via-zinc-950 to-indigo-950 p-6 flex flex-col justify-between`}>
+          <div className="flex justify-between items-start w-full">
+            <TarezaLogo size="sm" showSubtitle={true} variant="dark" />
+            <span className="text-[9px] font-mono tracking-widest uppercase font-bold text-cyan-400 border border-cyan-400/20 bg-cyan-400/5 px-2.5 py-1 rounded-full">
+              Academy Channel Art
+            </span>
+          </div>
+
+          <div className="my-auto text-center space-y-2 px-2">
+            <h4 className="text-xl md:text-3xl font-black font-sans leading-none tracking-tight uppercase bg-gradient-to-r from-zinc-50 to-white bg-clip-text text-transparent">
+              The Smart POS Masterclass
+            </h4>
+            <p className="text-xs text-zinc-400 max-w-lg mx-auto leading-relaxed">
+              Master cash desk security, daily sales reconciliation reports, multi-depot inventory valuation, and physical audit stocktakes.
+            </p>
+          </div>
+
+          <div className="w-full flex justify-between items-center border-t border-zinc-900 pt-3 text-[9px] font-mono text-zinc-500">
+            <span>🎥 New Video Training Weekly</span>
+            <span>Security & Fraud Prevention Systems</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (isWhatsappAd) {
+      return (
+        <div className={`${wrapperClass} bg-zinc-950 p-6 flex flex-row items-center gap-6 border border-zinc-800`}>
+          <div className="w-1/2 text-left space-y-3 z-10">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold font-mono text-[9px] uppercase tracking-wider">
+              <Smartphone className="w-3.5 h-3.5" />
+              Easy Mobile POS
+            </span>
+            <div className="space-y-1">
+              <h4 className="text-lg md:text-xl font-black tracking-tight uppercase leading-tight font-sans text-white">
+                300% Checkout Speed
+              </h4>
+              <p className="text-[10px] md:text-xs text-zinc-400 leading-snug">
+                No receipt books, no wait-lines. Tap items on any phone or check out bulk six-packs instantly.
+              </p>
+            </div>
+          </div>
+
+          <div className="w-1/2 p-3 border border-zinc-850 rounded-xl bg-zinc-900/90 flex flex-col justify-between shadow-xl min-h-[120px] font-mono text-[10px] space-y-2">
+            <div className="flex justify-between items-center border-b border-zinc-800 pb-1.5 text-zinc-400">
+              <span className="text-[8px] uppercase tracking-widest text-zinc-500">Checkout success</span>
+              <span className="font-bold text-teal-400">ZiG {Math.ceil(priceVal * rateVal)}</span>
+            </div>
+
+            <div className="flex-1 flex flex-col gap-1 justify-center">
+              <div className="flex justify-between text-[11px] font-sans font-medium text-zinc-300">
+                <span className="truncate max-w-[100px]">{customProduct}</span>
+                <span className="font-mono font-bold text-white">${priceVal} USD</span>
+              </div>
+              <div className="flex justify-between text-[10px] font-sans font-medium text-zinc-500 border-t border-zinc-850 pt-1">
+                <span>Rate Auto-Sync:</span>
+                <span className="font-mono font-bold text-cyan-400">1: {customRate} ZiG</span>
+              </div>
+            </div>
+
+            <div className="pt-1.5 border-t border-zinc-800 text-[7.5px] text-zinc-650 text-right">
+              Outlet: {customBusiness}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className={wrapperClass}>
+        <TarezaLogo size="md" variant="dark" />
+        <p className="text-xs text-zinc-400 mt-2">Custom Flyer Ready</p>
+      </div>
+    );
+  };
 
   // Brand Manual States
   const [showBrandManual, setShowBrandManual] = useState(false);
@@ -1136,6 +1642,551 @@ Equip your cashiers for success. Visit: https://www.tarezaerp.co.zw #EcoCash #In
         </div>
       </div>
 
+      {/* 📽️ Branded Video Walkthrough Simulator & Marketing Deck */}
+      <div className="bg-zinc-950 text-white border border-zinc-850 rounded-3xl p-6 shadow-2xl no-print space-y-6 relative overflow-hidden">
+        {/* Subtle decorative glowing backdrops */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl -z-10 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-cyan-500/5 rounded-full blur-3xl -z-10 pointer-events-none" />
+
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-4 border-b border-zinc-900">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="p-1 px-2 bg-indigo-500/20 text-indigo-400 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 animate-pulse">
+                <Video className="w-3.5 h-3.5" />
+                Live Walkthrough Studio
+              </span>
+              <span className="text-[10px] text-zinc-500 font-mono">YouTube & Facebook Creator</span>
+            </div>
+            <h3 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
+              Branded Walkthrough Video Simulators
+            </h3>
+            <p className="text-xs text-zinc-400 max-w-xl">
+              Use these interactive walkthrough decks with our official logo and copy parameters to capture high-converting promo video frames for YouTube masterclasses or Facebook ad reels.
+            </p>
+          </div>
+
+          {/* Video Selector list */}
+          <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+            {PLAYABLE_VIDEOS.map((video, idx) => {
+              const isActive = activeVideoIndex === idx;
+              return (
+                <button
+                  key={video.id}
+                  onClick={() => {
+                    setActiveVideoIndex(idx);
+                    setVideoPlayProgress(0);
+                    setVideoPlaying(false);
+                    setVideoStep(0);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-left text-xs font-bold transition-all border ${
+                    isActive
+                      ? 'bg-zinc-800 text-white border-zinc-700 shadow-md ring-2 ring-indigo-500/50 font-black'
+                      : 'bg-zinc-900/60 text-zinc-400 border-zinc-900 hover:text-white hover:bg-zinc-900'
+                  }`}
+                >
+                  <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono mb-0.5">{video.platform}</div>
+                  <div className="flex items-center gap-1.5 justify-between">
+                    <span>{video.title}</span>
+                    <span className="text-[10px] font-mono font-semibold bg-zinc-950 px-1 py-0.2 rounded text-zinc-500">{video.duration}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Selected Video Companion Area */}
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+          
+          {/* Main Cinematic 16:9 Video Player Simulation (7 cols) */}
+          <div className="xl:col-span-7 flex flex-col space-y-4">
+            <div className="relative aspect-[16/9] w-full bg-zinc-950 rounded-2xl border border-zinc-800/80 overflow-hidden flex flex-col justify-between shadow-inner group">
+              
+              {/* Top Bar Watermark / Status */}
+              <div className="p-3 bg-zinc-950/80 border-b border-zinc-900/50 backdrop-blur-sm flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TarezaLogo size="sm" showSubtitle={false} />
+                  <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider font-mono">
+                    • BRAND VIDEO SIMULATOR
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-[9px] font-bold text-zinc-400 font-mono">REC STREAM</span>
+                  </div>
+                  <Badge variant="outline" className="border-zinc-800 text-[9px] font-mono py-0 text-zinc-400 bg-zinc-900">
+                    {PLAYABLE_VIDEOS[activeVideoIndex].platform}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Dynamic Widescreen Visual Sandbox Display */}
+              <div className="flex-1 flex flex-col items-center justify-center p-6 relative">
+                
+                {/* 1. Cashier Speed Onboarding Graphics */}
+                {PLAYABLE_VIDEOS[activeVideoIndex].id === 'cashier-onboarding' && (
+                  <div className="w-full max-w-sm bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 shadow-2xl animate-fade-in space-y-3 font-sans text-xs">
+                    {videoStep === 0 && (
+                      <div className="space-y-2 text-center py-4 animate-pulse">
+                        <div className="mx-auto w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                          <Trash2 className="w-5 h-5 text-red-500" />
+                        </div>
+                        <h4 className="font-bold text-red-400">Drawer Sales Leakage Warning</h4>
+                        <p className="text-[10px] text-zinc-400 leading-normal max-w-xs mx-auto">
+                          Pretest audits reveal traditional counters lose up to 15% due to untracked manual calculations, missing receipts, and cashier pins sharing.
+                        </p>
+                      </div>
+                    )}
+                    {videoStep === 1 && (
+                      <div className="space-y-2.5">
+                        <div className="flex justify-between items-center border-b border-zinc-800 pb-1.5">
+                          <span className="font-bold text-[10px] text-indigo-400 uppercase tracking-wider">Fast Employee Record Entry</span>
+                          <span className="text-[9px] font-mono text-zinc-500">Auto PIN generation</span>
+                        </div>
+                        <div className="space-y-1.5 font-mono">
+                          <div className="flex justify-between text-[11px] py-1 border-b border-zinc-850">
+                            <span className="text-zinc-500">Employee Name:</span>
+                            <span className="text-white font-bold animate-pulse">Tinashe Moyo</span>
+                          </div>
+                          <div className="flex justify-between text-[11px] py-1 border-b border-zinc-850">
+                            <span className="text-zinc-500">Private Terminal PIN:</span>
+                            <span className="text-emerald-400 font-bold">● ● ● ● (6139)</span>
+                          </div>
+                          <div className="flex justify-between text-[11px]">
+                            <span className="text-zinc-500">Access Tier:</span>
+                            <span className="text-indigo-400 font-semibold uppercase text-[10px]">Active Drawer Cashier</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {videoStep === 2 && (
+                      <div className="space-y-2 text-center py-3">
+                        <div className="mx-auto w-10 h-10 rounded-full bg-cyan-500/10 flex items-center justify-center">
+                          <Laptop className="w-5 h-5 text-cyan-400" />
+                        </div>
+                        <h4 className="font-bold text-cyan-300">Register Authorization Complete</h4>
+                        <div className="flex items-center justify-center gap-1.5 py-1 text-[10px] text-zinc-300 font-mono">
+                          <span className="bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800 text-indigo-400">Terminal: Register Alpha</span>
+                          <span className="bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800 text-emerald-400">Harare HQ</span>
+                        </div>
+                        <p className="text-[9px] text-zinc-400">Floating limits locked to this work station successfully.</p>
+                      </div>
+                    )}
+                    {videoStep === 3 && (
+                      <div className="space-y-2 text-center py-2">
+                        <div className="mx-auto w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center animate-bounce">
+                          <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                        </div>
+                        <h4 className="font-bold text-emerald-400">Workforce Onboarding Activated!</h4>
+                        <p className="text-[10px] text-zinc-300 max-w-xs mx-auto leading-normal">
+                          Full transparency registered: Compliant, secure, and ready to go in Harare Branch. Leakage risk lowered to 0.00%.
+                        </p>
+                        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] py-1 rounded max-w-[180px] mx-auto font-mono uppercase tracking-wider">
+                          Ready for Counter 1
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. Offline Sales Defense Suite Graphics */}
+                {PLAYABLE_VIDEOS[activeVideoIndex].id === 'offline-defense' && (
+                  <div className="w-full max-w-sm bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 shadow-2xl animate-fade-in space-y-3 font-sans text-xs">
+                    {videoStep === 0 && (
+                      <div className="space-y-3 text-center py-4">
+                        <div className="flex justify-center items-center gap-3">
+                          <div className="text-emerald-500 flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-lg text-[10px] font-mono">
+                            <Wifi className="w-3.5 h-3.5 animate-pulse" /> CLOUD SYNC: ON
+                          </div>
+                          <span className="text-[10px] text-zinc-400 font-mono">Ping: 14ms</span>
+                        </div>
+                        <h4 className="font-bold text-zinc-100">Standard Cloud Operations</h4>
+                        <p className="text-[10px] text-zinc-400 max-w-xs mx-auto leading-normal">
+                          Tareza constantly monitors connection health to Firestore databases, loading products and cashier logs globally.
+                        </p>
+                      </div>
+                    )}
+                    {videoStep === 1 && (
+                      <div className="space-y-2 text-center py-4 animate-pulse">
+                        <div className="mx-auto w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                          <WifiOff className="w-5 h-5 text-red-500 animate-bounce" />
+                        </div>
+                        <h4 className="font-bold text-red-400">ZESA / Internet Grid Failure!</h4>
+                        <p className="text-[10px] text-zinc-400 leading-normal max-w-xs mx-auto">
+                          CRITICAL: Connection lost! Traditional checkout systems freeze immediately. But look—Tareza stays fully operational!
+                        </p>
+                      </div>
+                    )}
+                    {videoStep === 2 && (
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center border-b border-zinc-850 pb-1.5">
+                          <span className="bg-red-500/10 border border-red-500/20 text-red-400 px-2 py-0.5 text-[9px] font-semibold font-mono flex items-center gap-1">
+                            <WifiOff className="w-3 h-3" /> OFFLINE TERMINAL
+                          </span>
+                          <span className="text-[9px] font-mono text-zinc-500">Local Sandbox Driver</span>
+                        </div>
+                        <div className="p-2 border border-zinc-800 bg-zinc-950 rounded-lg space-y-1">
+                          <div className="flex justify-between font-mono text-[10px] text-zinc-300">
+                            <span>Item: Mazoe Peach Syrup 2L</span>
+                            <span className="text-white">$3.50</span>
+                          </div>
+                          <div className="flex justify-between font-mono text-[9px] text-emerald-400 border-t border-zinc-900 pt-1">
+                            <span>Local Cache Status:</span>
+                            <span className="font-bold">SECURED AT LOCALSTORAGE</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {videoStep === 3 && (
+                      <div className="space-y-3 text-center py-2 animate-fade-in">
+                        <div className="flex justify-center items-center gap-1.5 text-emerald-400 text-xs font-bold bg-emerald-500/10 p-1.5 rounded-lg border border-emerald-500/20">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 animate-bounce" /> Connection Restored! Auto-Sync Successful
+                        </div>
+                        <p className="text-[10px] text-zinc-300 max-w-xs mx-auto">
+                          The client container instantly flashed 1 safe offline transaction back to our cloud. Zero sales lost, zero cashier discrepancies found.
+                        </p>
+                        <div className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[9px] py-1 rounded max-w-[150px] mx-auto font-mono uppercase tracking-wider">
+                          Db Fully Synced
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. ZiG Dual-Pricing & Exchange Rate Auto-Sync Graphics */}
+                {PLAYABLE_VIDEOS[activeVideoIndex].id === 'dual-pricing-rate' && (
+                  <div className="w-full max-w-sm bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 shadow-2xl animate-fade-in space-y-3 font-sans text-xs">
+                    {videoStep === 0 && (
+                      <div className="space-y-2 text-center py-4">
+                        <div className="mx-auto w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center">
+                          <Calculator className="w-5 h-5 text-rose-500" />
+                        </div>
+                        <h4 className="font-bold text-rose-400">Multi-Currency Friction</h4>
+                        <p className="text-[10px] text-zinc-400 leading-normal max-w-xs mx-auto">
+                          Fluctuating pricing values on Harare shelves drive clients away and make bookkeeping validation and cashier reconciliation a living nightmare.
+                        </p>
+                      </div>
+                    )}
+                    {videoStep === 1 && (
+                      <div className="space-y-2.5">
+                        <div className="flex justify-between items-center border-b border-zinc-800 pb-1.5">
+                          <span className="font-bold text-[10px] text-indigo-400 uppercase tracking-widest">Base Value Setting</span>
+                          <span className="text-[9px] font-mono text-indigo-400 bg-indigo-500/10 px-1.5 py-0.2 rounded">USD Base</span>
+                        </div>
+                        <div className="p-2 border border-zinc-850 bg-zinc-950/80 rounded-lg space-y-1 font-mono text-zinc-300">
+                          <div className="flex justify-between text-[11px]">
+                            <span>Product Item Selection:</span>
+                            <span className="text-white font-bold">Mazoe Peach Syrup 2L</span>
+                          </div>
+                          <div className="flex justify-between text-[11px] pt-1">
+                            <span>Configured Base USD:</span>
+                            <span className="text-yellow-400 font-black">$3.50</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {videoStep === 2 && (
+                      <div className="space-y-2 text-center py-2">
+                        <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest block">Harare Exchange Rate Multiplier Shift</span>
+                        <div className="p-3 bg-zinc-950 border border-zinc-850 rounded-xl space-y-1">
+                          <div className="flex justify-between text-[10px] text-zinc-400 font-mono">
+                            <span>Adjusted Multiplier:</span>
+                            <span className="font-bold text-indigo-400">1 USD = 13.50 ZiG</span>
+                          </div>
+                          <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden mt-1 relative">
+                            <div className="absolute top-0 left-0 bottom-0 bg-gradient-to-r from-indigo-505 to-indigo-500 w-[60%] rounded-full" />
+                          </div>
+                          <div className="flex justify-between items-center pt-2 border-t border-zinc-900 mt-2 font-mono">
+                            <span className="text-zinc-500 text-[10px]">Auto ZiG Total:</span>
+                            <span className="text-white text-sm font-black bg-indigo-500/15 p-1 rounded border border-indigo-500/30">
+                              47.25 ZiG
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {videoStep === 3 && (
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center border-b border-zinc-800 pb-1.5 font-mono text-[9px] text-zinc-500">
+                          <span>ZiG Compliance Mode</span>
+                          <span className="text-emerald-400 font-bold flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> Compliant
+                          </span>
+                        </div>
+                        <div className="p-2 border border-zinc-800 bg-zinc-950 rounded-lg space-y-1 font-mono">
+                          <div className="flex justify-between text-[10px] text-zinc-400">
+                            <span>Total Due EcoCash:</span>
+                            <span className="text-white font-bold">47.25 ZiG</span>
+                          </div>
+                          <div className="flex justify-between text-[10px] text-zinc-400">
+                            <span>Total Due USD Cash:</span>
+                            <span className="text-white font-bold">$3.50</span>
+                          </div>
+                          <div className="border-t border-zinc-900 pt-1 flex justify-between text-[10px] text-emerald-400 font-black">
+                            <span>Cashier Drawer Compliant:</span>
+                            <span>YES</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
+
+              {/* Subtitle / Narrative Voice Bubble (Always visible at player bottom) */}
+              <div className="p-4 bg-zinc-900/90 border-t border-zinc-900/80 backdrop-blur-md flex flex-col space-y-1 font-sans">
+                <span className="text-[10px] font-bold text-indigo-400 tracking-wider uppercase flex items-center gap-1">
+                  <Volume2 className="w-3.5 h-3.5 animate-bounce" /> Subtitles / Narrator voice
+                </span>
+                <p className="text-sm font-semibold text-zinc-100 leading-normal">
+                  "{PLAYABLE_VIDEOS[activeVideoIndex].steps[videoStep].subtitle}"
+                </p>
+              </div>
+
+              {/* Video Timeline Progress Meter */}
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-900 z-20">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all duration-300"
+                  style={{ width: `${videoPlayProgress}%` }}
+                />
+              </div>
+
+            </div>
+
+            {/* Playback Controls & Utility Belt */}
+            <div className="bg-zinc-900/40 border border-zinc-850 p-4 rounded-xl flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {videoPlaying ? (
+                  <Button
+                    onClick={() => setVideoPlaying(false)}
+                    variant="outline"
+                    className="h-9 px-4 bg-white/5 border-zinc-800 text-white font-bold text-xs hover:bg-white/10"
+                  >
+                    <Pause className="w-4 h-4 mr-1.5" /> Pause
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => {
+                      if (videoPlayProgress >= 100) setVideoPlayProgress(0);
+                      setVideoPlaying(true);
+                    }}
+                    className="h-9 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md"
+                  >
+                    <Play className="w-4 h-4 mr-1.5" /> Play Walkthrough
+                  </Button>
+                )}
+
+                <Button
+                  onClick={() => {
+                    setVideoPlayProgress(0);
+                    setVideoStep(0);
+                    setVideoPlaying(false);
+                  }}
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 bg-white/5 border-zinc-800 text-zinc-400 hover:text-white"
+                  title="Replay Video"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {/* Timestamps */}
+              <div className="flex items-center gap-1.5 font-mono text-zinc-500 text-xs font-semibold">
+                <span>0:{videoPlayProgress < 10 ? `0${Math.floor(videoPlayProgress * 0.12)}` : Math.floor(videoPlayProgress * 0.12)}</span>
+                <span>/</span>
+                <span>{PLAYABLE_VIDEOS[activeVideoIndex].duration}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Marketing Copy and Ad Script (5 cols) */}
+          <div className="xl:col-span-5 flex flex-col justify-between space-y-4">
+            
+            {/* Ad Script Panel */}
+            <div className="bg-zinc-900/70 border border-zinc-850 rounded-2xl p-4 flex-1 space-y-4">
+              <div className="flex justify-between items-start border-b border-zinc-850 pb-3">
+                <div>
+                  <h4 className="text-xs font-mono font-bold text-indigo-400 uppercase tracking-widest">
+                    Voiceover & Marketing Script
+                  </h4>
+                  <p className="text-[11px] text-zinc-400 mt-1 font-sans">
+                    Give this script to your video editors, voice actresses, or speak directly during recording.
+                  </p>
+                </div>
+              </div>
+
+              {/* Subtitle milestones */}
+              <div className="space-y-2">
+                {PLAYABLE_VIDEOS[activeVideoIndex].steps.map((step, idx) => {
+                  const isCurrent = videoStep === idx;
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => {
+                        setVideoStep(idx);
+                        setVideoPlayProgress(idx * 25 + 5);
+                        setVideoPlaying(false);
+                      }}
+                      className={`p-2.5 rounded-xl border text-xs leading-normal font-sans cursor-pointer transition-all ${
+                        isCurrent
+                          ? 'bg-zinc-800/80 border-indigo-500/55 text-white font-bold ring-1 ring-indigo-500/25'
+                          : 'bg-zinc-950/40 border-zinc-900 text-zinc-500 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[9px] font-mono font-bold text-indigo-400 uppercase tracking-wider">
+                          Scene {idx + 1}
+                        </span>
+                        {isCurrent && <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-ping" />}
+                      </div>
+                      <p>"{step.subtitle}"</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Ready-to-Publish Caption */}
+            <div className="bg-zinc-900/50 border border-zinc-850 p-4 rounded-xl space-y-3 font-sans">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-widest">
+                  YouTube & Facebook Post Copy
+                </span>
+                <Button
+                  onClick={() => {
+                    navigator.clipboard.writeText(PLAYABLE_VIDEOS[activeVideoIndex].caption);
+                    toast.success('Capywriting copy block successfully copied!');
+                  }}
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-[10px] px-2 text-zinc-400 hover:text-white flex items-center gap-1 border border-zinc-800 hover:bg-zinc-800"
+                >
+                  <Copy className="w-3 h-3" /> Copy Caption
+                </Button>
+              </div>
+              <div className="p-3 bg-zinc-950/80 rounded-lg border border-zinc-900 max-h-32 overflow-y-auto">
+                <p className="text-[11px] text-zinc-400 leading-normal whitespace-pre-wrap font-sans">
+                  {PLAYABLE_VIDEOS[activeVideoIndex].caption}
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      {/* 🚀 Dynamic High-Fidelity Ad Customizer Panel */}
+      <div className="bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-6 shadow-sm no-print space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-50 tracking-tight flex items-center gap-2">
+              <Sparkles className="w-4.5 h-4.5 text-indigo-500 animate-pulse" />
+              Dynamic Real-Time Ad Customizer
+            </h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Toggle between static mockup graphic links and real-time CSS adverts featuring the inside of our system.
+            </p>
+          </div>
+
+          <div className="bg-zinc-100 dark:bg-zinc-950 p-1 rounded-xl border border-zinc-200/60 dark:border-zinc-850 flex items-center gap-1 shrink-0 self-stretch sm:self-auto justify-between sm:justify-start">
+            <button
+              onClick={() => setViewMode('live')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                viewMode === 'live'
+                  ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm font-black'
+                  : 'text-zinc-500 dark:text-zinc-450 hover:text-zinc-850'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+              🎨 Live Vector Ad Posters
+            </button>
+            <button
+              onClick={() => setViewMode('static')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                viewMode === 'static'
+                  ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm font-black'
+                  : 'text-zinc-500 dark:text-zinc-450 hover:text-zinc-855'
+              }`}
+            >
+              <ImageIcon className="w-3.5 h-3.5 text-zinc-500" />
+              🖼️ Static Image Files
+            </button>
+          </div>
+        </div>
+
+        {viewMode === 'live' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 pt-3 border-t border-zinc-200/60 dark:border-zinc-800/80">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                <Store className="w-3.5 h-3.5 text-indigo-400" />
+                Active Branch Name
+              </label>
+              <Input
+                value={customBusiness}
+                onChange={(e) => setCustomBusiness(e.target.value)}
+                className="bg-white dark:bg-zinc-950 h-9 text-xs rounded-lg font-medium border-zinc-200 dark:border-zinc-805"
+                placeholder="branch name"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                <ShoppingBag className="w-3.5 h-3.5 text-emerald-400" />
+                Featured Store Item
+              </label>
+              <Input
+                value={customProduct}
+                onChange={(e) => setCustomProduct(e.target.value)}
+                className="bg-white dark:bg-zinc-950 h-9 text-xs rounded-lg font-medium border-zinc-200 dark:border-zinc-805"
+                placeholder="featured product"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                <CreditCard className="w-3.5 h-3.5 text-cyan-400" />
+                USD Value ($)
+              </label>
+              <Input
+                type="number"
+                step="0.01"
+                value={customPrice}
+                onChange={(e) => setCustomPrice(e.target.value)}
+                className="bg-white dark:bg-zinc-950 h-9 text-xs rounded-lg font-mono border-zinc-200 dark:border-zinc-805"
+                placeholder="price in usd"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+                USD : ZiG Multiplier
+              </label>
+              <Input
+                type="number"
+                step="0.1"
+                value={customRate}
+                onChange={(e) => setCustomRate(e.target.value)}
+                className="bg-white dark:bg-zinc-950 h-9 text-xs rounded-lg font-mono border-zinc-200 dark:border-zinc-805"
+                placeholder="exchange rate multiplier"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                <Users className="w-3.5 h-3.5 text-pink-400" />
+                Assigned Cashier
+              </label>
+              <Input
+                value={customCashier}
+                onChange={(e) => setCustomCashier(e.target.value)}
+                className="bg-white dark:bg-zinc-950 h-9 text-xs rounded-lg font-medium border-zinc-200 dark:border-zinc-805"
+                placeholder="cashier operator"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
       {loading ? (
         <div className="h-64 flex flex-col items-center justify-center space-y-2">
           <div className="w-8 h-8 rounded-full border-2 border-t-zinc-800 border-zinc-200 animate-spin" />
@@ -1151,12 +2202,16 @@ Equip your cashiers for success. Visit: https://www.tarezaerp.co.zw #EcoCash #In
                 onClick={() => setPreviewAsset(asset)}
                 title="Click to preview full-resolution"
               >
-                <img 
-                  src={asset.imageUrl} 
-                  alt={asset.name} 
-                  className="object-contain w-full h-full max-h-full transition-transform group-hover/media:scale-[1.03] duration-300"
-                  referrerPolicy="no-referrer"
-                />
+                {viewMode === 'live' ? (
+                  renderLivePoster(asset)
+                ) : (
+                  <img 
+                    src={asset.imageUrl} 
+                    alt={asset.name} 
+                    className="object-contain w-full h-full max-h-full transition-transform group-hover/media:scale-[1.03] duration-300"
+                    referrerPolicy="no-referrer"
+                  />
+                )}
                 
                 {/* Hover zoom/eye overlay */}
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/media:opacity-100 flex items-center justify-center transition-opacity duration-200">
@@ -1380,14 +2435,18 @@ Equip your cashiers for success. Visit: https://www.tarezaerp.co.zw #EcoCash #In
         <Dialog open={true} onOpenChange={(open) => !open && setPreviewAsset(null)}>
           <DialogContent className="max-w-4xl w-[94vw] bg-zinc-950 dark:bg-zinc-950 border border-zinc-800/80 p-0 overflow-hidden shadow-2xl rounded-2xl flex flex-col md:flex-row">
             {/* Left: Beautiful Preview Screen */}
-            <div className="flex-1 relative bg-black flex items-center justify-center p-4 min-h-[300px] md:min-h-[460px] max-h-[70vh]">
-              <img 
-                src={previewAsset.imageUrl} 
-                alt={previewAsset.name} 
-                className="object-contain w-full h-full max-h-[60vh] select-none rounded-lg"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute top-4 left-4 flex gap-2">
+            <div className="flex-1 relative bg-black flex items-center justify-center p-4 min-h-[300px] md:min-h-[460px] max-h-[70vh] overflow-hidden">
+              {viewMode === 'live' ? (
+                renderLivePoster(previewAsset, true)
+              ) : (
+                <img 
+                  src={previewAsset.imageUrl} 
+                  alt={previewAsset.name} 
+                  className="object-contain w-full h-full max-h-[60vh] select-none rounded-lg"
+                  referrerPolicy="no-referrer"
+                />
+              )}
+              <div className="absolute top-4 left-4 flex gap-2 z-20">
                 <Badge className="bg-white/95 text-black border-none font-bold text-[10px] tracking-wide uppercase px-2.5 py-1">
                   {previewAsset.type}
                 </Badge>

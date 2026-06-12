@@ -22,6 +22,7 @@ import {
   Palette
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
+import { supabase } from '../lib/firebaseClient';
 
 interface CommandItem {
   name: string;
@@ -35,6 +36,12 @@ export function CommandPalette() {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
+
+  // Smart Search database query states
+  const [matchingProducts, setMatchingProducts] = useState<any[]>([]);
+  const [matchingCustomers, setMatchingCustomers] = useState<any[]>([]);
+  const [matchingSales, setMatchingSales] = useState<any[]>([]);
+  const [isSearchingDb, setIsSearchingDb] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -55,6 +62,62 @@ export function CommandPalette() {
     window.addEventListener('open-command-palette', handleOpenPalette);
     return () => window.removeEventListener('open-command-palette', handleOpenPalette);
   }, []);
+
+  // Real-time Database Search Query
+  useEffect(() => {
+    if (!search || search.trim().length < 2) {
+      setMatchingProducts([]);
+      setMatchingCustomers([]);
+      setMatchingSales([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsSearchingDb(true);
+        const queryTerm = search.trim().toLowerCase();
+
+        // Query Products
+        const { data: prodData } = await supabase.from('products').select('*');
+        if (prodData) {
+          const filterP = prodData.filter((p: any) =>
+            p.name?.toLowerCase().includes(queryTerm) ||
+            p.sku?.toLowerCase().includes(queryTerm) ||
+            p.barcode?.toLowerCase().includes(queryTerm)
+          ).slice(0, 4);
+          setMatchingProducts(filterP);
+        }
+
+        // Query Customers
+        const { data: custData } = await supabase.from('customers').select('*');
+        if (custData) {
+          const filterC = custData.filter((c: any) =>
+            c.name?.toLowerCase().includes(queryTerm) ||
+            c.email?.toLowerCase().includes(queryTerm) ||
+            c.phone?.toLowerCase().includes(queryTerm)
+          ).slice(0, 4);
+          setMatchingCustomers(filterC);
+        }
+
+        // Query Sales transactions (Receipts)
+        const { data: salesData } = await supabase.from('sales').select('*');
+        if (salesData) {
+          const filterS = salesData.filter((s: any) =>
+            s.id?.toLowerCase().includes(queryTerm) ||
+            s.customerName?.toLowerCase().includes(queryTerm) ||
+            s.payment_method?.toLowerCase().includes(queryTerm)
+          ).slice(0, 4);
+          setMatchingSales(filterS);
+        }
+      } catch (err) {
+        console.error('[CommandPalette] DB search error:', err);
+      } finally {
+        setIsSearchingDb(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const items: CommandItem[] = [
     // Pages Navigation
@@ -92,6 +155,7 @@ export function CommandPalette() {
     item.category.toLowerCase().includes(search.toLowerCase())
   );
 
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="p-0 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-2xl max-w-xl shadow-2xl overflow-hidden text-zinc-900 dark:text-zinc-100">
@@ -113,10 +177,138 @@ export function CommandPalette() {
           Global navigation finder command palette. Type to seek system areas.
         </DialogDescription>
 
-        <div className="max-h-[350px] overflow-y-auto p-2">
-          {filteredItems.length === 0 ? (
+        <div className="max-h-[380px] overflow-y-auto p-2 space-y-4">
+          {/* 1. Dynamic Products Search Result Section */}
+          {matchingProducts.length > 0 && (
+            <div className="mb-2">
+              <h3 className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 px-3 mb-1.5 tracking-wider font-sans select-none flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                Matching Products
+              </h3>
+              <div className="space-y-0.5">
+                {matchingProducts.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      navigate(`/inventory?search=${encodeURIComponent(p.name)}`);
+                      setIsOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between text-left p-2 px-3 rounded-lg hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 text-xs group transition-colors duration-150 cursor-pointer select-none"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="p-1 px-1.5 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-md">
+                        <Package className="w-4 h-4" />
+                      </span>
+                      <div>
+                        <span className="font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 block">
+                          {p.name}
+                        </span>
+                        <span className="text-[10px] text-zinc-400 font-mono">
+                          SKU: {p.sku || 'N/A'} • Barcode: {p.barcode || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-mono font-bold text-zinc-900 dark:text-zinc-100">
+                      ${Number(p.retail_price || p.price || 0).toFixed(2)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 2. Dynamic Customers Search Result Section */}
+          {matchingCustomers.length > 0 && (
+            <div className="mb-2">
+              <h3 className="text-[10px] uppercase font-bold text-blue-600 dark:text-blue-400 px-3 mb-1.5 tracking-wider font-sans select-none flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500"></span>
+                Matching Customers (CRM)
+              </h3>
+              <div className="space-y-0.5">
+                {matchingCustomers.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      navigate(`/customers?search=${encodeURIComponent(c.name)}`);
+                      setIsOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between text-left p-2 px-3 rounded-lg hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-xs group transition-colors duration-150 cursor-pointer select-none"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="p-1 px-1.5 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 rounded-md">
+                        <Users className="w-4 h-4" />
+                      </span>
+                      <div>
+                        <span className="font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 block">
+                          {c.name}
+                        </span>
+                        <span className="text-[10px] text-zinc-400">
+                          {c.email || 'No email'} • {c.phone || 'No phone'}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      CRM Record
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 3. Dynamic Receipts/Transactions Search Result Section */}
+          {matchingSales.length > 0 && (
+            <div className="mb-2">
+              <h3 className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 px-3 mb-1.5 tracking-wider font-sans select-none flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                Matching Sales (Receipts)
+              </h3>
+              <div className="space-y-0.5">
+                {matchingSales.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      navigate(`/reports?receipt=${encodeURIComponent(s.id)}`);
+                      setIsOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between text-left p-2 px-3 rounded-lg hover:bg-amber-50/50 dark:hover:bg-amber-950/20 text-xs group transition-colors duration-150 cursor-pointer select-none"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="p-1 px-1.5 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-md">
+                        <FileText className="w-4 h-4" />
+                      </span>
+                      <div>
+                        <span className="font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-amber-600 dark:group-hover:text-amber-400 block">
+                          Receipt #{s.id ? s.id.substring(0, 8).toUpperCase() : 'N/A'}
+                        </span>
+                        <span className="text-[10px] text-zinc-400">
+                          Customer: {s.customerName || 'Walk-in'} • Method: {s.payment_method || 'CASH'}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-mono font-bold text-amber-700 dark:text-amber-400">
+                      ${Number(s.total || 0).toFixed(2)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 4. Default Static Actions/Navigation Categories */}
+          {isSearchingDb && (
+            <div className="py-2 text-center text-zinc-400 text-[10px] flex items-center justify-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-zinc-400 animate-ping"></span>
+              Searching live business database records...
+            </div>
+          )}
+
+          {filteredItems.length === 0 && matchingProducts.length === 0 && matchingCustomers.length === 0 && matchingSales.length === 0 ? (
             <div className="py-12 text-center text-zinc-400 text-xs">
-              No matching pages or action commands discovered.
+              No matching pages, products, customers or transactions discovered.
             </div>
           ) : (
             <div>

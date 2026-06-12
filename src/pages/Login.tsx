@@ -291,6 +291,8 @@ export default function Login() {
         return;
       }
 
+      const isDeveloperEmail = email?.endsWith('@tarezaerp.co.zw') || email === 'admin@tarezaerp.co.zw' || email === 'developer@tarezaerp.co.zw' || email === 'dev@tarezaerp.co.zw' || email === 'tapsforex@gmail.com';
+
       try {
         const userCredential = await signInWithEmailAndPassword(fireAuth, email, password);
         const firebaseUser = userCredential.user;
@@ -298,12 +300,89 @@ export default function Login() {
         toast.success('Welcome back to Tareza ERP');
         navigate('/dashboard');
       } catch (error: any) {
-        if (email === 'dev@tarezaerp.co.zw' && password === 'tareza1302') {
+        if (isDeveloperEmail && password === 'tareza1302') {
           // Fall back to registration & seeding for premium seamless developer access
-          await handleDemoLogin('developer', 'tareza1302');
-          return;
+          try {
+            toast.info(`Initializing secure sandbox session for developer ${email}...`);
+            const userCredential = await createUserWithEmailAndPassword(fireAuth, email, password);
+            const firebaseUser = userCredential.user;
+            if (!firebaseUser) throw new Error("Authentication flow failed.");
+
+            const user = { id: firebaseUser.uid, email: firebaseUser.email };
+
+            // Build Firestore Profile
+            await supabase.from('profiles').insert([
+              { id: user.id, first_name: 'Alex', last_name: 'Developer', email: user.email }
+            ]);
+
+            // Pre-generate IDs to avoid race conditions and secure sequence
+            const newBusinessId = crypto.randomUUID();
+            const newRoleId = crypto.randomUUID();
+            const newBranchId = crypto.randomUUID();
+
+            // Step 1: Establish tenancy link in business_users FIRST
+            await supabase.from('business_users').insert([
+              { id: user.id, business_id: newBusinessId, user_id: user.id, branch_id: newBranchId, role_id: newRoleId, is_active: true }
+            ]);
+
+            // Step 2: Set target active business ID cache
+            const { setActiveBusinessId } = await import('../lib/firebaseClient');
+            setActiveBusinessId(newBusinessId);
+
+            // Step 3: Build Business
+            await supabase.from('businesses').insert([
+              { 
+                id: newBusinessId,
+                name: 'Developer Labs', 
+                tax_number: 'TZ-999999/DEV',
+                created_at: new Date().toISOString() 
+              }
+            ]);
+
+            const endDate = new Date();
+            endDate.setDate(endDate.getDate() + 90); // 90 days access for demo testing
+
+            await supabase.from('subscriptions').insert([{
+               business_id: newBusinessId,
+               plan_name: 'pro',
+               status: 'active',
+               start_date: new Date().toISOString(),
+               end_date: endDate.toISOString()
+            }]);
+
+            await supabase.from('roles').insert([
+              { id: newRoleId, business_id: newBusinessId, name: 'Developer', description: 'System Administrator Access' }
+            ]);
+
+            await supabase.from('branches').insert([
+              { id: newBranchId, business_id: newBusinessId, name: 'Testing Lab Alpha', type: 'retail' }
+            ]);
+
+            await supabase.from('categories').insert([
+              { business_id: newBusinessId, name: 'General' },
+              { business_id: newBusinessId, name: 'Electronics' },
+              { business_id: newBusinessId, name: 'Beverages' },
+              { business_id: newBusinessId, name: 'Office Supplies' }
+            ]);
+
+            toast.success(`Demo developer workspace initialized! Logged in as ${email}.`);
+            navigate('/dashboard');
+            return;
+          } catch (setupErr: any) {
+            // Already registered or fallback direct sign-in with master password
+            try {
+              await signInWithEmailAndPassword(fireAuth, email, password);
+              toast.success(`Logged in as Developer (${email})!`);
+              navigate('/dashboard');
+              return;
+            } catch (secondaryErr: any) {
+              console.error(secondaryErr);
+              authError = secondaryErr;
+            }
+          }
+        } else {
+          authError = error;
         }
-        authError = error;
       }
     }
 
@@ -726,13 +805,16 @@ export default function Login() {
               Developer Verification
             </h3>
             <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
-              Quick bypass registration is restricted to system developers. Please verify your credentials as developer:
+              Quick bypass registration is restricted to authorized developer credentials. Make sure you use the master passcode <strong>tareza1302</strong>:
             </p>
             <div className="mt-4 space-y-3">
               <div>
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Username / Email</label>
-                <div className="mt-1 p-2.5 bg-zinc-50 dark:bg-zinc-800 rounded-lg text-xs font-mono text-zinc-600 dark:text-zinc-300 border border-zinc-150 dark:border-zinc-700/50">
-                  dev@tarezaerp.co.zw
+                <div className="mt-1 p-2.5 bg-zinc-50 dark:bg-zinc-800 rounded-lg text-xs font-mono text-zinc-600 dark:text-zinc-300 border border-zinc-150 dark:border-zinc-700/50 flex flex-col gap-1">
+                  <span>dev@tarezaerp.co.zw</span>
+                  <span className="text-[10px] font-sans text-zinc-400 dark:text-zinc-500 border-t border-zinc-200/55 dark:border-zinc-700/55 pt-1.5 mt-1.5 leading-normal">
+                    💡 You can also type your custom developer email (e.g. <strong>tapsforex@gmail.com</strong>) with the password <strong>tareza1302</strong> in the main Login Sign In form to seed and login instantly!
+                  </span>
                 </div>
               </div>
               <div>
