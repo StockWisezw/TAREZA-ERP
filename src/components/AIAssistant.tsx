@@ -166,46 +166,30 @@ export function AIAssistant() {
     };
     setAiMessages(prev => [...prev, userMsg]);
 
-    const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
     let replyText = '';
-
     try {
-      if (geminiKey) {
-        const diag = compileDiagnostics();
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `You are Tareza Support Bot. You help users troubleshoot their Point of Sale and ERP system. 
-You are integrated deep with the developer diagnostic state. Use standard Markdown formatting.
-Live Context:
-- Network Adapter Connection (navigator.onLine): ${diag.isOnline ? 'ONLINE' : 'OFFLINE'}
-- Pending Sales in Sync/Offline memory Queue: ${diag.pendingSales} sales
-- Active Page View Path: ${diag.activeRoute}
-- Current Active Cart Count: ${diag.cartCount} items
-- Superadmin address: admin@tarezaerp.co.zw
-- User current physical Branch location: ${currentBranchName}
+      const diag = compileDiagnostics();
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userPrompt,
+          diagnostics: diag,
+          branchName: currentBranchName
+        })
+      });
 
-User asked: ${userPrompt}
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP progress error: ${res.status}`);
+      }
 
-Keep response highly brief, actionable, technical, styled with bulleted points, and extremely welcoming.`
-              }]
-            }]
-          })
-        });
-
-        const resJson = await res.json();
-        replyText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        
-        if (!replyText) {
-          throw new Error('Empirical text completion response was empty.');
-        }
+      const data = await res.json();
+      if (data.success && data.reply) {
+        replyText = data.reply;
+      } else if (data.reply) {
+        replyText = data.reply;
       } else {
-        // Fall back to robust diagnostic rule engine
-        await new Promise(resolve => setTimeout(resolve, 800));
-        replyText = getLocalDiagnosticAIResponse(userPrompt);
+        throw new Error('Empirical text completion response was empty.');
       }
     } catch (err) {
       console.warn('Gemini proxy error, falling back:', err);

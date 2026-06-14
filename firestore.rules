@@ -36,6 +36,7 @@ service cloud.firestore {
 
     function isSystemDeveloper() {
       return isSignedIn() && 
+        request.auth.token.email_verified == true &&
         request.auth.token.email != null && (
           request.auth.token.email.endsWith("@tarezaerp.co.zw") ||
           request.auth.token.email == "admin@tarezaerp.co.zw" ||
@@ -260,6 +261,10 @@ service cloud.firestore {
 
     match /exchange_rate_history/{id} {
       allow read, write: if isSystemDeveloper() || isSignedIn();
+    }
+
+    match /test_connection/{id} {
+      allow read: if true;
     }
   }
 }

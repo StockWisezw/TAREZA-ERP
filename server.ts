@@ -360,6 +360,70 @@ Keep the response concise, visually striking, professional, and limited to about
     }
   });
 
+  // 5. Secure Server-Side Gemini Chat for AI Diagnostic Support
+  app.post("/api/ai/chat", async (req, res) => {
+    const { message, diagnostics, branchName } = req.body;
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+
+    if (!geminiApiKey) {
+      return res.json({
+        success: false,
+        reply: "### 💡 AI Diagnostics Partner (Offline Mode)\n\n" +
+               "Configure your `GEMINI_API_KEY` in the **Settings > Secrets** panel to activate full cloud diagnostics, smart sync analysis, and server-side model guidance.\n\n" +
+               "In the meantime, you can ask about offline syncs, branch configurations, or decimal setups, and I will run on our local diagnostics rule engine."
+      });
+    }
+
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: geminiApiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build'
+          }
+        }
+      });
+
+      const systemInstruction = `You are Tareza Support Bot. You help users troubleshoot their Point of Sale and ERP system.
+You are integrated deep with the developer diagnostic state and real-time operational context.
+Always return response in standard Markdown syntax.
+Live Context Diagnostics:
+- Network Link Active: ${diagnostics?.isOnline ? 'ONLINE' : 'OFFLINE'}
+- Pending Transactions in Local Queue: ${diagnostics?.pendingSales || 0} items
+- Current Active Screen Route: ${diagnostics?.activeRoute || '/'}
+- Item Count in Current POS Cart: ${diagnostics?.cartCount || 0} items
+- Superadmin address: admin@tarezaerp.co.zw
+- Current User Branch: ${branchName || 'Unknown branch'}
+
+Instructions:
+1. Keep the response highly brief, helpful, technically precise, and welcoming.
+2. Structure suggestions with bulleted points for fast reading.
+3. Keep the advice tailored for local retail environments (such as dual-currency cash handling, network instability, and general ledger reconciliation).
+4. Limit the response to about 150 words. Do NOT include any unrequested technical parameters or system coordinates (such as container port numbers or ping states) to avoid tech-clutter.
+`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: message,
+        config: {
+          systemInstruction,
+        }
+      });
+
+      const replyText = response.text || "I was unable to formulate a diagnostic report. Please check your system logs or contact hotline support.";
+      return res.json({
+        success: true,
+        reply: replyText
+      });
+    } catch (err: any) {
+      console.error("Gemini AI Chat generation failed:", err);
+      return res.json({
+        success: false,
+        reply: `A server-side generation exception occurred: ${err.message || String(err)}`
+      });
+    }
+  });
+
   // Serve Vite in development, else raw static production assets
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
