@@ -6,7 +6,7 @@
   "background_color": "#09090b",
   "theme_color": "#2563eb",
   "display": "standalone",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "categories": ["business", "productivity", "finance"],
   "icons": [
     {
