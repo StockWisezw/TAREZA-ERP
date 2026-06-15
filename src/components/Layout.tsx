@@ -35,6 +35,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { SyncManager } from './pos/SyncManager';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
 import { OfflineStatusBadge } from './OfflineStatusBadge';
+import { PWAInstallPrompt } from './PWAInstallPrompt';
 import { TarezaLogo } from './ui/Logo';
 import { AIAssistant } from './AIAssistant';
 import { supabase } from '../lib/firebaseClient';
@@ -352,6 +353,8 @@ export default function Layout() {
             </div>
 
             <div className="flex items-center space-x-2 sm:space-x-3">
+              <PWAInstallPrompt />
+              <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden xs:block mx-1" id="pwa-divider" />
               <OfflineStatusBadge />
               <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block mx-1" />
               <SyncStatusIndicator />

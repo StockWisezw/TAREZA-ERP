@@ -1,26 +1,61 @@
 import React, { useState, useEffect } from 'react';
 import { Wifi, WifiOff } from 'lucide-react';
+import { toast } from 'sonner';
 
 export function OfflineStatusBadge() {
-  const [isOnline, setIsOnline] = useState<boolean>(
-    typeof window !== 'undefined' ? window.navigator.onLine : true
-  );
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [isOfflineModeForced, setIsOfflineModeForced] = useState<boolean>(false);
+
+  const checkConnectivity = () => {
+    const isLocalOffline = localStorage.getItem('tareza_offline_mode') === 'true';
+    const netOnline = typeof window !== 'undefined' ? window.navigator.onLine : true;
+    setIsOnline(netOnline && !isLocalOffline);
+    setIsOfflineModeForced(isLocalOffline);
+  };
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    checkConnectivity();
+
+    const handleOnline = () => {
+      checkConnectivity();
+    };
+    const handleOffline = () => {
+      checkConnectivity();
+    };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // Watch for other shifts or changes
+    const interval = setInterval(checkConnectivity, 1000);
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      clearInterval(interval);
     };
   }, []);
 
+  const toggleManualOffline = () => {
+    const newForcedVal = !isOfflineModeForced;
+    localStorage.setItem('tareza_offline_mode', String(newForcedVal));
+    checkConnectivity();
+    toast.success(
+      newForcedVal 
+        ? 'Simulated Offline Mode ACTIVATED. Modules will queue transactions locally.' 
+        : 'Online Mode RESTORED. Cloud databases are now connected.'
+    );
+    // Dispatch an event so components update immediately
+    window.dispatchEvent(new Event('offline-mode-changed'));
+  };
+
   return (
-    <div className="flex items-center select-none" id="offline-status-badge">
+    <div 
+      onClick={toggleManualOffline} 
+      className="flex items-center select-none cursor-pointer hover:opacity-90 active:scale-95 transition-transform" 
+      id="offline-status-badge"
+      title="Click to toggle between Online & Simulated Offline Mode"
+    >
       {isOnline ? (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-55/10 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-500/25 transition-all duration-300">
           <span className="relative flex h-2 w-2">
@@ -37,7 +72,7 @@ export function OfflineStatusBadge() {
             <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
           </span>
           <WifiOff className="h-3.5 w-3.5" />
-          <span>Offline</span>
+          <span>Offline {isOfflineModeForced && '(Forced)'}</span>
         </span>
       )}
     </div>

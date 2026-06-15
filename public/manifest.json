@@ -1,0 +1,25 @@
+{
+  "short_name": "Tareza ERP",
+  "name": "Tareza ERP — Next-Gen Global POS & Inventory",
+  "description": "Next-Gen Global Cloud POS, dynamic multi-branch inventory management, real-time double-entry ledger bookkeeping, and smart business operating system.",
+  "start_url": "/",
+  "background_color": "#09090b",
+  "theme_color": "#2563eb",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "categories": ["business", "productivity", "finance"],
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

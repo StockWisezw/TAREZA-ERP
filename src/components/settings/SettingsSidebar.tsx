@@ -15,6 +15,7 @@ import {
   Globe,
   CreditCard,
   Search,
+  Megaphone,
   X
 } from 'lucide-react';
 
@@ -68,6 +69,7 @@ const groups: NavGroup[] = [
       { id: 'security', label: 'Security & Backups', icon: Lock, description: 'Password, logs and manual/automatic database backups' },
       { id: 'notifications', label: 'Notifications', icon: Bell, description: 'Track internal alerts and activity logs' },
       { id: 'support', label: 'Help & Support', icon: Bell, description: 'Filing tickets, helpdocs and live developers support' },
+      { id: 'marketing', label: 'Marketing Kit & Ads', icon: Megaphone, description: 'Get professional high-converting FB and YT ad assets' },
     ]
   }
 ];

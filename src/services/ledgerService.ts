@@ -305,7 +305,9 @@ export async function recordStockMovement(
   type: 'POS_SALE' | 'POS_RETURN' | 'GOODS_RECEIVED' | 'ADJUSTMENT' | 'DAMAGE',
   userId: string,
   associatedTxRef: string,
-  customCostPrice?: number
+  customCostPrice?: number,
+  notes?: string,
+  customCreatedAt?: string
 ): Promise<{ success: boolean; quantityAfter: number; error?: string }> {
   try {
     // 1. Fetch current inventory stock for product at branch using direct Supabase select
@@ -355,7 +357,8 @@ export async function recordStockMovement(
       product_id: productId,
       quantity: quantityChange,
       type: type,
-      created_at: new Date().toISOString()
+      notes: notes || null,
+      created_at: customCreatedAt || new Date().toISOString()
     });
 
     if (moveInsertErr) {

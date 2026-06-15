@@ -30,8 +30,22 @@ export function usePOSSession() {
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [showShiftDetails, setShowShiftDetails] = useState(false);
 
+  const getIsOffline = () => {
+    return localStorage.getItem('tareza_offline_mode') === 'true' || (typeof window !== 'undefined' && !window.navigator.onLine);
+  };
+
   const refreshActiveSession = async () => {
     try {
+      if (getIsOffline()) {
+        const storedOffActive = localStorage.getItem('tareza_active_offline_session');
+        if (storedOffActive) {
+          setActiveSession(JSON.parse(storedOffActive));
+        } else {
+          setActiveSession(null);
+        }
+        return;
+      }
+
       const { data: userContext } = await supabase.auth.getUser();
       if (userContext?.user) {
         const { data: userBusiness } = await supabase
@@ -56,6 +70,18 @@ export function usePOSSession() {
     const initSession = async () => {
       try {
         setSessionLoading(true);
+
+        // Check offline first
+        if (getIsOffline()) {
+          const storedOffActive = localStorage.getItem('tareza_active_offline_session');
+          if (storedOffActive && active) {
+            setActiveSession(JSON.parse(storedOffActive));
+          } else if (active) {
+            setActiveSession(null);
+          }
+          return;
+        }
+
         const { data: userContext } = await supabase.auth.getUser();
         if (!active) return;
         if (userContext?.user) {
@@ -86,8 +112,16 @@ export function usePOSSession() {
     };
 
     initSession();
+
+    // Listen to manual offline mode toggles
+    const handleOfflineToggle = () => {
+      initSession();
+    };
+    window.addEventListener('offline-mode-changed', handleOfflineToggle);
+
     return () => {
       active = false;
+      window.removeEventListener('offline-mode-changed', handleOfflineToggle);
     };
   }, []);
 
@@ -96,8 +130,10 @@ export function usePOSSession() {
       refreshActiveSession();
     };
     window.addEventListener('tareza-session-updated', handleSessionRefresh);
+    window.addEventListener('offline-mode-changed', handleSessionRefresh);
     return () => {
       window.removeEventListener('tareza-session-updated', handleSessionRefresh);
+      window.removeEventListener('offline-mode-changed', handleSessionRefresh);
     };
   }, []);
 
@@ -122,6 +158,43 @@ export function usePOSSession() {
         return false;
       }
       const { data: userData } = await supabase.auth.getUser();
+      
+      const isCurrentlyOffline = getIsOffline();
+
+      // Implement offline shift startup if offline mode is triggered
+      if (isCurrentlyOffline) {
+        const offSessionId = 'off-shift-' + Math.random().toString(36).substring(2, 11) + '-' + Date.now().toString().slice(-4);
+        const offlineShiftObj: RegisterSession & { is_offline: boolean; synced: boolean } = {
+          id: offSessionId,
+          business_id: 'offline_business_id',
+          branch_id: 'offline_branch_id',
+          cashier_id: userData?.user?.id || 'offline_cashier_id',
+          opened_at: new Date().toISOString(),
+          opening_balance: floatVal,
+          expected_balance: floatVal,
+          closed_at: null,
+          closing_balance: null,
+          sales_count: 0,
+          variance: 0,
+          is_offline: true,
+          synced: false
+        };
+
+        // Save active session
+        localStorage.setItem('tareza_active_offline_session', JSON.stringify(offlineShiftObj));
+
+        // Append to local shifts log history for future manual synchronizations
+        const savedShiftsArrRaw = localStorage.getItem('tareza_offline_shifts_uncollapsed');
+        const shiftsArr = savedShiftsArrRaw ? JSON.parse(savedShiftsArrRaw) : [];
+        shiftsArr.push(offlineShiftObj);
+        localStorage.setItem('tareza_offline_shifts_uncollapsed', JSON.stringify(shiftsArr));
+
+        setActiveSession(offlineShiftObj);
+        toast.success(`Active OFFLINE register session successfully initialized with float $${floatVal.toFixed(2)}. Running locally.`);
+        window.dispatchEvent(new Event('offline-mode-changed'));
+        return true;
+      }
+
       if (!userData?.user) {
         toast.error('Session error: Could not verify user authentic token.');
         return false;
@@ -183,6 +256,32 @@ export function usePOSSession() {
         toast.error('Please input a valid closing drawer counter float.');
         return false;
       }
+
+      if (getIsOffline() || activeSession.id.startsWith('off-shift-')) {
+        // Complete shift session locally
+        const updatedOfflineSession = {
+          ...activeSession,
+          closed_at: new Date().toISOString(),
+          closing_balance: actualVal,
+          variance: actualVal - activeSession.expected_balance
+        };
+
+        // Remove active offline session, keep the record in uncollapsed array
+        localStorage.removeItem('tareza_active_offline_session');
+
+        const savedShiftsArrRaw = localStorage.getItem('tareza_offline_shifts_uncollapsed') || '[]';
+        let shiftsArr = JSON.parse(savedShiftsArrRaw);
+        shiftsArr = shiftsArr.map((s: any) => s.id === activeSession.id ? updatedOfflineSession : s);
+        localStorage.setItem('tareza_offline_shifts_uncollapsed', JSON.stringify(shiftsArr));
+
+        setActiveSession(null);
+        setClosingActual('');
+        setShowCloseShift(false);
+        toast.success(`Offline shift successfully completed! Total Expected: $${updatedOfflineSession.expected_balance.toFixed(2)}, Actual counted: $${actualVal.toFixed(2)}, Variance: $${updatedOfflineSession.variance.toFixed(2)}. Saved offline queue for manual sync.`);
+        window.dispatchEvent(new Event('offline-mode-changed'));
+        return true;
+      }
+
       const res = await closeRegisterSession(activeSession.id, actualVal);
       if (res.success) {
         setActiveSession(null);
