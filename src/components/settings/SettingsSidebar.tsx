@@ -16,7 +16,8 @@ import {
   CreditCard,
   Search,
   Megaphone,
-  X
+  X,
+  BookOpen
 } from 'lucide-react';
 
 interface SettingsSidebarProps {
@@ -69,7 +70,7 @@ const groups: NavGroup[] = [
       { id: 'security', label: 'Security & Backups', icon: Lock, description: 'Password, logs and manual/automatic database backups' },
       { id: 'notifications', label: 'Notifications', icon: Bell, description: 'Track internal alerts and activity logs' },
       { id: 'support', label: 'Help & Support', icon: Bell, description: 'Filing tickets, helpdocs and live developers support' },
-      { id: 'marketing', label: 'Marketing Kit & Ads', icon: Megaphone, description: 'Get professional high-converting FB and YT ad assets' },
+      { id: 'tutorials', label: 'Tutorials & Staff Training', icon: BookOpen, description: 'Step-by-step master guides with examples for all modules' },
     ]
   }
 ];
