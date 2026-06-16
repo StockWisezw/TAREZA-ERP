@@ -363,6 +363,104 @@ export default function POS() {
     }
   }, [products]);
 
+  // Keep track of cart and auto-select newly added items automatically
+  const prevCartLengthRef = useRef(cart.length);
+  useEffect(() => {
+    if (cart.length > prevCartLengthRef.current) {
+      // Item was added! Auto-select the last item
+      const lastItem = cart[cart.length - 1];
+      if (lastItem) {
+        setSelectedCartItemId(lastItem.id);
+        setIsNewInput(true);
+      }
+    } else if (cart.length === 0) {
+      setSelectedCartItemId(null);
+    } else if (selectedCartItemId && !cart.some(item => item.id === selectedCartItemId)) {
+      // Selected item was removed, select the last remaining item
+      setSelectedCartItemId(cart[cart.length - 1].id);
+      setIsNewInput(true);
+    }
+    prevCartLengthRef.current = cart.length;
+  }, [cart, selectedCartItemId]);
+
+  // Physical Keyboard listener for POS navigation and keyboard entries
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing in any input/textarea/select element (unless arrow keys)
+      const activeEl = document.activeElement;
+      if (activeEl && (
+        activeEl.tagName === 'INPUT' || 
+        activeEl.tagName === 'TEXTAREA' || 
+        activeEl.hasAttribute('contenteditable') ||
+        activeEl.tagName === 'SELECT'
+      )) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          // Allow arrow key override to select down/up in the cart items list
+        } else {
+          return;
+        }
+      }
+
+      if (cart.length === 0) return;
+
+      // Arrow Down: move to next item
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const currentIndex = cart.findIndex(item => item.id === selectedCartItemId);
+        let nextIndex = 0;
+        if (currentIndex !== -1) {
+          nextIndex = (currentIndex + 1) % cart.length;
+        }
+        setSelectedCartItemId(cart[nextIndex].id);
+        setIsNewInput(true);
+        toast.info(`Selected: ${cart[nextIndex].product.name}`);
+        return;
+      }
+
+      // Arrow Up: move to previous item
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const currentIndex = cart.findIndex(item => item.id === selectedCartItemId);
+        let prevIndex = cart.length - 1;
+        if (currentIndex !== -1) {
+          prevIndex = (currentIndex - 1 + cart.length) % cart.length;
+        }
+        setSelectedCartItemId(cart[prevIndex].id);
+        setIsNewInput(true);
+        toast.info(`Selected: ${cart[prevIndex].product.name}`);
+        return;
+      }
+
+      // Numpad number mapping
+      if (/[0-9]/.test(e.key)) {
+        e.preventDefault();
+        handleNumpadKey(e.key);
+      } else if (e.key === '.') {
+        e.preventDefault();
+        handleNumpadKey('.');
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handleNumpadKey('backspace');
+      } else if (e.key === '+' || e.key === '-') {
+        e.preventDefault();
+        handleNumpadKey('+/-');
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        setShowPayment(true);
+        toast.info("Proceeding to Split-Tenders Payment Settle...");
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        clearCart();
+        toast.success("Cart cleared");
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [cart, selectedCartItemId, numpadMode, numpadBuffer, isNewInput]);
+
   const startVoiceSearch = () => {
     if (!speechSupported) {
       toast.error('Voice input is not supported in this browser version.');
@@ -417,10 +515,11 @@ export default function POS() {
     if (numpadMode === 'qty') {
       const currentVal = targetItem.quantity;
       let currentBuf = numpadBuffer;
-      if (isNewInput) {
+      const replacesZero = currentVal === 0 || isNewInput || currentBuf === '0' || currentBuf === '';
+      if (replacesZero) {
         if (key === 'backspace') {
           const s = currentVal.toString();
-          currentBuf = s.slice(0, -1);
+          currentBuf = s.length <= 1 || s === '0' ? '' : s.slice(0, -1);
         } else if (key === '+/-') {
           const newQty = -targetItem.quantity;
           updateQuantity(targetItem.id, newQty);
@@ -458,10 +557,11 @@ export default function POS() {
     } else if (numpadMode === 'disc') {
       const currentVal = targetItem.discount?.value || 0;
       let currentBuf = numpadBuffer;
-      if (isNewInput) {
+      const replacesZero = currentVal === 0 || isNewInput || currentBuf === '0' || currentBuf === '';
+      if (replacesZero) {
         if (key === 'backspace') {
           const s = currentVal.toString();
-          currentBuf = s.slice(0, -1);
+          currentBuf = s.length <= 1 || s === '0' ? '' : s.slice(0, -1);
         } else if (key === '+/-') {
           return;
         } else if (key === '.') {
@@ -492,10 +592,11 @@ export default function POS() {
     } else if (numpadMode === 'price') {
       const currentVal = targetItem.unitPrice;
       let currentBuf = numpadBuffer;
-      if (isNewInput) {
+      const replacesZero = currentVal === 0 || isNewInput || currentBuf === '0' || currentBuf === '';
+      if (replacesZero) {
         if (key === 'backspace') {
           const s = currentVal.toString();
-          currentBuf = s.slice(0, -1);
+          currentBuf = s.length <= 1 || s === '0' ? '' : s.slice(0, -1);
         } else if (key === '+/-') {
           const newPrice = -targetItem.unitPrice;
           usePOSStore.setState((s: any) => ({
