@@ -31,6 +31,7 @@ import { CartSummary } from '../components/pos/CartSummary';
 import { SessionManager } from '../components/pos/SessionManager';
 import { QuotationManager } from '../components/pos/QuotationManager';
 import { PaymentFlow } from '../components/pos/PaymentFlow';
+import { TransactionHistoryManager } from '../components/pos/TransactionHistoryManager';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -1150,6 +1151,11 @@ export default function POS() {
           <div className="flex justify-between items-center mb-3">
             <h1 className="text-xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">Point of Sale</h1>
             <div className="flex items-center gap-2">
+              <TransactionHistoryManager 
+                activeSession={activeSession}
+                setActiveSession={setActiveSession}
+                userId={(activeSession as any)?.user_id || (activeSession as any)?.cashier_id || 'unknown'}
+              />
               <Button 
                 variant="outline" 
                 size="sm" 

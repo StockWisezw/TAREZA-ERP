@@ -58,45 +58,9 @@ const navigation = [
 ];
 
 function SubscriptionBanner({ status, endDate }: { status: string; endDate: string | null }) {
-  const { user } = useAuth();
-  
-  // Superadmin account has no expiration and unlimited functions
-  const isSuperadmin = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw';
-  const subscriptionStatus = isSuperadmin ? 'ACTIVE' : status;
-  
-  if (subscriptionStatus === 'ACTIVE') return null;
-
-  const expiresAt = endDate ? new Date(endDate) : new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // Fallback to 2 days ago if undefined/not loaded
-  const gracePeriodEnd = new Date(expiresAt.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days grace from expiration
-  let daysLeftInGrace = Math.ceil((gracePeriodEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  
-  // Ensure we don't display negative days if it's already expired but status hasn't moved
-  if (daysLeftInGrace < 0) {
-    daysLeftInGrace = 0;
-  }
-
-  // If status is EXPIRED, or daysLeftInGrace <= 0, we show EXPIRED banner
-  if (subscriptionStatus === 'EXPIRED' || daysLeftInGrace <= 0) {
-     return (
-      <div className="bg-red-500 text-white border-b border-red-600 px-4 py-2 flex items-center justify-center text-sm z-50 relative shrink-0" id="expired-subscription-banner">
-        <AlertTriangle className="w-4 h-4 mr-2 shrink-0 animate-pulse" />
-        <span className="truncate font-medium">Your subscription has expired. Please upgrade or renew your plan to restore access.</span>
-        <Link to="/settings?tab=billing" className="ml-3 font-bold underline hover:text-red-100 shrink-0">Renew Plan</Link>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-amber-100 border-b border-amber-200 px-4 py-2 flex items-center justify-center text-sm text-amber-800 z-50 relative shrink-0 font-sans" id="grace-period-subscription-banner">
-      <AlertTriangle className="w-4 h-4 mr-2 shrink-0 text-amber-600 animate-bounce" />
-      <span className="truncate font-medium">
-        {subscriptionStatus === 'TRIAL' 
-          ? `Your free trial is active.` 
-          : `Subscription Overdue: You are in a 7-day grace period (${daysLeftInGrace} day${daysLeftInGrace === 1 ? '' : 's'} left).`}
-      </span>
-      <Link to="/settings?tab=billing" className="ml-3 font-semibold underline hover:text-amber-900 shrink-0 select-none">Upgrade Plan</Link>
-    </div>
-  );
+  // Auto locking system has been removed per user request.
+  // We bypass expired banners entirely and ensure the user always has continuous access.
+  return null;
 }
 
 interface NotificationItem {
@@ -200,7 +164,7 @@ export default function Layout() {
       {
         id: 'notif-4',
         title: 'Paynow Subscription Reminder',
-        description: 'Complete your license payment soon using EcoCash or credit card to avoid lock.',
+        description: 'Complete your license payment soon using EcoCash or credit card to renew your plan.',
         time: '1 day ago',
         read: false,
         type: 'billing',

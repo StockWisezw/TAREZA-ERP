@@ -46,7 +46,7 @@ const CYCLES = {
 
 const PLAN_BASE_PRICES = {
   starter: 15,
-  pro: 50,
+  pro: 30,
   enterprise: 99
 };
 
@@ -80,7 +80,7 @@ export function BillingSettings() {
   // EcoCash & POP billing states
   const [isPaynowOpen, setIsPaynowOpen] = useState(false); 
   const [selectedPlanCode, setSelectedPlanCode] = useState<'starter' | 'pro' | 'enterprise'>('pro');
-  const [selectedPlanCost, setSelectedPlanCost] = useState<number>(50);
+  const [selectedPlanCost, setSelectedPlanCost] = useState<number>(30);
   const [selectedCycle, setSelectedCycle] = useState<'monthly' | 'quarterly' | 'semi_annually' | 'annually'>('monthly');
   const [paynowCurrency, setPaynowCurrency] = useState<'USD' | 'ZiG'>('USD');
   const [mobileMethod, setMobileMethod] = useState<'ecocash' | 'innbucks' | 'onemoney' | 'visa'>('ecocash');
@@ -157,10 +157,10 @@ export function BillingSettings() {
   const expiresAt = businessData?.subscription_end_date ? new Date(businessData.subscription_end_date) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
   const gracePeriodEnd = new Date(expiresAt.getTime() + 7 * 24 * 60 * 60 * 1000);
   const daysLeftInGrace = Math.floor((gracePeriodEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  const planName = subscription?.plan_name === 'free_trial' ? 'Free Trial' : subscription?.plan_name === 'starter' ? 'Starter' : subscription?.plan_name === 'pro' ? 'Consultancy Pro' : subscription?.plan_name === 'enterprise' ? 'Enterprise' : (subscription?.plan_name || 'Free Trial');
+  const planName = subscription?.plan_name === 'free_trial' ? 'Free Trial' : subscription?.plan_name === 'free' ? 'Forever Free' : subscription?.plan_name === 'starter' ? 'Starter' : subscription?.plan_name === 'pro' ? 'Consultancy Pro' : subscription?.plan_name === 'enterprise' ? 'Enterprise' : (subscription?.plan_name || 'Free Trial');
   const planNameRaw = subscription?.plan_name || 'free_trial';
-  const maxUsers = planNameRaw === 'starter' ? 3 : planNameRaw === 'pro' ? 10 : planNameRaw === 'enterprise' ? 100 : (businessData?.max_users || 5);
-  const planCost = planNameRaw === 'starter' ? '$15.00' : planNameRaw === 'pro' ? '$50.00' : planNameRaw === 'enterprise' ? '$99.00' : '$0.00';
+  const maxUsers = planNameRaw === 'free' ? 1 : planNameRaw === 'starter' ? 2 : planNameRaw === 'pro' ? 10 : planNameRaw === 'enterprise' ? 9999 : (businessData?.max_users || 5);
+  const planCost = planNameRaw === 'free' ? '$0.00' : planNameRaw === 'starter' ? '$15.00' : planNameRaw === 'pro' ? '$30.00' : planNameRaw === 'enterprise' ? 'Custom' : '$0.00';
   const userPercent = Math.min((userCount / maxUsers) * 100, 100);
 
   // Remaining days to actual renewal due date
@@ -216,6 +216,53 @@ export function BillingSettings() {
       }
     } catch (err) {
       console.error("Auto approve simulation error:", err);
+    }
+  };
+
+  const handleSelectFreePlan = async () => {
+    setLoading(true);
+    try {
+      if (!businessData) {
+        toast.error("Billing session timed out. Please refresh.");
+        return;
+      }
+      
+      const newExpiry = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000); // 100 years
+      const subId = 'sub-free-' + Math.floor(100000 + Math.random() * 900000);
+      
+      const { error: subError } = await supabase.from('subscriptions').insert({
+        id: subId,
+        business_id: businessData.id,
+        plan_name: 'free',
+        status: 'active',
+        start_date: new Date().toISOString(),
+        end_date: newExpiry.toISOString(),
+        created_at: new Date().toISOString(),
+        pop_amount: '$0.00 USD',
+        pop_reference: 'FOREVER_FREE',
+        pop_date: new Date().toLocaleDateString()
+      });
+
+      if (subError) throw subError;
+
+      const { error: bizError } = await supabase.from('businesses').update({
+        subscription_status: 'ACTIVE',
+        updated_at: new Date().toISOString()
+      }).eq('id', businessData.id);
+
+      if (bizError) throw bizError;
+
+      toast.success("Forever Free Plan Activated!", {
+        description: "Your business is now set up on the Tareza Free tier. No credit card required.",
+        duration: 8000
+      });
+
+      await loadData();
+    } catch (err: any) {
+      console.error("Free plan activation failed:", err);
+      toast.error(`Database error: ${err.message || "Failed to activate Free plan."}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -413,7 +460,7 @@ export function BillingSettings() {
               </h4>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-xl font-medium leading-relaxed">
                 {isOverdue 
-                  ? `Your business profile has crossed its standard due date and entered the grace period. Only ${daysLeftInGrace} days remain before terminal lock.` 
+                  ? `Your business profile has crossed its standard due date and entered the grace period. Only ${daysLeftInGrace} days remain before the renewal period ends.` 
                   : `Your billing cycle ends in ${daysLeft} days on ${expiresAt.toLocaleDateString()}. Renew or upgrade subscription to maintain uninterrupted access.`}
               </p>
             </div>
@@ -448,7 +495,7 @@ export function BillingSettings() {
                 {planStatus === 'GRACE_PERIOD' ? (
                   <>
                     <AlertTriangle className="h-4 w-4 mr-1.5" /> 
-                    Grace period ends in {daysLeftInGrace} days. System will lock automatically.
+                    Grace period ends in {daysLeftInGrace} days. Please renew to keep your service status updated.
                   </>
                 ) : planStatus === 'PENDING_VERIFICATION' ? (
                   <>
@@ -542,8 +589,53 @@ export function BillingSettings() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Starter Plan */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Free Plan */}
+          {(() => {
+            const isActive = planNameRaw === 'free';
+            return (
+              <Card className={`relative overflow-hidden bg-white dark:bg-zinc-900 shadow-sm flex flex-col ${isActive ? 'border-zinc-900 dark:border-zinc-50' : 'border-zinc-200 dark:border-zinc-800'}`}>
+                <CardHeader className="bg-zinc-50/50 dark:bg-zinc-900/50 pb-6 border-b border-zinc-100 dark:border-zinc-850">
+                  <div className="flex justify-between items-start">
+                    <CardTitle className="text-lg font-bold text-zinc-805 dark:text-zinc-200 font-sans">Forever Free</CardTitle>
+                    {isActive && (
+                      <Badge className="bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 text-[10px] uppercase font-bold tracking-wider">
+                        Current
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-4 flex flex-col tracking-tight">
+                    <div className="flex items-baseline text-4xl font-extrabold text-zinc-900 dark:text-white">
+                      $0
+                      <span className="ml-1 text-base font-medium text-zinc-500 font-sans font-medium">/mo</span>
+                    </div>
+                    <div className="text-xs text-zinc-400 mt-1.5">Free forever for startups</div>
+                  </div>
+                  <CardDescription className="pt-3 text-zinc-550 dark:text-zinc-400 leading-relaxed font-semibold">Perfect for testing, street vendors, and prototyping.</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-4 flex-1">
+                  <ul className="space-y-3 shrink-0 text-sm">
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">1 POS Register</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">1 User Account</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Basic POS features</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">10 Transactions / day</span></li>
+                    <li className="flex items-center gap-3 text-zinc-400"><Check className="h-4 w-4 text-zinc-300 shrink-0" /> <span className="font-sans line-through">No stocktake included</span></li>
+                  </ul>
+                </CardContent>
+                <CardFooter className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
+                  <Button 
+                    variant={isActive ? "secondary" : "outline"}
+                    className="w-full border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-950 cursor-pointer text-xs font-bold" 
+                    onClick={handleSelectFreePlan}
+                    disabled={isActive}
+                  >
+                    {isActive ? 'Active Plan' : 'Select Free Plan'}
+                  </Button>
+                </CardFooter>
+              </Card>
+            );
+          })()}
+
           {/* Starter Plan */}
           {(() => {
             const info = getPlanPriceInfo('starter', selectedCycle);
@@ -573,14 +665,15 @@ export function BillingSettings() {
                       </div>
                     )}
                   </div>
-                  <CardDescription className="pt-3 text-zinc-550 dark:text-zinc-400 leading-relaxed font-semibold">Perfect for small, single-location shops or kiosks.</CardDescription>
+                  <CardDescription className="pt-3 text-zinc-550 dark:text-zinc-400 leading-relaxed font-semibold">Perfect for small kiosks, convenience stores, and solo shops.</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-4 flex-1">
                   <ul className="space-y-3 shrink-0 text-sm">
-                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">1 Branch / Warehouse</span></li>
-                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">3 User Accounts</span></li>
-                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Core POS & Inventory</span></li>
-                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Standard Support</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">1 POS Register Station</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">2 User Accounts</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Unlimited transactions</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Basic inventory tracking</span></li>
+                    <li className="flex items-center gap-3 text-zinc-400"><Check className="h-4 w-4 text-zinc-300 shrink-0" /> <span className="font-sans line-through">No stocktake included</span></li>
                   </ul>
                 </CardContent>
                 <CardFooter className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
@@ -596,7 +689,7 @@ export function BillingSettings() {
             );
           })()}
 
-          {/* Consultancy Pro (Current standard selection) */}
+          {/* Consultancy Pro */}
           {(() => {
             const info = getPlanPriceInfo('pro', selectedCycle);
             const isActive = planNameRaw === 'pro';
@@ -628,14 +721,16 @@ export function BillingSettings() {
                       </div>
                     )}
                   </div>
-                  <CardDescription className="pt-3 text-zinc-650 dark:text-zinc-400 leading-relaxed font-medium">Physical stocktake support plus total Cloud ERP access.</CardDescription>
+                  <CardDescription className="pt-3 text-zinc-650 dark:text-zinc-400 leading-relaxed font-semibold">Optimized for growing retailers, franchises, & boutiques.</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-4 flex-1">
                   <ul className="space-y-3 shrink-0 text-sm">
-                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">1 Monthly Stocktake Visit</span></li>
-                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">Up to 3 Branches / Warehouses</span></li>
-                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">Up to 10 User Accounts</span></li>
-                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">ZIMRA & tax readiness</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">3 POS Registers</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">10 User Accounts</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">Up to 3 Branches</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">Real-time inventory tracking</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-indigo-500 shrink-0" /> <span className="text-zinc-800 dark:text-zinc-350 font-medium font-sans">Till Denomination count tools</span></li>
+                    <li className="flex items-center gap-3 text-zinc-400"><Check className="h-4 w-4 text-zinc-300 shrink-0" /> <span className="font-sans line-through">No stocktake included</span></li>
                   </ul>
                 </CardContent>
                 <CardFooter className="pt-6 border-t border-indigo-500/10 dark:border-indigo-500/25">
@@ -666,40 +761,104 @@ export function BillingSettings() {
                     )}
                   </div>
                   <div className="mt-4 flex flex-col tracking-tight">
-                    <div className="flex items-baseline text-4xl font-extrabold text-zinc-900 dark:text-white">
-                      ${info.monthlyEquivalent.toFixed(2).replace('.00', '')}
-                      <span className="ml-1 text-base font-medium text-zinc-500 font-sans font-medium">/mo</span>
+                    <div className="flex items-baseline text-4xl font-extrabold text-[#111827] dark:text-white">
+                      Custom
                     </div>
-                    {selectedCycle !== 'monthly' && (
-                      <div className="text-xs text-emerald-650 dark:text-emerald-400 font-bold mt-1.5 flex items-center gap-1">
-                        <span>Billed as ${info.totalCost} for {info.months} mos</span>
-                        <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-[9px] px-1.5 py-0.5 rounded-full">
-                          Save ${info.savings.toFixed(0)}
-                        </span>
-                      </div>
-                    )}
+                    <div className="text-xs text-zinc-400 mt-1.5">For high volume chain stores</div>
                   </div>
                   <CardDescription className="pt-3 text-zinc-650 dark:text-zinc-400 leading-relaxed font-semibold">Unlimited options for high volume franchise operations.</CardDescription>
                 </CardHeader>
-            <CardContent className="pt-6 space-y-4 flex-1">
-              <ul className="space-y-3 shrink-0 text-sm">
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Unlimited Branches</span></li>
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Unlimited Users</span></li>
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Custom API Access</span></li>
-                <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Priority 24/7 Support</span></li>
-              </ul>
-            </CardContent>
-            <CardFooter className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
-              <Button 
-                className="w-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-950 dark:border border-zinc-800 shadow-sm cursor-pointer h-10 text-xs font-bold rounded-xl" 
-                onClick={() => handlePaynowInit('enterprise', selectedCycle)}
-              >
-                Upgrade/Select Enterprise
-              </Button>
-            </CardFooter>
-          </Card>
+                <CardContent className="pt-6 space-y-4 flex-1">
+                  <ul className="space-y-3 shrink-0 text-sm">
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Unlimited Branches</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Unlimited Users & Tills</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Custom API Integrations</span></li>
+                    <li className="flex items-center gap-3"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> <span className="text-zinc-600 dark:text-zinc-400 font-medium font-sans">Priority Support & SLA</span></li>
+                    <li className="flex items-center gap-3 text-zinc-400"><Check className="h-4 w-4 text-zinc-300 shrink-0" /> <span className="font-sans line-through">No stocktake included</span></li>
+                  </ul>
+                </CardContent>
+                <CardFooter className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
+                  <Button 
+                    className="w-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-950 dark:border border-zinc-800 shadow-sm cursor-pointer h-10 text-xs font-bold rounded-xl" 
+                    onClick={() => handlePaynowInit('enterprise', selectedCycle)}
+                  >
+                    Upgrade/Select Enterprise
+                  </Button>
+                </CardFooter>
+              </Card>
             );
           })()}
+        </div>
+
+        {/* Stocktake Services Separator & Pricing Panel */}
+        <div className="mt-12 bg-indigo-50/20 dark:bg-zinc-900/40 rounded-3xl border border-indigo-100 dark:border-zinc-800 p-8 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-indigo-100 dark:bg-indigo-950/50 rounded-xl text-indigo-600 dark:text-indigo-400 shrink-0">
+                <TrendingUp className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-lg font-bold text-zinc-905 dark:text-zinc-50 font-sans">💾 Stocktake Services & Diagnostic Add-ons</h4>
+                <p className="text-xs text-zinc-500 mt-1">Guided, highly accurate physical audit assessments separate from monthly cloud subscription plans.</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-extrabold uppercase bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-400 px-3 py-1 rounded-full border border-emerald-200 tracking-wider h-fit shrink-0">
+              100% Value Back Guarantee
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Option 1 */}
+            <div className="bg-white dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-850 p-6 rounded-2xl flex flex-col justify-between">
+              <div>
+                <div className="flex justify-between items-start mb-4">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#d97706] bg-amber-50 dark:bg-amber-950/20 px-2 py-0.5 rounded-full font-mono">Option 1</span>
+                  <span className="text-sm font-extrabold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">One-Off Stocktake</span>
+                </div>
+                <div className="text-3xl font-black text-zinc-900 dark:text-white">$10<span className="text-xs font-semibold text-zinc-500 font-sans"> / per 100 product lines</span></div>
+                <p className="text-xs text-zinc-550 dark:text-zinc-400 mt-2 font-medium leading-relaxed">Perfect for annual audits, quarterly audits, or damage assessments. Includes thorough comparison against existing systems.</p>
+                
+                <ul className="mt-4 space-y-2 text-xs font-medium text-zinc-650 dark:text-zinc-400">
+                  <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-indigo-500" /> Count variance analysis reports</li>
+                  <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-indigo-500" /> Discrepancy comparison & shrinkage check</li>
+                  <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-indigo-500" /> Automatic General Ledger variance entry updates</li>
+                </ul>
+              </div>
+              <div className="pt-6 border-t border-zinc-50 dark:border-zinc-850 mt-6 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-900/10 p-3 rounded-xl gap-2 flex-wrap">
+                <div className="text-[11px] font-sans font-semibold text-zinc-500">Need a periodic count?</div>
+                <a href="mailto:admin@tarezaerp.co.zw?subject=One-Off Stocktake Inquiry" className="text-xs text-indigo-650 dark:text-indigo-400 font-extrabold flex items-center gap-1 hover:underline">
+                  Request Quote <ChevronRight className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+
+            {/* Option 2 */}
+            <div className="bg-white dark:bg-zinc-950 border border-indigo-200/50 dark:border-zinc-855 p-6 rounded-2xl flex flex-col justify-between shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 bg-indigo-650 text-white text-[8px] font-extrabold px-3 py-1 uppercase tracking-wider rounded-bl-lg">
+                Best ROI (5x)
+              </div>
+              <div>
+                <div className="flex justify-between items-start mb-4">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#4f46e5] bg-indigo-50 dark:bg-indigo-950/20 px-2 py-0.5 rounded-full font-mono">Option 2</span>
+                  <span className="text-sm font-extrabold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">Ongoing Stocktake</span>
+                </div>
+                <div className="text-3xl font-black text-zinc-900 dark:text-white">$20<span className="text-xs font-semibold text-zinc-500 font-sans"> / per week</span></div>
+                <p className="text-xs text-zinc-550 dark:text-zinc-400 mt-2 font-medium leading-relaxed">Continuous tracking for convenience stores and fast shops. Counts processed bi-weekly or custom rolling periods.</p>
+                
+                <ul className="mt-4 space-y-2 text-xs font-medium text-zinc-650 dark:text-zinc-400">
+                  <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-[#10b981]" /> Weekly variance trends & seasonal demand forecast</li>
+                  <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-[#10b981]" /> Low stock alerts & automatic optimization</li>
+                  <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-[#10b981]" /> Average 2.2% reduction in store shrinkage</li>
+                </ul>
+              </div>
+              <div className="pt-6 border-t border-zinc-50 dark:border-zinc-850 mt-6 flex justify-between items-center bg-indigo-50/40 dark:bg-zinc-900/10 p-3 rounded-xl gap-2 flex-wrap">
+                <div className="text-[11px] font-sans font-semibold text-indigo-950 dark:text-indigo-200">Recommended for busy retailers</div>
+                <a href="mailto:admin@tarezaerp.co.zw?subject=Ongoing Stocktake Setup Request" className="text-xs text-[#10b981] font-extrabold flex items-center gap-1 hover:underline">
+                  Activate Service <ChevronRight className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -724,7 +883,7 @@ export function BillingSettings() {
                   {pastedInvoices.length > 0 ? (
                     pastedInvoices.map((inv, idx) => {
                       const formattedDate = new Date(inv.created_at || Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-                      const amountStr = inv.pop_amount || `$${inv.plan_name === 'starter' ? 15 : inv.plan_name === 'pro' ? 50 : 99}.00 USD`;
+                      const amountStr = inv.pop_amount || `$${inv.plan_name === 'starter' ? 15 : inv.plan_name === 'pro' ? 30 : 99}.00 USD`;
                       const isPending = inv.status === 'pending_pop_verification';
                       
                       return (
@@ -780,14 +939,14 @@ export function BillingSettings() {
                       <TableRow className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/25">
                          <TableCell className="font-medium text-zinc-900 dark:text-zinc-200">Jun 1, 2026</TableCell>
                          <TableCell className="text-zinc-500 font-mono text-xs">INV-2026-0094</TableCell>
-                         <TableCell className="text-zinc-800 dark:text-zinc-300 font-bold">$50.00 USD</TableCell>
+                         <TableCell className="text-zinc-800 dark:text-zinc-300 font-bold">$30.00 USD</TableCell>
                          <TableCell><Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400 border-emerald-200 text-emerald-700">Paid (EcoCash API)</Badge></TableCell>
                          <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Download className="w-4 h-4" /></Button></TableCell>
                       </TableRow>
                       <TableRow className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/25">
                          <TableCell className="font-medium text-zinc-900 dark:text-zinc-200">May 1, 2026</TableCell>
                          <TableCell className="text-zinc-500 font-mono text-xs">INV-2026-0081</TableCell>
-                         <TableCell className="text-zinc-800 dark:text-zinc-300 font-bold">$50.00 USD</TableCell>
+                         <TableCell className="text-zinc-800 dark:text-zinc-300 font-bold">$30.00 USD</TableCell>
                          <TableCell><Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-450 border-emerald-200 text-emerald-700">Paid (Direct Local Trsf)</Badge></TableCell>
                          <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Download className="w-4 h-4" /></Button></TableCell>
                       </TableRow>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/button';
-import { Store, TrendingUp, ShieldCheck, Zap, Package, Key, Building2, ArrowRight, CheckCircle2, Calculator, Users, BarChart3, Receipt, ShoppingCart, Activity, Mail, Phone, MessageCircle, Facebook, Youtube, Globe, ClipboardList, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
+import { Store, TrendingUp, ShieldCheck, Zap, Package, Key, Building2, ArrowRight, CheckCircle2, Calculator, Users, BarChart3, Receipt, ShoppingCart, Activity, Mail, Phone, MessageCircle, Facebook, Youtube, Globe, ClipboardList, ChevronDown, ChevronUp, HelpCircle, ChevronRight } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { TarezaLogo } from '../components/ui/Logo';
 
@@ -351,71 +351,145 @@ export default function Landing() {
             <p className="text-xl text-zinc-500 dark:text-zinc-400">All plans include access to all modules. You only pay for additional locations and users.</p>
           </div>
           
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {/* Starter Plan */}
-            <div className="bg-card rounded-2xl border border-border p-8 shadow-sm flex flex-col">
-              <h3 className="text-2xl font-bold mb-2">Starter</h3>
-              <div className="flex items-baseline gap-1 mb-4">
-                <span className="text-4xl font-bold">$15</span>
-                <span className="text-muted-foreground">/mo</span>
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+            {/* Free Plan */}
+            <div className="bg-card rounded-2xl border border-border p-6 shadow-sm flex flex-col">
+              <h3 className="text-xl font-bold mb-1 text-foreground">Free</h3>
+              <div className="flex items-baseline gap-1 mb-3">
+                <span className="text-3xl font-bold text-foreground">FREE</span>
+                <span className="text-xs text-muted-foreground">forever</span>
               </div>
-              <p className="text-sm text-muted-foreground mb-6">Perfect for small, single-location shops.</p>
+              <p className="text-xs text-muted-foreground mb-4">Startups, street vendors & testing.</p>
               
-              <ul className="space-y-4 mb-8 flex-1">
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> 1 Branch / Warehouse</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> 3 User Accounts</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> All Tareza Modules</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Standard Support</li>
+              <ul className="space-y-3 mb-6 flex-1 text-xs text-foreground/80">
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> 1 register / POS station</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> 1 User Account</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Basic POS features</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Manual inventory tracking</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> 10 transactions / day limit</li>
+                <li className="flex items-center gap-2 text-muted-foreground/75"><CheckCircle2 className="w-4 h-4 text-muted shrink-0" /> <span className="line-through">No stocktake included</span></li>
               </ul>
               <Link to="/login" className="mt-auto">
-                <Button variant="outline" className="w-full border-primary text-primary hover:bg-primary/5">Start 14-day free trial</Button>
+                <Button variant="outline" className="w-full text-xs h-9">Get Started Free</Button>
+              </Link>
+            </div>
+
+            {/* Starter Plan */}
+            <div className="bg-card rounded-2xl border border-border p-6 shadow-sm flex flex-col">
+              <h3 className="text-xl font-bold mb-1 text-foreground">Starter</h3>
+              <div className="flex items-baseline gap-1 mb-3">
+                <span className="text-3xl font-bold text-foreground">$15</span>
+                <span className="text-muted-foreground text-xs">/mo</span>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">Small convenience stores & solo retail.</p>
+              
+              <ul className="space-y-3 mb-6 flex-1 text-xs text-foreground/80">
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> 1 POS register station</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> 2 User Accounts</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Unlimited transactions</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Sales history & reports</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Manual cash reconciliation</li>
+                <li className="flex items-center gap-2 text-muted-foreground/75"><CheckCircle2 className="w-4 h-4 text-muted shrink-0" /> <span className="line-through">No stocktake included</span></li>
+              </ul>
+              <Link to="/login" className="mt-auto">
+                <Button variant="outline" className="w-full text-xs h-9">Start 14-day free trial</Button>
               </Link>
             </div>
 
             {/* Pro Plan */}
-            <div className="bg-card rounded-2xl border-2 border-primary p-8 shadow-lg relative flex flex-col scale-105 z-10">
+            <div className="bg-card rounded-2xl border-2 border-primary p-6 shadow-lg relative flex flex-col scale-105 z-10">
               <div className="absolute top-0 inset-x-0 translate-y-[-50%] flex justify-center">
-                <span className="bg-primary text-primary-foreground text-xs font-bold uppercase tracking-widest py-1 px-4 rounded-full">Most Recommended</span>
+                <span className="bg-primary text-primary-foreground text-[9px] font-bold uppercase tracking-widest py-0.5 px-3 rounded-full">Most Popular</span>
               </div>
-              <h3 className="text-2xl font-bold mb-2 text-foreground">Consultancy Pro</h3>
-              <div className="flex items-baseline gap-1 mb-4">
-                <span className="text-4xl font-bold text-foreground">$50</span>
-                <span className="text-muted-foreground">/mo</span>
+              <h3 className="text-xl font-bold mb-1 text-foreground">Consultancy Pro</h3>
+              <div className="flex items-baseline gap-1 mb-3">
+                <span className="text-3xl font-bold text-foreground">$30</span>
+                <span className="text-muted-foreground text-xs">/mo</span>
               </div>
-              <p className="text-sm text-muted-foreground mb-6">Expert physical oversight & premium enterprise software.</p>
+              <p className="text-xs text-muted-foreground mb-4">Established pharmacies & boutiques.</p>
               
-              <ul className="space-y-4 mb-8 flex-1">
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> 1 Monthly On-Site Visit (Stocktake or Consultancy)</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Up to 10 User Accounts</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Professional Financial Trend Interpretation</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Up to 3 Branches / Warehouses</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Direct Developer Support Hotline</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Universal Tax Engine (ZIMRA, SARS & Global Ready)</li>
+              <ul className="space-y-3 mb-6 flex-1 text-xs text-foreground/80">
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> 3 Registers / POS Stations</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> 10 User Accounts</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Multi-branch (up to 3 branches)</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Real-time inventory tracking</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Advanced analytics, Till Calc</li>
+                <li className="flex items-center gap-2 text-muted-foreground/75"><CheckCircle2 className="w-4 h-4 text-muted shrink-0" /> <span className="line-through">No stocktake included</span></li>
               </ul>
               <Link to="/login" className="mt-auto">
-                <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-bold">Start your 14-day trial</Button>
+                <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs h-9">Start your 14-day trial</Button>
               </Link>
             </div>
 
             {/* Enterprise Plan */}
-            <div className="bg-card rounded-2xl border border-border p-8 shadow-sm flex flex-col">
-              <h3 className="text-2xl font-bold mb-2">Enterprise</h3>
-              <div className="flex items-baseline gap-1 mb-4">
-                <span className="text-4xl font-bold">$99</span>
-                <span className="text-muted-foreground">/mo</span>
+            <div className="bg-card rounded-2xl border border-border p-6 shadow-sm flex flex-col">
+              <h3 className="text-xl font-bold mb-1 text-foreground">Enterprise</h3>
+              <div className="flex items-baseline gap-1 mb-3">
+                <span className="text-3xl font-bold text-foreground">Custom</span>
               </div>
-              <p className="text-sm text-muted-foreground mb-6">Unlimited power for large operations.</p>
+              <p className="text-xs text-muted-foreground mb-4">Large retail chains & franchises.</p>
               
-              <ul className="space-y-4 mb-8 flex-1">
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Unlimited Branches</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Unlimited Users</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> All Tareza Modules</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> Custom API Access</li>
-                <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-5 h-5 text-primary shrink-0" /> 24/7 Priority Support</li>
+              <ul className="space-y-3 mb-6 flex-1 text-xs text-foreground/80">
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Unlimited POS register stations</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Unlimited Users & Branches</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Custom API Access & white-label</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Dedicated Account Manager</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Phone support (same-day)</li>
+                <li className="flex items-center gap-2 text-muted-foreground/75"><CheckCircle2 className="w-4 h-4 text-muted shrink-0" /> <span className="line-through">No stocktake included</span></li>
               </ul>
               <a href="mailto:admin@tarezaerp.co.zw?subject=Enterprise Inquiry - Tareza ERP" className="mt-auto block">
-                <Button variant="outline" className="w-full">Contact Sales</Button>
+                <Button variant="outline" className="w-full text-xs h-9">Contact Sales</Button>
               </a>
+            </div>
+          </div>
+
+          {/* Separate Stocktake pricing options landing panel */}
+          <div className="mt-16 bg-zinc-100/50 dark:bg-zinc-900/40 rounded-3xl border border-zinc-200/60 dark:border-zinc-800 p-8 max-w-5xl mx-auto shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+              <div>
+                <h4 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 font-sans flex items-center gap-2">
+                  <span>💾 Separate Stocktake Services & Diagnostic Add-ons</span>
+                </h4>
+                <p className="text-sm text-zinc-550 dark:text-zinc-400 mt-1">Guided, highly accurate physical audit assessments billed separate from software plans.</p>
+              </div>
+              <span className="text-[10px] font-extrabold uppercase bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-400 px-3 py-1 rounded-full border border-emerald-200 tracking-wider h-fit shrink-0">
+                Pays for itself in Shrinkage Reduction
+              </span>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-8">
+              {/* Option 1 landing summary */}
+              <div className="bg-background rounded-2xl border border-border p-6 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 font-mono bg-amber-50 dark:bg-amber-950/20 px-2 py-0.5 rounded-full">Option 1</span>
+                    <span className="text-sm font-bold text-foreground">One-Off Stocktake Audit</span>
+                  </div>
+                  <div className="text-3xl font-black text-foreground">$10<span className="text-xs font-semibold text-muted-foreground"> / per 100 product lines</span></div>
+                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">Perfect for annual audits, damage checks, or major operations transitions. Guided scanning updates General Ledger automatically.</p>
+                </div>
+                <div className="pt-4 border-t border-border mt-6 flex justify-between items-center text-xs">
+                  <span className="text-muted-foreground font-medium">Need a manual check-up?</span>
+                  <a href="mailto:admin@tarezaerp.co.zw?subject=One-Off Stocktake Inquiry" className="text-primary font-bold hover:underline flex items-center gap-1">Request Quote <ChevronRight className="w-3.5 h-3.5" /></a>
+                </div>
+              </div>
+
+              {/* Option 2 landing summary */}
+              <div className="bg-background rounded-2xl border border-primary/20 p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
+                <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[8px] font-extrabold px-3 py-1 uppercase tracking-wider rounded-bl-lg">5x Average ROI</div>
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-primary font-mono bg-primary/10 px-2 py-0.5 rounded-full">Option 2</span>
+                    <span className="text-sm font-bold text-foreground">Ongoing Weekly Stocktake</span>
+                  </div>
+                  <div className="text-3xl font-black text-foreground">$20<span className="text-xs font-semibold text-muted-foreground"> / per week</span></div>
+                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">Continuously optimizes reorders, charts variance trends, and delivers seasonal demand forecasts. Ideal for convenience stores & pharmacies.</p>
+                </div>
+                <div className="pt-4 border-t border-border mt-6 flex justify-between items-center text-xs">
+                  <span className="text-muted-foreground font-medium">Reduce store shrinkage by 20%</span>
+                  <a href="mailto:admin@tarezaerp.co.zw?subject=Ongoing Stocktake Setup Request" className="text-primary font-bold hover:underline flex items-center gap-1">Learn More <ChevronRight className="w-3.5 h-3.5" /></a>
+                </div>
+              </div>
             </div>
           </div>
           

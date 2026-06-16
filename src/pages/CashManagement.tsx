@@ -88,18 +88,31 @@ export default function CashManagement() {
   const [auditLogs, setAuditLogs] = useState<CashLog[]>([]);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(() => {
+    return localStorage.getItem('tareza_cash_advanced_mode') === 'true';
+  });
+
+  const toggleAdvanced = (val: boolean) => {
+    setShowAdvanced(val);
+    localStorage.setItem('tareza_cash_advanced_mode', String(val));
+    toast.info(val ? "Advanced tools and registries enabled." : "Lite Mode enabled. Screen simplified.");
+  };
+
   // Denomination Drawer Calculator tool
   const [showDenominationCalc, setShowDenominationCalc] = useState(false);
-  const [denominations, setDenominations] = useState<Record<number, number>>({
-    100: 0,
-    50: 0,
-    20: 0,
-    10: 0,
-    5: 0,
-    2: 0,
-    1: 0
+  const [calcCurrency, setCalcCurrency] = useState<'USD' | 'ZWG' | 'ZAR'>('USD');
+  const [rates, setRates] = useState<Record<string, number>>({ USD: 1.0, ZWG: 26.9181, ZAR: 16.2229 });
+
+  const [denominations, setDenominations] = useState<Record<string, Record<number, number>>>({
+    USD: { 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 },
+    ZWG: { 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 },
+    ZAR: { 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 }
   });
-  const [coinTotal, setCoinTotal] = useState('');
+  const [coinTotals, setCoinTotals] = useState<Record<string, string>>({
+    USD: '',
+    ZWG: '',
+    ZAR: ''
+  });
 
   const [businessId, setBusinessId] = useState('');
   const [branchId, setBranchId] = useState('');
@@ -168,6 +181,23 @@ export default function CashManagement() {
 
       setBusinessId(busId);
       setBranchId(brId);
+
+      // Load active currency exchange rates
+      try {
+        const { data: dbRates } = await supabase
+          .from('currencies')
+          .select('code, exchange_rate')
+          .eq('business_id', busId);
+        if (dbRates && dbRates.length > 0) {
+          const ratesMap: Record<string, number> = { USD: 1.0, ZWG: 26.9181, ZAR: 16.2229 };
+          dbRates.forEach((r: any) => {
+            ratesMap[r.code] = Number(r.exchange_rate) || 1.0;
+          });
+          setRates(ratesMap);
+        }
+      } catch (rateErr) {
+        console.error("Could not fetch database currency exchange rates", rateErr);
+      }
 
       // Check if a register session is actively OPEN
       const { data: activeSess } = await supabase
@@ -362,6 +392,7 @@ export default function CashManagement() {
             notes: 'Register opened with starting float',
             created_at: new Date().toISOString()
         }]).select();
+        if (logErr) throw logErr;
 
         const sessionId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
         const sessionItem = {
@@ -383,7 +414,8 @@ export default function CashManagement() {
           created_at: new Date().toISOString()
         };
         
-        await supabase.from('register_sessions').insert(sessionItem);
+        const { error: sessErr } = await supabase.from('register_sessions').insert(sessionItem);
+        if (sessErr) throw sessErr;
         
         setIsDrawerOpen(true);
         setStartingFloatInput('');
@@ -408,7 +440,7 @@ export default function CashManagement() {
     }
 
     try {
-        await supabase.from('cash_drawer_logs').insert([{
+        const { error: logErr } = await supabase.from('cash_drawer_logs').insert([{
             business_id: businessId,
             branch_id: branchId || null,
             amount: countedCash,
@@ -417,6 +449,7 @@ export default function CashManagement() {
             notes: `Counted: $${countedCash.toFixed(2)}, Expected: $${expectedCash.toFixed(2)}, Variance: $${calculatedVariance.toFixed(2)}. Notes: ${notes}`,
             created_at: new Date().toISOString()
         }]);
+        if (logErr) throw logErr;
 
         const { data: openSess } = await supabase
           .from('register_sessions')
@@ -436,14 +469,23 @@ export default function CashManagement() {
             sales_total: sessionCashSales,
             payouts_total: sessionOutflows
           };
-          await supabase.from('register_sessions').eq('id', openSess.id).update(patches);
+          const { error: updateErr } = await supabase.from('register_sessions').eq('id', openSess.id).update(patches);
+          if (updateErr) throw updateErr;
         }
         
         setIsDrawerOpen(false);
         setCountedCash(0);
         setNotes('');
-        setDenominations({ 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 });
-        setCoinTotal('');
+        setDenominations({
+          USD: { 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 },
+          ZWG: { 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 },
+          ZAR: { 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 }
+        });
+        setCoinTotals({
+          USD: '',
+          ZWG: '',
+          ZAR: ''
+        });
         setShowDenominationCalc(false);
         fetchActiveShiftAndAccounting();
         toast.success('Register safely closed. Reconciled summary saved.');
@@ -703,33 +745,68 @@ export default function CashManagement() {
     }
   };
 
+  // Centralized Counted Cash calculation based on multi-currency inputs
+  useEffect(() => {
+    let totalUsd = 0;
+    
+    // Sum for USD
+    const usdNotesSum = Object.entries(denominations.USD || {}).reduce((sum, [denom, qty]) => {
+      return sum + (Number(denom) * qty);
+    }, 0);
+    const usdCoinsVal = parseFloat(coinTotals.USD || '') || 0;
+    totalUsd += (usdNotesSum + usdCoinsVal);
+
+    // Sum for ZWG (converted to USD)
+    const zwgNotesSum = Object.entries(denominations.ZWG || {}).reduce((sum, [denom, qty]) => {
+      return sum + (Number(denom) * qty);
+    }, 0);
+    const zwgCoinsVal = parseFloat(coinTotals.ZWG || '') || 0;
+    const zwgRate = rates.ZWG || 26.9181;
+    totalUsd += (zwgNotesSum + zwgCoinsVal) / zwgRate;
+
+    // Sum for ZAR (converted to USD)
+    const zarNotesSum = Object.entries(denominations.ZAR || {}).reduce((sum, [denom, qty]) => {
+      return sum + (Number(denom) * qty);
+    }, 0);
+    const zarCoinsVal = parseFloat(coinTotals.ZAR || '') || 0;
+    const zarRate = rates.ZAR || 16.2229;
+    totalUsd += (zarNotesSum + zarCoinsVal) / zarRate;
+
+    setCountedCash(totalUsd);
+  }, [denominations, coinTotals, rates]);
+
   // Handle banknote counting calculator inputs
   const handleDenominationChange = (val: number, count: number) => {
     setDenominations(prev => {
-      const next = { ...prev, [val]: Math.max(0, count) };
-      // Recalculate total Counted
-      const valSum = Object.entries(next).reduce((sum, [denom, qty]) => {
-        return sum + (Number(denom) * qty);
-      }, 0);
-      const coins = parseFloat(coinTotal) || 0;
-      setCountedCash(valSum + coins);
-      return next;
+      const currMap = prev[calcCurrency] || {};
+      return {
+        ...prev,
+        [calcCurrency]: {
+          ...currMap,
+          [val]: Math.max(0, count)
+        }
+      };
     });
   };
 
   const handleCoinTotalChange = (text: string) => {
-    setCoinTotal(text);
-    const coins = parseFloat(text) || 0;
-    const notesSum = Object.entries(denominations).reduce((sum, [denom, qty]) => {
-      return sum + (Number(denom) * qty);
-    }, 0);
-    setCountedCash(notesSum + coins);
+    setCoinTotals(prev => ({
+      ...prev,
+      [calcCurrency]: text
+    }));
   };
 
   const clearCalculators = () => {
-    setDenominations({ 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 });
-    setCoinTotal('');
-    setCountedCash(0);
+    setDenominations({
+      USD: { 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 },
+      ZWG: { 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 },
+      ZAR: { 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 }
+    });
+    setCoinTotals({
+      USD: '',
+      ZWG: '',
+      ZAR: ''
+    });
   };
 
   // Format cash logs for layout views
@@ -1016,16 +1093,26 @@ export default function CashManagement() {
           <h2 className="text-3xl font-extrabold tracking-tight text-zinc-950">Cash Drawer Registers</h2>
           <p className="text-zinc-500 text-sm mt-1">Audit active shifts, balance currency tills, and track COD business sales.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 h-9 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 rounded-xl px-3 shadow-sm select-none">
+            <Label htmlFor="advanced-toggle" className="text-xs font-bold text-zinc-650 cursor-pointer">Advanced Mode</Label>
+            <input 
+              type="checkbox"
+              id="advanced-toggle"
+              checked={showAdvanced}
+              onChange={(e) => toggleAdvanced(e.target.checked)}
+              className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-zinc-300 cursor-pointer ml-1.5"
+            />
+          </div>
           <Button 
             variant="outline" 
             size="sm" 
             onClick={fetchActiveShiftAndAccounting} 
-            className="border-zinc-200 text-zinc-600 font-medium"
+            className="border-zinc-200 text-zinc-600 font-medium h-9"
           >
             <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Reload
           </Button>
-          <Badge variant="outline" className={`px-3 py-1 text-xs font-semibold rounded-full ${isDrawerOpen ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+          <Badge variant="outline" className={`px-3 py-2 text-xs font-semibold rounded-xl h-9 flex items-center ${isDrawerOpen ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
              {isDrawerOpen ? <><Unlock className="w-3.5 h-3.5 mr-1.5" /> Register Till Active</> : <><Lock className="w-3.5 h-3.5 mr-1.5" /> Till Locked / Closed</>}
           </Badge>
         </div>
@@ -1040,9 +1127,11 @@ export default function CashManagement() {
           <TabsTrigger value="active-shift" className="flex items-center gap-2 rounded-lg px-4 py-2 font-medium">
             <Sliders className="w-4 h-4" /> Active Shift Control
           </TabsTrigger>
-          <TabsTrigger value="shift-logs" className="flex items-center gap-2 rounded-lg px-4 py-2 font-medium">
-            <History className="w-4 h-4" /> Registers & Shifts Log
-          </TabsTrigger>
+          {showAdvanced && (
+            <TabsTrigger value="shift-logs" className="flex items-center gap-2 rounded-lg px-4 py-2 font-medium">
+              <History className="w-4 h-4" /> Registers & Shifts Log
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* 1. MAIN ACTIVE SHIFT TAB */}
@@ -1106,7 +1195,7 @@ export default function CashManagement() {
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* LEFT operational section */}
-            <div className="lg:col-span-6 space-y-6">
+            <div className={`${showAdvanced ? 'lg:col-span-6' : 'lg:col-span-12'} space-y-6`}>
               {!isDrawerOpen ? (
                 <Card className="border-indigo-100 bg-white shadow-xl rounded-2xl overflow-hidden relative">
                   <div className="h-1.5 w-full bg-amber-500"></div>
@@ -1173,14 +1262,26 @@ export default function CashManagement() {
                     {/* DENOMINATION tray tool */}
                     {showDenominationCalc && (
                       <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200/80 animate-in zoom-in-95 duration-150 space-y-3">
-                        <div className="flex justify-between items-center pb-2 border-b border-zinc-200/60">
-                          <span className="text-xs font-bold text-zinc-700 uppercase tracking-widest flex items-center gap-1.5">
+                        <div className="flex justify-between items-center pb-2 border-b border-zinc-200/60 flex-wrap gap-2">
+                          <span className="text-xs font-bold text-zinc-700 uppercase tracking-widest flex items-center gap-1.5 font-mono">
                             <Calculator className="w-3.5 h-3.5 text-indigo-500" /> Bill Counter
                           </span>
+                          <div className="flex gap-1.5 items-center">
+                            {(['USD', 'ZWG', 'ZAR'] as const).map((cc) => (
+                              <button
+                                key={cc}
+                                type="button"
+                                onClick={() => setCalcCurrency(cc)}
+                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded border transition-all ${calcCurrency === cc ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}`}
+                              >
+                                {cc}
+                              </button>
+                            ))}
+                          </div>
                           <Button 
                             variant="ghost" 
                             size="sm" 
-                            className="text-[10px] text-zinc-500 hover:text-zinc-700 p-1 h-6"
+                            className="text-[10px] text-zinc-500 hover:text-zinc-700 p-0 h-6 shrink-0"
                             onClick={clearCalculators}
                           >
                             <RotateCcw className="w-2.5 h-2.5 mr-1" /> Clear Tray
@@ -1188,15 +1289,15 @@ export default function CashManagement() {
                         </div>
                         
                         <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                          {[100, 50, 20, 10, 5, 2, 1].map((denom) => (
+                          {((calcCurrency === 'USD' ? [100, 50, 20, 10, 5, 2, 1] : [200, 100, 50, 20, 10, 5, 2])) .map((denom) => (
                             <div key={denom} className="flex items-center justify-between text-xs font-medium text-zinc-600">
-                              <span className="w-10 text-right pr-2">${denom} x</span>
+                              <span className="w-12 text-right pr-2">{calcCurrency === 'USD' ? '$' : calcCurrency === 'ZWG' ? 'ZiG' : 'R'}{denom} x</span>
                               <div className="flex items-center gap-1">
                                 <Button 
                                   variant="outline" 
                                   size="icon" 
                                   className="w-5 h-5 rounded-full"
-                                  onClick={() => handleDenominationChange(denom, (denominations[denom] || 0) - 1)}
+                                  onClick={() => handleDenominationChange(denom, ((denominations[calcCurrency] || {})[denom] || 0) - 1)}
                                 >
                                   -
                                 </Button>
@@ -1204,14 +1305,14 @@ export default function CashManagement() {
                                   type="number"
                                   min="0"
                                   className="w-12 h-6 text-center font-mono text-[11px] p-0 border-zinc-200 bg-white"
-                                  value={denominations[denom] || ''}
+                                  value={((denominations[calcCurrency] || {})[denom]) || ''}
                                   onChange={(e) => handleDenominationChange(denom, parseInt(e.target.value) || 0)}
                                 />
                                 <Button 
                                   variant="outline" 
                                   size="icon" 
                                   className="w-5 h-5 rounded-full"
-                                  onClick={() => handleDenominationChange(denom, (denominations[denom] || 0) + 1)}
+                                  onClick={() => handleDenominationChange(denom, ((denominations[calcCurrency] || {})[denom] || 0) + 1)}
                                 >
                                   +
                                 </Button>
@@ -1220,23 +1321,43 @@ export default function CashManagement() {
                           ))}
                           
                           <div className="col-span-2 pt-2 border-t border-zinc-200/40 flex items-center justify-between text-xs font-medium text-zinc-700">
-                            <span>Coins / Cent Total:</span>
+                            <span>Coins / Cents {calcCurrency} Total:</span>
                             <div className="relative">
-                              <span className="absolute left-1.5 top-1.5 text-[10px] text-zinc-400 font-bold">$</span>
+                              <span className="absolute left-1.5 top-1.5 text-[10px] text-zinc-450 font-bold">{calcCurrency === 'USD' ? '$' : calcCurrency === 'ZWG' ? 'ZiG' : 'R'}</span>
                               <Input 
                                 type="number" 
                                 step="0.01" 
                                 placeholder="0.00"
-                                className="w-24 h-7 pl-4 text-right font-mono text-[11px]"
-                                value={coinTotal}
+                                className="w-24 h-7 pl-6 pr-1.5 text-right font-mono text-[11px]"
+                                value={coinTotals[calcCurrency] || ''}
                                 onChange={(e) => handleCoinTotalChange(e.target.value)}
                               />
                             </div>
                           </div>
                         </div>
 
+                        {/* Multi-currency breakdown list */}
+                        <div className="pt-2 border-t border-zinc-200 text-[10px] font-mono text-zinc-500 space-y-0.5 leading-normal">
+                          <div className="font-semibold text-zinc-600 flex justify-between">
+                            <span>Subtotals:</span>
+                            <span>Exchange Rates (per USD)</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>USD Counted: ${Object.entries(denominations.USD || {}).reduce((s, [d, q]) => s + (Number(d) * q), 0) + (parseFloat(coinTotals.USD) || 0)}</span>
+                            <span>1.0000 Base</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>ZWG (ZiG) Counted: {Object.entries(denominations.ZWG || {}).reduce((s, [d, q]) => s + (Number(d) * q), 0) + (parseFloat(coinTotals.ZWG) || 0)}</span>
+                            <span>{rates.ZWG?.toFixed(4) || "26.9181"}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>ZAR (Rand) Counted: R{Object.entries(denominations.ZAR || {}).reduce((s, [d, q]) => s + (Number(d) * q), 0) + (parseFloat(coinTotals.ZAR) || 0)}</span>
+                            <span>{rates.ZAR?.toFixed(4) || "16.2229"}</span>
+                          </div>
+                        </div>
+ 
                         <div className="pt-2 flex justify-between items-center font-semibold text-xs border-t border-zinc-200 bg-indigo-50/50 p-2 rounded-lg text-indigo-950">
-                          <span>Computed Cash Total:</span>
+                          <span>Converted USD Cash Total:</span>
                           <span className="font-mono text-sm">${countedCash.toFixed(2)}</span>
                         </div>
                       </div>
@@ -1311,7 +1432,8 @@ export default function CashManagement() {
             </div>
 
             {/* RIGHT side forms for cash actions info */}
-            <div className="lg:col-span-6 space-y-6">
+            {showAdvanced && (
+              <div className="lg:col-span-6 space-y-6">
               <Card className="border-zinc-200 bg-white shadow-md rounded-2xl overflow-hidden">
                 <div className="h-1.5 w-full bg-slate-800"></div>
                 <CardHeader>
@@ -1430,6 +1552,7 @@ export default function CashManagement() {
                 </CardContent>
               </Card>
             </div>
+            )}
           </div>
         </TabsContent>
 
