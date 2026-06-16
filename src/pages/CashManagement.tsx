@@ -275,6 +275,9 @@ export default function CashManagement() {
       let expenses = 0;
       let restocks = 0;
       let ownerCollections = 0;
+      let cashIns = 0;
+      let reversalsInflow = 0;
+      let reversalsOutflow = 0;
       
       logsData.forEach(log => {
         const amt = Number(log.amount);
@@ -291,13 +294,22 @@ export default function CashManagement() {
             case 'owner_collection': 
               ownerCollections += amt; 
               break;
+            case 'cash_in':
+              cashIns += amt;
+              break;
+            case 'reversal_outflow':
+              reversalsInflow += amt;
+              break;
+            case 'reversal_inflow':
+              reversalsOutflow += amt;
+              break;
         }
       });
       
-      const calculatedOutflows = expenses + restocks + ownerCollections;
+      const calculatedOutflows = Math.max(0, (expenses + restocks + ownerCollections) - reversalsInflow);
       setSessionOutflows(calculatedOutflows);
 
-      const calculatedExpected = float + totalCashSales - calculatedOutflows;
+      const calculatedExpected = float + totalCashSales + cashIns - reversalsOutflow - calculatedOutflows;
       setExpectedCash(calculatedExpected);
 
     } catch (error) {
@@ -451,6 +463,8 @@ export default function CashManagement() {
         let logType = 'payout';
         if (entryType === 'owner_collection') {
           logType = 'drop';
+        } else if (entryType === 'cash_in') {
+          logType = 'payin';
         }
 
         const amt = parseFloat(entryAmount);
@@ -486,12 +500,38 @@ export default function CashManagement() {
           } catch (ledgerError) {
             console.error('Ledger journal creation failed:', ledgerError);
           }
+        } else if (entryType === 'cash_in') {
+          try {
+            const { data: userDetails } = await supabase.auth.getUser();
+            const callerId = userDetails?.user?.id || 'default_user';
+
+            await postJournalEntry(
+              businessId,
+              branchId || 'default_branch',
+              callerId,
+              `POS-CIN-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+              `POS cash-in: ${description}`,
+              [
+                { accountCode: '1000', debit: amt, credit: 0, description: `Cash till deposit: ${description}` },
+                { accountCode: '3000', debit: 0, credit: amt, description: `Owner float addition / Capital: ${description}` }
+              ]
+            );
+          } catch (ledgerError) {
+            console.error('Ledger cash-in journal failed:', ledgerError);
+          }
         }
 
         // If there is an active session in register_sessions, update its payouts and expected balance
         if (activeSession) {
-          const updatedPayouts = Number(activeSession.payouts_total || 0) + amt;
-          const updatedExpected = Number(activeSession.expected_balance || 0) - amt;
+          let updatedPayouts = Number(activeSession.payouts_total || 0);
+          let updatedExpected = Number(activeSession.expected_balance || 0);
+
+          if (entryType === 'cash_in') {
+            updatedExpected += amt;
+          } else {
+            updatedPayouts += amt;
+            updatedExpected -= amt;
+          }
           
           await supabase
             .from('register_sessions')
@@ -502,7 +542,12 @@ export default function CashManagement() {
             });
         }
         
-        toast.success(`Registered cash $${amt.toFixed(2)} ${entryType}. Expense automatically posted to Journals.`);
+        if (entryType === 'cash_in') {
+          toast.success(`Registered Cash Inbound of $${amt.toFixed(2)}. Float addition posted to Journals.`);
+        } else {
+          toast.success(`Registered cash $${amt.toFixed(2)} ${entryType}. Transaction automatically posted to Journals.`);
+        }
+
         setEntryAmount('');
         setEntryNotes('');
         setEntryType('expense');
@@ -510,6 +555,118 @@ export default function CashManagement() {
     } catch (e) {
         console.error(e);
         toast.error('Failed to save till transaction');
+    }
+  };
+
+  const handleReverseLog = async (log: CashLog) => {
+    if (log.notes.startsWith('[REVERSED]') || log.transaction_type.startsWith('reversal_') || log.notes.startsWith('Reversal of')) {
+      toast.error('This transaction is either already reversed or is a corrective reversal itself.');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to reverse the transaction: "${formatLogType(log.transaction_type)} - $${Number(log.amount).toFixed(2)}"? This will log a corrective journal entry and balance the register.`)) {
+      return;
+    }
+
+    try {
+      let correctionType = '';
+      let correctionTxType = '';
+      let notes = `Reversal of transaction: ${log.notes}`;
+
+      if (['expense', 'restock', 'owner_collection', 'payout'].includes(log.transaction_type)) {
+        correctionType = 'cash_in';
+        correctionTxType = 'reversal_outflow';
+      } else if (log.transaction_type === 'cash_in') {
+        correctionType = 'payout';
+        correctionTxType = 'reversal_inflow';
+      } else {
+        toast.error('Reversal is not allowed for this transaction type.');
+        return;
+      }
+
+      // Add the balancing log
+      await supabase.from('cash_drawer_logs').insert([{
+        business_id: businessId,
+        branch_id: branchId || null,
+        amount: Number(log.amount),
+        type: correctionType,
+        transaction_type: correctionTxType,
+        notes: notes,
+        created_at: new Date().toISOString()
+      }]);
+
+      // Update original log string so visual layout shows [REVERSED] tag
+      await supabase.from('cash_drawer_logs')
+        .update({ notes: `[REVERSED] ${log.notes}` })
+        .eq('id', log.id);
+
+      // Perform accounting journal entry if it was an expense
+      if (log.transaction_type === 'expense') {
+        try {
+          const { data: userDetails } = await supabase.auth.getUser();
+          const callerId = userDetails?.user?.id || 'default_user';
+
+          await postJournalEntry(
+            businessId,
+            branchId || 'default_branch',
+            callerId,
+            `POS-REV-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            `Reversal of POS till expense: ${log.notes}`,
+            [
+              { accountCode: '1000', debit: Number(log.amount), credit: 0, description: `Cash till reversal inflow: ${log.notes}` },
+              { accountCode: '6000', debit: 0, credit: Number(log.amount), description: `POS micro expense reversal: ${log.notes}` }
+            ]
+          );
+        } catch (ledgerError) {
+          console.error('Ledger reversal journal failed:', ledgerError);
+        }
+      } else if (log.transaction_type === 'cash_in') {
+        try {
+          const { data: userDetails } = await supabase.auth.getUser();
+          const callerId = userDetails?.user?.id || 'default_user';
+
+          await postJournalEntry(
+            businessId,
+            branchId || 'default_branch',
+            callerId,
+            `POS-REV-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            `Reversal of POS till deposit: ${log.notes}`,
+            [
+              { accountCode: '3000', debit: Number(log.amount), credit: 0, description: `Owner float addition reversal: ${log.notes}` },
+              { accountCode: '1000', debit: 0, credit: Number(log.amount), description: `Cash till reversal outflow: ${log.notes}` }
+            ]
+          );
+        } catch (ledgerError) {
+          console.error('Ledger reversal journal failed:', ledgerError);
+        }
+      }
+
+      // Adjust active session payouts_total or expected_balance if present
+      if (activeSession) {
+        let updatedPayouts = Number(activeSession.payouts_total || 0);
+        let updatedExpected = Number(activeSession.expected_balance || 0);
+
+        if (correctionTxType === 'reversal_outflow') {
+          updatedPayouts = Math.max(0, updatedPayouts - Number(log.amount));
+          updatedExpected = updatedExpected + Number(log.amount);
+        } else if (correctionTxType === 'reversal_inflow') {
+          updatedExpected = Math.max(0, updatedExpected - Number(log.amount));
+        }
+
+        await supabase
+          .from('register_sessions')
+          .eq('id', activeSession.id)
+          .update({
+            payouts_total: updatedPayouts,
+            expected_balance: updatedExpected
+          });
+      }
+
+      toast.success('Transaction successfully reversed. Double-entry alignment updated!');
+      fetchActiveShiftAndAccounting();
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to complete transaction reversal');
     }
   };
 
@@ -584,6 +741,9 @@ export default function CashManagement() {
           case 'owner_collection': return 'Cash Collection (Safe Drop)';
           case 'closing_count': return 'Closing Reconciliation';
           case 'cash_sale': return 'Gross Cash Sales';
+          case 'cash_in': return 'Cash In (Deposit)';
+          case 'reversal_outflow': return 'Reversal Balance Inbound';
+          case 'reversal_inflow': return 'Reversal Balance Outbound';
           default: return type.replace(/_/g, ' ');
       }
   };
@@ -596,6 +756,9 @@ export default function CashManagement() {
           case 'owner_collection': return <UserMinus className="w-4 h-4 text-indigo-600" />;
           case 'closing_count': return <Lock className="w-4 h-4 text-zinc-600" />;
           case 'cash_sale': return <DollarSign className="w-4 h-4 text-sky-600" />;
+          case 'cash_in': return <Plus className="w-4 h-4 text-emerald-600" />;
+          case 'reversal_outflow': return <RotateCcw className="w-4 h-4 text-amber-600" />;
+          case 'reversal_inflow': return <RotateCcw className="w-4 h-4 text-rose-600" />;
           default: return <FileText className="w-4 h-4 text-zinc-600" />;
       }
   };
@@ -1157,13 +1320,14 @@ export default function CashManagement() {
                 </CardHeader>
                 <CardContent>
                   <Tabs value={entryType} onValueChange={setEntryType} className="space-y-4">
-                    <TabsList className="grid grid-cols-2 w-full border bg-zinc-100 p-1 rounded-lg">
-                      <TabsTrigger value="expense" className="text-xs rounded font-medium">Expense</TabsTrigger>
-                      <TabsTrigger value="owner_collection" className="text-xs rounded font-medium">Cash Collection (Safe Drop)</TabsTrigger>
+                    <TabsList className="grid grid-cols-3 w-full border bg-zinc-100 p-1 rounded-lg">
+                      <TabsTrigger value="expense" className="text-xs rounded font-semibold px-1 py-1.5">Expense</TabsTrigger>
+                      <TabsTrigger value="owner_collection" className="text-xs rounded font-semibold px-1 py-1.5" title="Safe Drop Outflows">Safe Drop</TabsTrigger>
+                      <TabsTrigger value="cash_in" className="text-xs rounded font-semibold px-1 py-1.5">Cash In (Inflow)</TabsTrigger>
                     </TabsList>
                     
                     <div className="space-y-4 pt-2">
-                      <div className="space-y-2">
+                       <div className="space-y-2">
                         <Label className="text-xs font-bold text-zinc-600 uppercase tracking-wider">Transaction Cash Amount</Label>
                         <div className="relative">
                           <DollarSign className="absolute left-3 top-2.5 h-5 w-5 text-zinc-400" />
@@ -1185,6 +1349,8 @@ export default function CashManagement() {
                           placeholder={
                             entryType === 'expense' 
                               ? "e.g., Office printing stationery" 
+                              : entryType === 'cash_in'
+                              ? "e.g., Additional drawer float / change addition"
                               : "e.g., Vault cash transfers (Cash collection)"
                           } 
                           className="bg-white border-zinc-200"
@@ -1195,7 +1361,7 @@ export default function CashManagement() {
                       </div>
                       
                       <Button className="w-full bg-slate-800 text-white hover:bg-slate-700 h-10" onClick={handleAddLog} disabled={!isDrawerOpen}>
-                        Record Transaction Outflow
+                        Record {entryType === 'cash_in' ? 'Cash Inbound (Deposit)' : 'Transaction Outflow'}
                       </Button>
                     </div>
                   </Tabs>
@@ -1241,10 +1407,21 @@ export default function CashManagement() {
                               </p>
                             </div>
                           </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-xs font-bold font-mono">
-                              {['expense', 'restock', 'owner_collection'].includes(log.transaction_type) ? '-' : ''}${Number(log.amount).toFixed(2)}
-                            </p>
+                          <div className="flex items-center text-right shrink-0 gap-2">
+                            <span className={`text-xs font-bold font-mono ${['expense', 'restock', 'owner_collection', 'reversal_inflow'].includes(log.transaction_type) ? 'text-rose-600' : 'text-emerald-600'}`}>
+                              {['expense', 'restock', 'owner_collection', 'reversal_inflow'].includes(log.transaction_type) ? '-' : '+'}${Number(log.amount).toFixed(2)}
+                            </span>
+                            {isDrawerOpen && ['expense', 'restock', 'owner_collection', 'cash_in'].includes(log.transaction_type) && !log.notes.startsWith('[REVERSED]') && (
+                              <Button 
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleReverseLog(log)}
+                                className="h-6 text-[10px] text-rose-500 border-rose-100 font-semibold hover:text-rose-700 hover:bg-rose-50 px-1.5 rounded cursor-pointer"
+                                title="Reverse this till transaction"
+                              >
+                                <RotateCcw className="w-2.5 h-2.5 mr-0.5" /> Rev
+                              </Button>
+                            )}
                           </div>
                         </div>
                       ))
@@ -1473,8 +1650,37 @@ export default function CashManagement() {
                           <p className="font-bold text-zinc-800">{formatLogType(log.transaction_type)}</p>
                           <p className="text-[10px] text-zinc-500">{new Date(log.created_at).toLocaleTimeString()} {log.notes && `• ${log.notes}`}</p>
                         </div>
-                        <div className="text-right font-mono font-bold">
-                          {['expense', 'restock', 'owner_collection'].includes(log.transaction_type) ? '-' : ''}${Number(log.amount).toFixed(2)}
+                        <div className="flex items-center gap-2">
+                          <span className={`font-mono font-bold ${['expense', 'restock', 'owner_collection', 'reversal_inflow'].includes(log.transaction_type) ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {['expense', 'restock', 'owner_collection', 'reversal_inflow'].includes(log.transaction_type) ? '-' : '+'}${Number(log.amount).toFixed(2)}
+                          </span>
+                          {selectedAuditSession.status === 'OPEN' && isDrawerOpen && ['expense', 'restock', 'owner_collection', 'cash_in'].includes(log.transaction_type) && !log.notes.startsWith('[REVERSED]') && (
+                            <Button 
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                handleReverseLog(log);
+                                // Refresh current modal logs
+                                setTimeout(async () => {
+                                  try {
+                                    const { data } = await supabase.from('cash_drawer_logs')
+                                      .select('*')
+                                      .gte('created_at', new Date(selectedAuditSession.opened_at).toISOString())
+                                      .order('created_at', { ascending: true });
+                                    const filtered = (data || []).filter(l => {
+                                      if (!selectedAuditSession.closed_at) return true;
+                                      return new Date(l.created_at) <= new Date(selectedAuditSession.closed_at);
+                                    });
+                                    setAuditLogs(filtered);
+                                  } catch (err) {}
+                                }, 800);
+                              }}
+                              className="h-6 text-[10px] text-rose-500 border-rose-100 font-semibold hover:text-rose-700 hover:bg-rose-50 px-1.5 rounded cursor-pointer"
+                              title="Reverse this till transaction"
+                            >
+                              <RotateCcw className="w-2.5 h-2.5 mr-0.5" /> Rev
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ))}

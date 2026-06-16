@@ -21,7 +21,8 @@ import {
   Calendar,
   AlertTriangle,
   ArrowDownLeft,
-  HeartHandshake
+  HeartHandshake,
+  Play
 } from 'lucide-react';
 
 interface TutorialTopic {
@@ -336,6 +337,22 @@ export function TutorialsSettings() {
                   <CardDescription className="text-xs text-zinc-550 dark:text-zinc-400 mt-1 leading-relaxed">
                     {selectedTopic.shortDesc}
                   </CardDescription>
+                  {(selectedTopic.module === 'pos' || selectedTopic.module === 'inventory') && (
+                    <div className="mt-4 pt-1 flex justify-start">
+                      <Button
+                        onClick={() => {
+                          window.dispatchEvent(
+                            new CustomEvent('start-tour', { 
+                              detail: { moduleId: selectedTopic.module } 
+                            })
+                          );
+                        }}
+                        className="bg-indigo-600 hover:bg-indigo-750 text-white font-bold text-xs h-9 px-4 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-white" /> Launch Interactive Live Tour
+                      </Button>
+                    </div>
+                  )}
                 </CardHeader>
 
                 <CardContent className="p-6 md:p-8 space-y-6">
