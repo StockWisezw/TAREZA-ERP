@@ -10,20 +10,20 @@ export default function Landing() {
 
   const faqs = [
     {
-      question: "What is Tareza ERP, and how does it dominate your product ecosystem?",
-      answer: "Tareza ERP is our flagship, next-generation Point of Sale (POS) and inventory control cloud ledger platform designed for modern business operations. It acts as the core brain of our software services, ensuring reliable multi-branch tracking, secure real-time bookkeeping, and live remote management. Any supplementary service we offer exists to feed, audit, or strengthen this dominant product."
+      question: "What is Tareza ERP, and how does it optimize your business?",
+      answer: "Tareza ERP is our flagship, next-generation Point of Sale (POS) and inventory control cloud ledger platform designed for modern business operations. It acts as the core brain of your retail tracking, ensuring reliable multi-branch tracking, secure real-time bookkeeping, and live remote management."
     },
     {
-      question: "What other complementary services do you offer beyond the software itself?",
-      answer: "To ensure your business succeeds in both the offline and online worlds, we provide valuable creative and physical services. This includes Enterprise Website Development to help setup a stunning web portal for your company, as well as On-Site Physical Stocktakes & Audits conducted by our experienced product verification team."
+      question: "What premium upgraded features are available in Tareza ERP?",
+      answer: "We offer several high-performance upgrades to scale your operations, including our automated Multi-Branch Sync Engine to link remote stores, and our ZIMRA fiscalization compliant gateway for direct digital tax transactions."
     },
     {
       question: "Is there an offline-ready POS feature, and how does synchronization work?",
-      answer: "Yes, our web application dominates because it is highly designed to support modern hybrid operations. The POS terminal saves sales transactions locally if the connection is cut, and automatically syncs to active cloud records as soon as internet connectivity returns."
+      answer: "Yes, our POS app is uniquely designed to support modern retail environments. The terminal saves sales transactions locally if your storefront connection is interrupted, and seamlessly syncs with your central database records once connection is restored."
     },
     {
-      question: "How are physical on-site stocktakes and custom websites priced?",
-      answer: "We offer highly transparent, budget-friendly companion service packages:\n• On-site Stocktakes: Typically priced from a once-off fee of just $15, depending entirely on the database complexity and number of catalog items (SKU lines).\n• Website Development: Custom built, fast, SEO-optimized web setups priced competitively for the Zimbabwe (Zim) corporate and retail market to fit local cash flow expectations."
+      question: "How are the software modules and upgrade modules priced?",
+      answer: "We offer a flexible tier budget: Free forever for small setups, Starter at $15/mo, and Professional at $30/mo. Additional connected branches are only $10/mo, and our professional ZIMRA compliance middleware gateway is a flat $25/mo fee."
     },
     {
       question: "Where can we follow your online updates and learn how to use Tareza ERP?",
@@ -31,7 +31,7 @@ export default function Landing() {
     },
     {
       question: "How do we receive technical and billing support?",
-      answer: "We prioritize our clients' success. You can email support@tarezaerp.co.zw for help desk tickets or billing updates, and call our direct hotlines at +263 784553570 and +263 776699950 for immediate support. Starter, Pro, and Enterprise tiers include dedicated support options suited to your enterprise scale."
+      answer: "We prioritize our clients' success. You can email support@tarezaerp.co.zw for help desk tickets or billing updates, and call our direct hotlines at +263 784553570 and +263 776699950 for immediate support. Starter, Professional, and Enterprise tiers include dedicated support options suited to your enterprise scale."
     }
   ];
 
@@ -141,7 +141,7 @@ export default function Landing() {
           <div className="lg:w-1/2 space-y-8 z-10 text-center lg:text-left">
             <div className="inline-flex items-center space-x-2 bg-background/80 dark:bg-background/50 border border-border/50 rounded-full px-4 py-1.5 text-sm font-medium backdrop-blur-md shadow-sm">
               <CheckCircle2 className="w-4 h-4 text-primary" />
-              <span>Includes On-site Stocktakes & Expert Consultancy</span>
+              <span>Includes Multi-Branch Sync & ZIMRA Compliance Gateway</span>
             </div>
             
             <h1 className="text-5xl md:text-7xl font-bold tracking-tighter leading-[1.1] text-zinc-900 dark:text-zinc-50 drop-shadow-sm">
@@ -203,8 +203,8 @@ export default function Landing() {
                   <Package className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-primary uppercase">Professional Advice</p>
-                  <p className="text-sm font-medium text-zinc-200">On-site stocktakes & strategic planning</p>
+                  <p className="text-xs font-bold text-primary uppercase">Multi-Branch Sync</p>
+                  <p className="text-sm font-medium text-zinc-200">Real-time ledger & automated sync</p>
                 </div>
               </div>
             </div>
@@ -255,93 +255,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Companion Technical & Auditing Services */}
-      <section id="services" className="w-full py-24 bg-background border-b border-border/50 relative overflow-hidden">
-        {/* Subtle Grid Background */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:30px_30px] opacity-30 dark:opacity-20 pointer-events-none"></div>
-        <div className="max-w-7xl mx-auto px-6 relative z-10">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-16 gap-6">
-            <div className="space-y-3">
-              <div className="inline-flex items-center space-x-2 bg-primary/10 border border-primary/20 rounded-full px-3 py-1 text-xs font-semibold text-primary uppercase tracking-wider">
-                Digital & Practical Solutions
-              </div>
-              <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-                Companion Services We Offer
-              </h2>
-              <p className="text-zinc-550 dark:text-zinc-400 max-w-2xl text-base leading-relaxed">
-                Unlock full-scale digital success with our professional companion services. While <strong className="text-primary">Tareza ERP</strong> is our flagship cloud platform that dominates your daily routine, we provide essential physical and creative operations to maximize your business potential.
-              </p>
-            </div>
-            
-            {/* Social Connection Hub */}
-            <div className="flex flex-col gap-2.5 bg-zinc-50 dark:bg-zinc-900/60 border border-border/60 p-4 rounded-2xl shadow-sm shrink-0 w-full md:w-auto">
-              <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest text-center md:text-left">Connect With Us Online</span>
-              <div className="flex items-center gap-3 justify-center md:justify-start">
-                <a 
-                  href="https://www.facebook.com/TarezaERP" 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-50 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-border shadow-sm text-[#1877F2] text-xs font-semibold transition-all hover:scale-105"
-                  title="Follow our Facebook Page"
-                >
-                  <Facebook className="w-4 h-4" /> Facebook Page
-                </a>
-                <a 
-                  href="https://www.youtube.com/@tarezaerp" 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-50 dark:bg-zinc-800 dark:hover:bg-zinc-700 border border-border shadow-sm text-[#FF0000] text-xs font-semibold transition-all hover:scale-105"
-                  title="Subscribe on YouTube"
-                >
-                  <Youtube className="w-4 h-4" /> YouTube Channel
-                </a>
-              </div>
-            </div>
-          </div>
 
-          <div className="grid md:grid-cols-2 gap-8 lg:gap-12">
-            {/* Website Development Service Card */}
-            <div className="bg-card hover:bg-card/70 transition-all duration-300 p-8 md:p-10 rounded-3xl border border-border shadow-sm flex flex-col justify-between group relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-40 h-40 bg-blue-500/5 rounded-full blur-[50px] group-hover:bg-blue-500/10 transition-colors duration-500"></div>
-              <div>
-                <div className="bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 w-14 h-14 rounded-2xl flex items-center justify-center mb-8 shadow-inner border border-blue-100 dark:border-blue-900">
-                  <Globe className="w-7 h-7" />
-                </div>
-                <h3 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50 mb-4 tracking-tight">Enterprise Website Development</h3>
-                <p className="text-zinc-600 dark:text-zinc-350 leading-relaxed text-sm mb-8">
-                  Establish an unmissable digital footprint. We craft gorgeous, responsive, custom-coded websites, ecommerce digital storefronts, and business landing pages starting with next-gen speed optimization and clean modern styling. We deliver competitive, highly professional prices tailored specifically for the Zimbabwe (Zim) corporate and retail market, giving local brands premium global presence on a local budget.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border-t border-border/80 pt-6 mt-auto">
-                <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Custom Code / SEO Optimized</span>
-                <span className="text-xs font-bold px-3 py-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 rounded-full border border-blue-200/50 dark:border-blue-900/50">
-                  Zim Market Friendly Rates
-                </span>
-              </div>
-            </div>
-
-            {/* Custom On-Site Stocktaking Service Card */}
-            <div className="bg-card hover:bg-card/70 transition-all duration-300 p-8 md:p-10 rounded-3xl border border-border shadow-sm flex flex-col justify-between group relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/5 rounded-full blur-[50px] group-hover:bg-emerald-500/10 transition-colors duration-500"></div>
-              <div>
-                <div className="bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 w-14 h-14 rounded-2xl flex items-center justify-center mb-8 shadow-inner border border-emerald-100 dark:border-emerald-900">
-                  <ClipboardList className="w-7 h-7" />
-                </div>
-                <h3 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50 mb-4 tracking-tight">Professional Stocktakes & Audits</h3>
-                <p className="text-zinc-600 dark:text-zinc-350 leading-relaxed text-sm mb-8">
-                  Banish discrepancy anxiety and streamline your inventory. Our highly trained precision verification auditors perform swift, on-site physical count services using advanced digital inventory equipment. Typically priced starting from a once-off rate of just <span className="font-extrabold text-zinc-900 dark:text-zinc-100 text-lg">$15 once-off</span> depending entirely on the total number of lines, warehouse layout, and database catalog complexity.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border-t border-border/80 pt-6 mt-auto">
-                <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Accurate Scanning & Audit Logs</span>
-                <span className="text-xs font-bold px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 rounded-full border border-emerald-200/50 dark:border-emerald-900/50">
-                  From $15 Once-Off
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Pricing Section */}
       <section id="pricing" className="w-full py-24 bg-zinc-50 dark:bg-zinc-900/50">
@@ -367,7 +281,7 @@ export default function Landing() {
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Basic POS features</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Manual inventory tracking</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> 10 transactions / day limit</li>
-                <li className="flex items-center gap-2 text-muted-foreground/75"><CheckCircle2 className="w-4 h-4 text-muted shrink-0" /> <span className="line-through">No stocktake included</span></li>
+                <li className="flex items-center gap-2 text-muted-foreground/75"><CheckCircle2 className="w-4 h-4 text-muted shrink-0" /> <span className="line-through">No multi-branch sync</span></li>
               </ul>
               <Link to="/login" className="mt-auto">
                 <Button variant="outline" className="w-full text-xs h-9">Get Started Free</Button>
@@ -389,7 +303,7 @@ export default function Landing() {
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Unlimited transactions</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Sales history & reports</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Manual cash reconciliation</li>
-                <li className="flex items-center gap-2 text-muted-foreground/75"><CheckCircle2 className="w-4 h-4 text-muted shrink-0" /> <span className="line-through">No stocktake included</span></li>
+                <li className="flex items-center gap-2 text-muted-foreground/75"><CheckCircle2 className="w-4 h-4 text-muted shrink-0" /> <span className="line-through">No multi-branch sync</span></li>
               </ul>
               <Link to="/login" className="mt-auto">
                 <Button variant="outline" className="w-full text-xs h-9">Start 14-day free trial</Button>
@@ -397,11 +311,11 @@ export default function Landing() {
             </div>
 
             {/* Pro Plan */}
-            <div className="bg-card rounded-2xl border-2 border-primary p-6 shadow-lg relative flex flex-col scale-105 z-10">
+            <div className="bg-card rounded-2xl border-2 border-primary p-6 shadow-lg relative flex flex-col scale-100 lg:scale-105 z-10">
               <div className="absolute top-0 inset-x-0 translate-y-[-50%] flex justify-center">
                 <span className="bg-primary text-primary-foreground text-[9px] font-bold uppercase tracking-widest py-0.5 px-3 rounded-full">Most Popular</span>
               </div>
-              <h3 className="text-xl font-bold mb-1 text-foreground">Consultancy Pro</h3>
+              <h3 className="text-xl font-bold mb-1 text-foreground">Professional</h3>
               <div className="flex items-baseline gap-1 mb-3">
                 <span className="text-3xl font-bold text-foreground">$30</span>
                 <span className="text-muted-foreground text-xs">/mo</span>
@@ -414,7 +328,7 @@ export default function Landing() {
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Multi-branch (up to 3 branches)</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Real-time inventory tracking</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Advanced analytics, Till Calc</li>
-                <li className="flex items-center gap-2 text-muted-foreground/75"><CheckCircle2 className="w-4 h-4 text-muted shrink-0" /> <span className="line-through">No stocktake included</span></li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Upgradable Multi-Branch Sync</li>
               </ul>
               <Link to="/login" className="mt-auto">
                 <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs h-9">Start your 14-day trial</Button>
@@ -435,7 +349,7 @@ export default function Landing() {
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Custom API Access & white-label</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Dedicated Account Manager</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Phone support (same-day)</li>
-                <li className="flex items-center gap-2 text-muted-foreground/75"><CheckCircle2 className="w-4 h-4 text-muted shrink-0" /> <span className="line-through">No stocktake included</span></li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> ZIMRA Compliance Ready</li>
               </ul>
               <a href="mailto:admin@tarezaerp.co.zw?subject=Enterprise Inquiry - Tareza ERP" className="mt-auto block">
                 <Button variant="outline" className="w-full text-xs h-9">Contact Sales</Button>
@@ -443,51 +357,51 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Separate Stocktake pricing options landing panel */}
+          {/* Upgraded Premium ERP Modules & Add-on Pricing */}
           <div className="mt-16 bg-zinc-100/50 dark:bg-zinc-900/40 rounded-3xl border border-zinc-200/60 dark:border-zinc-800 p-8 max-w-5xl mx-auto shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
               <div>
                 <h4 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 font-sans flex items-center gap-2">
-                  <span>💾 Separate Stocktake Services & Diagnostic Add-ons</span>
+                  <span>💾 Upgrade Modules & Specialized Add-on Pricing</span>
                 </h4>
-                <p className="text-sm text-zinc-550 dark:text-zinc-400 mt-1">Guided, highly accurate physical audit assessments billed separate from software plans.</p>
+                <p className="text-sm text-zinc-550 dark:text-zinc-400 mt-1">Supercharge your operations with specific enterprise-ready companion software additions.</p>
               </div>
-              <span className="text-[10px] font-extrabold uppercase bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-400 px-3 py-1 rounded-full border border-emerald-200 tracking-wider h-fit shrink-0">
-                Pays for itself in Shrinkage Reduction
+              <span className="text-[10px] font-extrabold uppercase bg-indigo-100 dark:bg-indigo-950/50 text-indigo-800 dark:text-indigo-400 px-3 py-1 rounded-full border border-indigo-200 tracking-wider h-fit shrink-0">
+                Seamless Expansion Integrations
               </span>
             </div>
 
             <div className="grid md:grid-cols-2 gap-8">
-              {/* Option 1 landing summary */}
+              {/* Add-on 1 */}
               <div className="bg-background rounded-2xl border border-border p-6 shadow-sm flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-center mb-4">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 font-mono bg-amber-50 dark:bg-amber-950/20 px-2 py-0.5 rounded-full">Option 1</span>
-                    <span className="text-sm font-bold text-foreground">One-Off Stocktake Audit</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 font-mono bg-indigo-50 dark:bg-indigo-950/20 px-2 py-0.5 rounded-full">Add-on Module</span>
+                    <span className="text-sm font-bold text-foreground">Multi-Branch Sync Engine</span>
                   </div>
-                  <div className="text-3xl font-black text-foreground">$10<span className="text-xs font-semibold text-muted-foreground"> / per 100 product lines</span></div>
-                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">Perfect for annual audits, damage checks, or major operations transitions. Guided scanning updates General Ledger automatically.</p>
+                  <div className="text-3xl font-black text-foreground">$10<span className="text-xs font-semibold text-muted-foreground"> / per month per branch</span></div>
+                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">Connect additional inventory warehouses, brick-and-mortar storefronts, and logistics centers into a single centralized ERP Ledger.</p>
                 </div>
                 <div className="pt-4 border-t border-border mt-6 flex justify-between items-center text-xs">
-                  <span className="text-muted-foreground font-medium">Need a manual check-up?</span>
-                  <a href="mailto:admin@tarezaerp.co.zw?subject=One-Off Stocktake Inquiry" className="text-primary font-bold hover:underline flex items-center gap-1">Request Quote <ChevronRight className="w-3.5 h-3.5" /></a>
+                  <span className="text-muted-foreground font-medium">Ready to scale your reach?</span>
+                  <a href="mailto:admin@tarezaerp.co.zw?subject=Multi-Branch Sync Request" className="text-primary font-bold hover:underline flex items-center gap-1">Enable Sync Module <ChevronRight className="w-3.5 h-3.5" /></a>
                 </div>
               </div>
 
-              {/* Option 2 landing summary */}
+              {/* Add-on 2 */}
               <div className="bg-background rounded-2xl border border-primary/20 p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
-                <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[8px] font-extrabold px-3 py-1 uppercase tracking-wider rounded-bl-lg">5x Average ROI</div>
+                <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[8px] font-extrabold px-3 py-1 uppercase tracking-wider rounded-bl-lg">5x Avg ROI</div>
                 <div>
                   <div className="flex justify-between items-center mb-4">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-primary font-mono bg-primary/10 px-2 py-0.5 rounded-full">Option 2</span>
-                    <span className="text-sm font-bold text-foreground">Ongoing Weekly Stocktake</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-mono bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded-full">Compliance Gateway</span>
+                    <span className="text-sm font-bold text-foreground">ZIMRA Fiscalization Gateway</span>
                   </div>
-                  <div className="text-3xl font-black text-foreground">$20<span className="text-xs font-semibold text-muted-foreground"> / per week</span></div>
-                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">Continuously optimizes reorders, charts variance trends, and delivers seasonal demand forecasts. Ideal for convenience stores & pharmacies.</p>
+                  <div className="text-3xl font-black text-foreground">$25<span className="text-xs font-semibold text-muted-foreground"> / month flat fee</span></div>
+                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">Transmit real-time cryptographic sales signatures and daily digital tax audits directly to the official ZIMRA compliance database sandbox.</p>
                 </div>
                 <div className="pt-4 border-t border-border mt-6 flex justify-between items-center text-xs">
-                  <span className="text-muted-foreground font-medium">Reduce store shrinkage by 20%</span>
-                  <a href="mailto:admin@tarezaerp.co.zw?subject=Ongoing Stocktake Setup Request" className="text-primary font-bold hover:underline flex items-center gap-1">Learn More <ChevronRight className="w-3.5 h-3.5" /></a>
+                  <span className="text-muted-foreground font-medium">Fully tax compliant in minutes</span>
+                  <a href="mailto:admin@tarezaerp.co.zw?subject=ZIMRA Interface Integration Request" className="text-primary font-bold hover:underline flex items-center gap-1">Request Integration <ChevronRight className="w-3.5 h-3.5" /></a>
                 </div>
               </div>
             </div>

@@ -15,6 +15,7 @@ export type Product = {
   sku: string;
   retailPrice: number;
   wholesalePrice: number;
+  costPrice?: number;
   taxClass: 'standard' | 'zero' | 'exempt';
   category?: string;
   imageUrl?: string;
@@ -143,8 +144,9 @@ export const usePOSStore = create<POSState>()(
       localSales: [],
       currentCustomer: null,
 
-      addToCart: (product, quantity = 0, forcedTier = 'retail') => set((state) => {
-        const activeTier = forcedTier;
+      addToCart: (product, quantity = 1, forcedTier) => set((state) => {
+        const qtyToAdd = (quantity === undefined || quantity === null || quantity <= 0) ? 1 : quantity;
+        const activeTier = forcedTier || state.pricingTier || 'retail';
         const existingItem = state.cart.find((item) => item.product.id === product.id && item.tier === activeTier);
         
         let unitPrice = product.retailPrice;
@@ -158,7 +160,7 @@ export const usePOSStore = create<POSState>()(
         }
         
         if (existingItem) {
-          const newQty = existingItem.quantity + quantity;
+          const newQty = existingItem.quantity + qtyToAdd;
           const subtotal = newQty * unitPrice;
           let itemDiscountValue = 0;
           if (existingItem.discount) {
@@ -177,11 +179,11 @@ export const usePOSStore = create<POSState>()(
           };
         }
 
-        const subtotal = quantity * unitPrice;
+        const subtotal = qtyToAdd * unitPrice;
         const vatAmount = product.taxClass === 'standard' ? subtotal * getVatRate() : 0;
 
         return {
-          cart: [...state.cart, { id: uuidv4(), product, quantity, unitPrice, subtotal, vatAmount, tier: activeTier }],
+          cart: [...state.cart, { id: uuidv4(), product, quantity: qtyToAdd, unitPrice, subtotal, vatAmount, tier: activeTier }],
         };
       }),
 

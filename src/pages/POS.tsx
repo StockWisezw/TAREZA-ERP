@@ -247,6 +247,7 @@ export default function POS() {
                     sku: p.sku || '',
                     retailPrice: p.retail_price || p.retailPrice || 0,
                     wholesalePrice: p.wholesale_price || p.wholesalePrice || 0,
+                    costPrice: p.cost_price || 0,
                     taxClass: p.tax_class || p.taxClass || 'standard',
                     category: p.category_id || p.category || 'all',
                     imageUrl: '', 
@@ -307,6 +308,7 @@ export default function POS() {
               sku: p.sku || '',
               retailPrice: p.retail_price || p.retailPrice || 0,
               wholesalePrice: p.wholesale_price || p.wholesalePrice || 0,
+              costPrice: p.cost_price || 0,
               taxClass: p.tax_class || p.taxClass || 'standard',
               category: p.category_id || p.category || 'all',
               imageUrl: '', 
@@ -924,7 +926,7 @@ export default function POS() {
                     'POS_SALE',
                     userData?.user?.id || 'unknown',
                     sale.receiptNumber,
-                    item.product.wholesalePrice
+                    item.product.costPrice || 0
                   );
                   
                   if (!result || result.error) {
@@ -1227,6 +1229,8 @@ export default function POS() {
           handleCreateQuotation={handleCreateQuotation}
           cartContainerRef={cartContainerRef}
           setShowPayment={setShowPayment}
+          pricingTier={pricingTier}
+          setPricingTier={setPricingTier}
         />
       </div>
 

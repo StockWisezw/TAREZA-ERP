@@ -42,6 +42,17 @@ export default function GoodsReceiving() {
 
   // Bulk Receivable Items list state
   const [receivableItems, setReceivableItems] = useState<ReceivableItem[]>([]);
+  const grnContainerRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (grnContainerRef.current) {
+      setTimeout(() => {
+        if (grnContainerRef.current) {
+          grnContainerRef.current.scrollTop = grnContainerRef.current.scrollHeight;
+        }
+      }, 50);
+    }
+  }, [receivableItems.length]);
 
   // Extra / Non-PO item state selectors
   const [extraProductId, setExtraProductId] = useState('');
@@ -834,7 +845,7 @@ export default function GoodsReceiving() {
                       </span>
                     </div>
 
-                    <div className="overflow-x-auto max-h-[260px] overflow-y-auto">
+                    <div ref={grnContainerRef} className="overflow-x-auto max-h-[260px] overflow-y-auto scroll-smooth">
                       <table className="w-full text-xs text-left">
                         <thead className="bg-zinc-100 dark:bg-zinc-800 text-[11px] text-zinc-650 dark:text-zinc-400 font-bold border-bSticky border-zinc-205 dark:border-zinc-800 top-0 z-10">
                           <tr>

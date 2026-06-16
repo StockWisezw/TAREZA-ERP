@@ -13,6 +13,8 @@ import {
   RefreshCw, 
   FileJson, 
   DownloadCloud,
+  Users,
+  Building2,
   Activity,
   Globe,
   Key,
@@ -55,6 +57,9 @@ export default function DeveloperPanel() {
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [subFilter, setSubFilter] = useState<'active' | 'suspended' | 'no_sub' | 'all'>('active');
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [businessUsers, setBusinessUsers] = useState<any[]>([]);
+  const [userSearch, setUserSearch] = useState('');
 
   // Support tickets state
   const [supportTickets, setSupportTickets] = useState<any[]>([]);
@@ -271,11 +276,68 @@ export default function DeveloperPanel() {
       if (!sError && sData) {
         setSubscriptions(sData);
       }
+
+      // Fetch user profiles & business user connections
+      const { data: pData, error: pError } = await supabase.from('profiles').select('*');
+      if (!pError && pData) {
+        setProfiles(pData);
+      }
+
+      const { data: buData, error: buError } = await supabase.from('business_users').select('*');
+      if (!buError && buData) {
+        setBusinessUsers(buData);
+      }
     } catch (err: any) {
       console.error(err);
       toast.error(`Failed to load business databases: ${err.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateUserStatus = async (userId: string, currentIsActive: boolean) => {
+    try {
+      const matchedRecords = businessUsers.filter(bu => bu.user_id === userId);
+      
+      if (matchedRecords && matchedRecords.length > 0) {
+        for (const record of matchedRecords) {
+          const { error: updateErr } = await supabase
+            .from('business_users')
+            .update({ is_active: !currentIsActive, updated_at: new Date().toISOString() })
+            .eq('id', record.id);
+          if (updateErr) throw updateErr;
+        }
+        toast.success(`User access successfully ${currentIsActive ? 'paused (deactivated)' : 'active (reactivated)'}!`);
+      } else {
+        toast.error("User is not connected to a business workspace registry.");
+      }
+      fetchBusinessesAndSubscriptions();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Failed to update user status: ${err.message}`);
+    }
+  };
+
+  const updateUserRole = async (userId: string, targetRoleId: string) => {
+    try {
+      const matchedRecords = businessUsers.filter(bu => bu.user_id === userId);
+      
+      if (matchedRecords && matchedRecords.length > 0) {
+        for (const record of matchedRecords) {
+          const { error: updateErr } = await supabase
+            .from('business_users')
+            .update({ role_id: targetRoleId, updated_at: new Date().toISOString() })
+            .eq('id', record.id);
+          if (updateErr) throw updateErr;
+        }
+        toast.success(`User role updated to: ${targetRoleId}`);
+      } else {
+        toast.error("User is not connected to a business workspace registry.");
+      }
+      fetchBusinessesAndSubscriptions();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Failed to update user role: ${err.message}`);
     }
   };
 
@@ -866,6 +928,171 @@ export default function DeveloperPanel() {
           </Card>
 
         </div>
+
+        {/* Centralized Operator Profiles Registry */}
+        <Card className="border-zinc-200 dark:border-zinc-800 shadow-sm">
+          <CardHeader className="flex flex-col md:flex-row md:items-center justify-between border-b border-zinc-100 dark:border-zinc-800/80 pb-4 gap-4">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                Individual User Profiles & Operator Registry
+              </CardTitle>
+              <CardDescription className="text-xs">
+                View individual authenticated accounts, inspect workspace bounds, and manually activate or pause cashiers and owners.
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Search operators by name or email..."
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                className="h-8 max-w-xs text-xs rounded-lg font-sans"
+              />
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={fetchBusinessesAndSubscriptions} 
+                disabled={loading}
+                className="h-8 text-xs border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                Reload Users
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4 max-h-[500px] overflow-y-auto">
+            {loading ? (
+              <div className="flex justify-center py-10">
+                <RefreshCw className="w-6 h-6 animate-spin text-zinc-400" />
+              </div>
+            ) : profiles.length === 0 ? (
+              <div className="py-8 text-center text-sm text-zinc-500">
+                No user profiles retrieved in this sandbox database.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-xs">User Account</TableHead>
+                      <TableHead className="text-xs">Connected Workspaces</TableHead>
+                      <TableHead className="text-xs">Role Index</TableHead>
+                      <TableHead className="text-xs">Access State</TableHead>
+                      <TableHead className="text-xs text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {profiles
+                      .filter(p => {
+                        const searchLower = userSearch.toLowerCase();
+                        return (
+                          (p.first_name || '').toLowerCase().includes(searchLower) ||
+                          (p.last_name || '').toLowerCase().includes(searchLower) ||
+                          (p.email || '').toLowerCase().includes(searchLower)
+                        );
+                      })
+                      .map(p => {
+                        const links = businessUsers.filter(bu => bu.user_id === p.id);
+                        const isUserActive = links.length > 0 ? links.every(bu => bu.is_active !== false) : true;
+                        
+                        return (
+                          <TableRow key={p.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/40">
+                            <TableCell>
+                              <div className="font-semibold text-xs text-zinc-900 dark:text-zinc-50">
+                                {p.first_name || 'Unnamed'} {p.last_name || 'User'}
+                              </div>
+                              <div className="text-[10px] text-zinc-500 font-mono">{p.email}</div>
+                              {p.phone && <div className="text-[9px] text-zinc-400 font-sans mt-0.5">{p.phone}</div>}
+                            </TableCell>
+                            <TableCell>
+                              {links.length === 0 ? (
+                                <span className="text-[10px] text-amber-500 italic font-medium">No workspace linked</span>
+                              ) : (
+                                <div className="flex flex-col gap-1">
+                                  {links.map(l => {
+                                    const biz = businesses.find(b => b.id === l.business_id);
+                                    return (
+                                      <div key={l.id} className="text-[10px] flex items-center gap-1.5 text-zinc-750 dark:text-zinc-350">
+                                        <Building2 className="w-3 h-3 text-zinc-450 shrink-0" />
+                                        <span>{biz?.name || 'Unknown Workspace'}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {links.length === 0 ? (
+                                <span className="text-[10px] text-zinc-400">-</span>
+                              ) : (
+                                <div className="flex flex-col gap-1">
+                                  {links.map(l => {
+                                    const roleLabel = l.role_id === 'staff' ? 'Staff' : l.role_id === 'mgr' ? 'Manager' : l.role_id === 'admin' ? 'Administrator' : l.role_id || 'Member';
+                                    return (
+                                      <Badge key={l.id} variant="outline" className="text-[8px] font-sans w-fit tracking-wider border-zinc-200 dark:border-zinc-800 py-0 uppercase">
+                                        {roleLabel}
+                                      </Badge>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge 
+                                className={`text-[9px] font-sans capitalize px-2 py-0.5 border ${
+                                  isUserActive 
+                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/25 border-emerald-250 border-emerald-200' 
+                                    : 'bg-zinc-100 text-zinc-650 dark:bg-zinc-900 border-zinc-250 border-zinc-350 font-medium'
+                                }`}
+                              >
+                                {isUserActive ? 'Active' : 'Paused'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end items-center gap-1.5 font-sans">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className={`h-7 text-[10px] font-semibold font-sans px-2.5 rounded-lg ${
+                                    isUserActive ? 'text-rose-600 hover:text-rose-700 border-rose-200 hover:bg-rose-50' : 'text-emerald-600 hover:text-emerald-700 border-emerald-200 hover:bg-emerald-50/50'
+                                  }`}
+                                  onClick={() => updateUserStatus(p.id, isUserActive)}
+                                >
+                                  {isUserActive ? 'Pause User' : 'Unpause User'}
+                                </Button>
+                                
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger render={
+                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 flex items-center justify-center border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-100">
+                                      <span className="sr-only">Menu</span>
+                                      <span className="text-[10px] font-bold">...</span>
+                                    </Button>
+                                  } />
+                                  <DropdownMenuContent align="end" className="w-40 font-sans border border-border bg-card">
+                                    <DropdownMenuLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Upgrade/Set Role</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => updateUserRole(p.id, 'admin')}>
+                                      Set as Admin
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => updateUserRole(p.id, 'mgr')}>
+                                      Set as Manager
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => updateUserRole(p.id, 'staff')}>
+                                      Set as Staff
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Database backups & automated logging */}
         <Card className="font-sans bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-850 shadow-sm">

@@ -51,6 +51,8 @@ interface CartSummaryProps {
   cartContainerRef: React.RefObject<HTMLDivElement>;
   setShowPayment: (show: boolean) => void;
   className?: string;
+  pricingTier: 'retail' | 'wholesale';
+  setPricingTier: (tier: 'retail' | 'wholesale') => void;
 }
 
 export const CartSummary: React.FC<CartSummaryProps> = ({
@@ -80,9 +82,21 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
   handleCreateQuotation,
   cartContainerRef,
   setShowPayment,
-  className
+  className,
+  pricingTier,
+  setPricingTier
 }) => {
   const [customerSearch, setCustomerSearch] = React.useState('');
+
+  React.useEffect(() => {
+    if (cartContainerRef && cartContainerRef.current) {
+      setTimeout(() => {
+        if (cartContainerRef.current) {
+          cartContainerRef.current.scrollTop = cartContainerRef.current.scrollHeight;
+        }
+      }, 50);
+    }
+  }, [cart.length, cartContainerRef]);
 
   return (
     <div className={cn("w-full md:w-[325px] lg:w-[400px] xl:w-[460px] flex flex-col gap-2 h-full overflow-hidden justify-between", className)}>
@@ -165,6 +179,38 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
           )}
         </CardContent>
       </Card>
+
+      {/* Global Pricing Tier Switcher */}
+      {(() => {
+        const isPricingToggleEnabled = typeof window !== 'undefined' ? localStorage.getItem('tareza_pricing_toggle') !== 'false' : true;
+        if (!isPricingToggleEnabled) return null;
+        return (
+          <div className="bg-zinc-100 p-1 rounded-xl border border-zinc-205 flex gap-1 text-[11px] font-bold shrink-0 shadow-sm">
+            <button
+              onClick={() => setPricingTier('retail')}
+              className={cn(
+                "flex-grow flex-1 py-1 px-3 rounded-lg text-center transition-all duration-150 cursor-pointer h-7 flex items-center justify-center",
+                pricingTier === 'retail' 
+                  ? "bg-white text-zinc-950 shadow-sm border border-zinc-200" 
+                  : "text-zinc-500 hover:text-zinc-800"
+              )}
+            >
+              Retail Sales Price
+            </button>
+            <button
+              onClick={() => setPricingTier('wholesale')}
+              className={cn(
+                "flex-grow flex-1 py-1 px-3 rounded-lg text-center transition-all duration-150 cursor-pointer h-7 flex items-center justify-center",
+                pricingTier === 'wholesale' 
+                  ? "bg-purple-600 text-white shadow-sm font-bold border-0" 
+                  : "text-zinc-500 hover:text-zinc-805"
+              )}
+            >
+              Wholesale / Pack Price
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Dynamic Interactive Shopping Cart items list container */}
       <Card className="border-zinc-200 shadow-sm flex-1 min-h-[140px] max-h-[350px] flex flex-col pt-1.5 bg-white pb-1.5 rounded-xl overflow-hidden">

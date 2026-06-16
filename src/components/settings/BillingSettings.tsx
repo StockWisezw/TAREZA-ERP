@@ -157,7 +157,7 @@ export function BillingSettings() {
   const expiresAt = businessData?.subscription_end_date ? new Date(businessData.subscription_end_date) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
   const gracePeriodEnd = new Date(expiresAt.getTime() + 7 * 24 * 60 * 60 * 1000);
   const daysLeftInGrace = Math.floor((gracePeriodEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  const planName = subscription?.plan_name === 'free_trial' ? 'Free Trial' : subscription?.plan_name === 'free' ? 'Forever Free' : subscription?.plan_name === 'starter' ? 'Starter' : subscription?.plan_name === 'pro' ? 'Consultancy Pro' : subscription?.plan_name === 'enterprise' ? 'Enterprise' : (subscription?.plan_name || 'Free Trial');
+  const planName = subscription?.plan_name === 'free_trial' ? 'Free Trial' : subscription?.plan_name === 'free' ? 'Forever Free' : subscription?.plan_name === 'starter' ? 'Starter' : subscription?.plan_name === 'pro' ? 'Professional' : subscription?.plan_name === 'enterprise' ? 'Enterprise' : (subscription?.plan_name || 'Free Trial');
   const planNameRaw = subscription?.plan_name || 'free_trial';
   const maxUsers = planNameRaw === 'free' ? 1 : planNameRaw === 'starter' ? 2 : planNameRaw === 'pro' ? 10 : planNameRaw === 'enterprise' ? 9999 : (businessData?.max_users || 5);
   const planCost = planNameRaw === 'free' ? '$0.00' : planNameRaw === 'starter' ? '$15.00' : planNameRaw === 'pro' ? '$30.00' : planNameRaw === 'enterprise' ? 'Custom' : '$0.00';
@@ -689,7 +689,7 @@ export function BillingSettings() {
             );
           })()}
 
-          {/* Consultancy Pro */}
+          {/* Professional Plan */}
           {(() => {
             const info = getPlanPriceInfo('pro', selectedCycle);
             const isActive = planNameRaw === 'pro';
@@ -700,7 +700,7 @@ export function BillingSettings() {
                 </div>
                 <CardHeader className="bg-indigo-500/5 dark:bg-indigo-500/5 pb-6 border-b border-indigo-500/10 dark:border-indigo-500/25">
                   <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg font-bold text-indigo-650 dark:text-indigo-400">Consultancy Pro</CardTitle>
+                    <CardTitle className="text-lg font-bold text-indigo-650 dark:text-indigo-400">Professional</CardTitle>
                     {isActive && (
                       <Badge className="bg-indigo-650 text-white dark:bg-indigo-400 dark:text-zinc-950 text-[10px] uppercase font-semibold">
                         Current
@@ -1081,7 +1081,7 @@ export function BillingSettings() {
                         <Label htmlFor="pop-text" className="text-xs font-bold text-zinc-500">Additional Message / Note (Optional)</Label>
                         <Input 
                           id="pop-text"
-                          placeholder="e.g. Payment for Consultancy Pro Quarterly cycle"
+                          placeholder="e.g. Payment for Professional Quarterly cycle"
                           value={popText}
                           className="h-9 text-xs rounded-lg"
                           onChange={(e) => setPopText(e.target.value)}

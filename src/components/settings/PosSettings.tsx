@@ -13,6 +13,7 @@ export function PosSettings() {
   const [initialOfflineMode, setInitialOfflineMode] = useState(false);
   const [strictInventory, setStrictInventory] = useState(false);
   const [requireFloat, setRequireFloat] = useState(false);
+  const [pricingToggle, setPricingToggle] = useState(true);
 
   useEffect(() => {
     const stored = localStorage.getItem('tareza_offline_mode');
@@ -25,6 +26,8 @@ export function PosSettings() {
     setStrictInventory(strictStored === 'true');
     const floatStored = localStorage.getItem('tareza_require_float');
     setRequireFloat(floatStored === 'true');
+    const pricingStored = localStorage.getItem('tareza_pricing_toggle');
+    setPricingToggle(pricingStored === null || pricingStored === 'true');
   }, []);
 
   const handleSave = async () => {
@@ -33,6 +36,7 @@ export function PosSettings() {
       localStorage.setItem('tareza_offline_mode', String(offlineMode));
       localStorage.setItem('tareza_strict_inventory', String(strictInventory));
       localStorage.setItem('tareza_require_float', String(requireFloat));
+      localStorage.setItem('tareza_pricing_toggle', String(pricingToggle));
       
       // Register service worker if offline mode is enabled
       if (offlineMode && 'serviceWorker' in navigator) {
@@ -95,7 +99,7 @@ export function PosSettings() {
                     Allow cashiers to switch pricing tiers for bulk shoppers.
                   </span>
                 </div>
-                <Switch defaultChecked />
+                <Switch checked={pricingToggle} onCheckedChange={setPricingToggle} />
               </div>
 
               <div className="flex items-start justify-between gap-4 p-4 rounded-xl border border-zinc-100 bg-zinc-50/50">

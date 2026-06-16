@@ -171,7 +171,7 @@ export function SyncManager() {
                   'POS_SALE',
                   userId,
                   sale.receiptNumber,
-                  item.product.wholesalePrice || 0
+                  item.product.costPrice || 0
                 );
               })
             );

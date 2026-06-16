@@ -183,6 +183,19 @@ export async function postJournalEntry(
         balance: updatedBalance,
         updated_at: new Date().toISOString()
       });
+
+      // Synchronize changes directly with the Supabase accounts table
+      try {
+        await supabase.from('accounts')
+          .update({
+            balance: updatedBalance,
+            updated_at: new Date().toISOString()
+          })
+          .eq('business_id', businessId)
+          .eq('code', line.accountCode);
+      } catch (supErr) {
+        console.error('[postJournalEntry] Failed to synchronize Supabase accounts:', supErr);
+      }
     }
 
     await batch.commit();
@@ -348,7 +361,7 @@ export async function recordStockMovement(
       return { success: false, quantityAfter: currentQty, error: `Catalog error: Product referenced does not exist.` };
     }
 
-    const costPrice = customCostPrice !== undefined ? customCostPrice : Number(product.cost_price || product.wholesale_price || 0);
+    const costPrice = customCostPrice !== undefined ? customCostPrice : Number(product.cost_price || 0);
     const valueImpact = Math.abs(quantityChange) * costPrice;
 
     // 3. Create unique stock movement record in Supabase directly

@@ -1085,7 +1085,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
         
-        {/* Consultancy Card */}
+        {/* Enterprise Upgrade & ZIMRA Fiscalization Card */}
         <Card className="col-span-3 border-0 shadow-xl bg-gradient-to-br from-indigo-900 to-indigo-950 text-white relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20"></div>
           <CardHeader className="relative z-10">
@@ -1093,38 +1093,38 @@ export default function Dashboard() {
               <div className="p-1.5 bg-indigo-500/20 rounded-md">
                  <Package className="h-5 w-5 text-indigo-300" />
               </div>
-              <span className="tracking-tight">On-site Consultancy & Stocktake Bundle</span>
+              <span className="tracking-tight">Enterprise Sync & ZIMRA Fiscalization Gateway</span>
             </CardTitle>
-            <CardDescription className="text-zinc-400">Because numbers alone do not tell the whole story. Numbers need a physical expert to interpret them and advise on the best direct strategies to protect margins.</CardDescription>
+            <CardDescription className="text-zinc-400">Scale your retail chain with our ZIMRA fiscal digital tax gateway and real-time Multi-Branch Sync module built directly into the central cloud ledger.</CardDescription>
           </CardHeader>
           <CardContent className="relative z-10 w-full">
             <div className="flex flex-col p-6 bg-white/5 rounded-xl border border-white/10 space-y-4">
               <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold text-white">$50</span>
-                <span className="text-zinc-400 text-sm">/month bundle</span>
+                <span className="text-3xl font-extrabold text-white">$25</span>
+                <span className="text-zinc-400 text-sm">/month compliance fee</span>
               </div>
               <p className="text-xs text-zinc-300 leading-relaxed">
-                Ensure absolute alignment between raw ledger values and real-world counts. We specialize in interpreting stock velocity trends and advising on leakage-prevention strategies.
+                Connect your physical registers automatically. Transmit real-time cryptographic signatures and digital tax audits directly to the official ZIMRA sandbox.
               </p>
               <div className="space-y-1.5 text-xs text-zinc-400 border-t border-white/5 pt-3">
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                  <span><strong>1 Monthly On-Site Visit</strong>: Hands-on physical stocktake or high-level management consulting</span>
+                  <span><strong>ZIMRA Compliance Ready</strong>: Automatic, real-time fiscal tax validation on every sale</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                  <span><strong>Trend Interpretation</strong>: Translate metrics into simple, high-yield business growth advice</span>
+                  <span><strong>Multi-Branch Sync Engine</strong>: Instantly link warehouses, brick-and-mortar storefronts, and offices</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                  <span><strong>Developer Support</strong>: Direct line to technical engineers & diagnostic terminals</span>
+                  <span><strong>Developer Support Coverage</strong>: Support line to engineering teams & API Diagnostic consoles</span>
                 </div>
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
                 <a href="https://wa.me/263776699950" target="_blank" rel="noopener noreferrer" className="block">
                   <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white transition-all font-bold text-xs py-2.5 rounded-lg shadow-md">
-                    Request WhatsApp Visit
+                    Inquire via WhatsApp
                   </button>
                 </a>
                 <a href="/developer-panel" className="block">
