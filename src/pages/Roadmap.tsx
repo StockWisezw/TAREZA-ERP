@@ -172,7 +172,11 @@ const INITIAL_ROADMAP: RoadmapItem[] = [
 export default function Roadmap() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw' || user?.email === 'dev@tarezaerp.co.zw' || user?.email === 'tapsforex@gmail.com';
+  const isDeveloper = user?.email?.toLowerCase().endsWith('@tarezaerp.co.zw') || 
+                      user?.email?.toLowerCase() === 'admin@tarezaerp.co.zw' || 
+                      user?.email?.toLowerCase() === 'developer@tarezaerp.co.zw' || 
+                      user?.email?.toLowerCase() === 'dev@tarezaerp.co.zw' || 
+                      user?.email?.toLowerCase() === 'tapsforex@gmail.com';
 
   const [items, setItems] = useState<RoadmapItem[]>(() => {
     const cached = localStorage.getItem('tareza_roadmap_items');

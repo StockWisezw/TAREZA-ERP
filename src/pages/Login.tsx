@@ -291,7 +291,11 @@ export default function Login() {
         return;
       }
 
-      const isDeveloperEmail = email?.endsWith('@tarezaerp.co.zw') || email === 'admin@tarezaerp.co.zw' || email === 'developer@tarezaerp.co.zw' || email === 'dev@tarezaerp.co.zw' || email === 'tapsforex@gmail.com';
+      const isDeveloperEmail = email?.toLowerCase().endsWith('@tarezaerp.co.zw') || 
+                               email?.toLowerCase() === 'admin@tarezaerp.co.zw' || 
+                               email?.toLowerCase() === 'developer@tarezaerp.co.zw' || 
+                               email?.toLowerCase() === 'dev@tarezaerp.co.zw' || 
+                               email?.toLowerCase() === 'tapsforex@gmail.com';
 
       try {
         const userCredential = await signInWithEmailAndPassword(fireAuth, email, password);

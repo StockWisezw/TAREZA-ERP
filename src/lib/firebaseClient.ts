@@ -655,6 +655,18 @@ class SupabaseQueryBuilder {
 
   async execute() {
     try {
+      const email = fireAuth.currentUser?.email?.toLowerCase();
+      const isSystemDev = email && (
+        email.endsWith('@tarezaerp.co.zw') ||
+        email === 'admin@tarezaerp.co.zw' ||
+        email === 'developer@tarezaerp.co.zw' ||
+        email === 'dev@tarezaerp.co.zw' ||
+        email === 'tapsforex@gmail.com'
+      );
+      
+      const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
+      const isDevAdminTable = isSystemDev && adminTables.includes(this.table);
+
       const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id');
       const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
 
@@ -669,7 +681,9 @@ class SupabaseQueryBuilder {
 
           const cleanItem = normalizeInput(item, this.table);
           if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business') {
-            cleanItem.business_id = activeBizId;
+            if (!(isDevAdminTable && cleanItem.business_id)) {
+              cleanItem.business_id = activeBizId;
+            }
           }
           return { id: docId, ...cleanItem };
         });
@@ -686,13 +700,15 @@ class SupabaseQueryBuilder {
       
       if (this.isUpdate) {
         if (this.targetId) {
-          if (this.table === 'businesses' && activeBizId && activeBizId !== 'default_business' && this.targetId !== activeBizId) {
+          if (this.table === 'businesses' && !isSystemDev && activeBizId && activeBizId !== 'default_business' && this.targetId !== activeBizId) {
             throw new Error(`Permission denied: Cannot update other business profile`);
           }
           const docRef = fireDoc(db, this.table, this.targetId);
           const cleanItem = normalizeInput(this.payload, this.table);
           if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business') {
-            cleanItem.business_id = activeBizId;
+            if (!(isDevAdminTable && cleanItem.business_id)) {
+              cleanItem.business_id = activeBizId;
+            }
           }
           await fireUpdateDoc(docRef, cleanItem);
           const updatedDoc = { id: this.targetId, ...cleanItem };
@@ -701,7 +717,9 @@ class SupabaseQueryBuilder {
           const results = await this.getFilteredDocs();
           const cleanItem = normalizeInput(this.payload, this.table);
           if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business') {
-            cleanItem.business_id = activeBizId;
+            if (!(isDevAdminTable && cleanItem.business_id)) {
+              cleanItem.business_id = activeBizId;
+            }
           }
           for (const docSnap of results) {
             const docRef = fireDoc(db, this.table, docSnap.id);
@@ -713,7 +731,7 @@ class SupabaseQueryBuilder {
 
       if (this.isDelete) {
         if (this.targetId) {
-          if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business') {
+          if (requiresBusinessScope && !isSystemDev && activeBizId && activeBizId !== 'default_business') {
             const docRef = fireDoc(db, this.table, this.targetId);
             const snap = await fireGetDoc(docRef);
             if (snap.exists() && snap.data()?.business_id !== activeBizId) {
@@ -749,7 +767,7 @@ class SupabaseQueryBuilder {
         let mappedData = [];
         if (snap.exists()) {
           const data = snap.data();
-          if (!requiresBusinessScope || data?.business_id === activeBizId || this.table === 'businesses') {
+          if (!requiresBusinessScope || isSystemDev || data?.business_id === activeBizId || this.table === 'businesses') {
             mappedData = [normalizeOutput(snap.id, data, this.table)];
           }
         }
@@ -774,31 +792,43 @@ class SupabaseQueryBuilder {
   }
 
   async getFilteredDocs() {
-    const colRef = fireCollection(db, this.table);
-    let q: any = colRef;
-
-    const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id');
-    const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
-
-    if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business') {
-      const hasBizIdFilter = this.eqFilters.some(f => f.col === 'business_id');
-      if (!hasBizIdFilter) {
-        this.eqFilters.push({ col: 'business_id', val: activeBizId });
-      } else {
-        this.eqFilters = this.eqFilters.map(f => f.col === 'business_id' ? { col: 'business_id', val: activeBizId } : f);
-      }
-    } else if (this.table === 'businesses' && activeBizId && activeBizId !== 'default_business') {
-      if (this.targetId) {
-        this.targetId = activeBizId;
-      } else {
-        const hasIdFilter = this.eqFilters.some(f => f.col === 'id');
-        if (!hasIdFilter) {
-          this.eqFilters.push({ col: 'id', val: activeBizId });
-        } else {
-          this.eqFilters = this.eqFilters.map(f => f.col === 'id' ? { col: 'id', val: activeBizId } : f);
-        }
-      }
-    }
+     const colRef = fireCollection(db, this.table);
+     let q: any = colRef;
+ 
+     const email = fireAuth.currentUser?.email?.toLowerCase();
+     const isSystemDev = email && (
+       email.endsWith('@tarezaerp.co.zw') ||
+       email === 'admin@tarezaerp.co.zw' ||
+       email === 'developer@tarezaerp.co.zw' ||
+       email === 'dev@tarezaerp.co.zw' ||
+       email === 'tapsforex@gmail.com'
+     );
+     
+     const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
+     const isDevAdminTable = isSystemDev && adminTables.includes(this.table);
+ 
+     const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id');
+     const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
+ 
+     if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business' && !isDevAdminTable) {
+       const hasBizIdFilter = this.eqFilters.some(f => f.col === 'business_id');
+       if (!hasBizIdFilter) {
+         this.eqFilters.push({ col: 'business_id', val: activeBizId });
+       } else {
+         this.eqFilters = this.eqFilters.map(f => f.col === 'business_id' ? { col: 'business_id', val: activeBizId } : f);
+       }
+     } else if (this.table === 'businesses' && activeBizId && activeBizId !== 'default_business' && !isDevAdminTable) {
+       if (this.targetId) {
+         this.targetId = activeBizId;
+       } else {
+         const hasIdFilter = this.eqFilters.some(f => f.col === 'id');
+         if (!hasIdFilter) {
+           this.eqFilters.push({ col: 'id', val: activeBizId });
+         } else {
+           this.eqFilters = this.eqFilters.map(f => f.col === 'id' ? { col: 'id', val: activeBizId } : f);
+         }
+       }
+     }
 
     const constraints: any[] = [];
     for (const filter of this.eqFilters) {

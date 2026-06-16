@@ -77,7 +77,11 @@ export default function Layout() {
   const { signOut, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const isDeveloper = user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw' || user?.email === 'dev@tarezaerp.co.zw' || user?.email === 'tapsforex@gmail.com';
+  const isDeveloper = user?.email?.toLowerCase().endsWith('@tarezaerp.co.zw') || 
+                      user?.email?.toLowerCase() === 'admin@tarezaerp.co.zw' || 
+                      user?.email?.toLowerCase() === 'developer@tarezaerp.co.zw' || 
+                      user?.email?.toLowerCase() === 'dev@tarezaerp.co.zw' || 
+                      user?.email?.toLowerCase() === 'tapsforex@gmail.com';
   // Screen lock removed per user request
   const isLocked = false;
   const [businessName, setBusinessName] = React.useState<string>('');
