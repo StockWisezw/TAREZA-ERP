@@ -320,7 +320,9 @@ export async function recordStockMovement(
   associatedTxRef: string,
   customCostPrice?: number,
   notes?: string,
-  customCreatedAt?: string
+  customCreatedAt?: string,
+  batchNumber?: string,
+  expiryDate?: string
 ): Promise<{ success: boolean; quantityAfter: number; error?: string }> {
   try {
     // 1. Fetch current inventory stock for product at branch using direct Supabase select
@@ -366,17 +368,135 @@ export async function recordStockMovement(
 
     // 3. Create unique stock movement record in Supabase directly
     const { error: moveInsertErr } = await supabase.from('stock_movements').insert({
+      business_id: businessId,
       branch_id: branchId,
       product_id: productId,
       quantity: quantityChange,
       type: type,
       notes: notes || null,
+      batch_number: batchNumber || null,
+      expiry_date: expiryDate || null,
       created_at: customCreatedAt || new Date().toISOString()
     });
 
     if (moveInsertErr) {
       console.error('[recordStockMovement] Failed to insert stock movement:', moveInsertErr);
       throw new Error(moveInsertErr.message);
+    }
+
+    // Zimbabwean compliance batch-level synchronization
+    try {
+      if (batchNumber) {
+        // Look up designated batch
+        const batchRes = await supabase.from('inventory_batches')
+          .eq('business_id', businessId)
+          .eq('branch_id', branchId)
+          .eq('product_id', productId)
+          .eq('batch_number', batchNumber)
+          .select();
+
+        if (batchRes.data && batchRes.data.length > 0) {
+          const existingBatch = batchRes.data[0];
+          const newBatchQty = Math.max(0, Number(existingBatch.quantity || 0) + quantityChange);
+          await supabase.from('inventory_batches')
+            .update({
+              quantity: newBatchQty,
+              expiry_date: expiryDate || existingBatch.expiry_date,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingBatch.id);
+        } else {
+          // If a negative change starts a brand-new batch (can happen with backorders), starting qty is 0/clamp
+          await supabase.from('inventory_batches').insert({
+            business_id: businessId,
+            branch_id: branchId,
+            product_id: productId,
+            batch_number: batchNumber,
+            expiry_date: expiryDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            quantity: Math.max(0, quantityChange),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        }
+      } else if (quantityChange < 0) {
+        // FEFO (First Expired First Out) automatic deduction
+        const activeBatchesRes = await supabase.from('inventory_batches')
+          .eq('business_id', businessId)
+          .eq('branch_id', branchId)
+          .eq('product_id', productId)
+          .order('expiry_date', { ascending: true })
+          .select();
+
+        if (activeBatchesRes.data && activeBatchesRes.data.length > 0) {
+          let remainingToDeduct = Math.abs(quantityChange);
+          for (const bt of activeBatchesRes.data) {
+            const btQty = Number(bt.quantity || 0);
+            if (btQty > 0 && remainingToDeduct > 0) {
+              const deductAmt = Math.min(btQty, remainingToDeduct);
+              await supabase.from('inventory_batches')
+                .update({
+                  quantity: btQty - deductAmt,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', bt.id);
+              remainingToDeduct -= deductAmt;
+            }
+          }
+
+          if (remainingToDeduct > 0) {
+            const earliestBt = activeBatchesRes.data[0];
+            await supabase.from('inventory_batches')
+              .update({
+                quantity: Math.max(0, Number(earliestBt.quantity || 0) - remainingToDeduct),
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', earliestBt.id);
+          }
+        } else {
+          // Fallback unbatched
+          await supabase.from('inventory_batches').insert({
+            business_id: businessId,
+            branch_id: branchId,
+            product_id: productId,
+            batch_number: 'B-UNBATCHED',
+            expiry_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            quantity: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        }
+      } else if (quantityChange > 0) {
+        // unbatched positive arrival
+        const unbatchedRes = await supabase.from('inventory_batches')
+          .eq('business_id', businessId)
+          .eq('branch_id', branchId)
+          .eq('product_id', productId)
+          .eq('batch_number', 'B-UNBATCHED')
+          .select();
+
+        if (unbatchedRes.data && unbatchedRes.data.length > 0) {
+          const uBatch = unbatchedRes.data[0];
+          await supabase.from('inventory_batches')
+            .update({
+              quantity: Number(uBatch.quantity || 0) + quantityChange,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', uBatch.id);
+        } else {
+          await supabase.from('inventory_batches').insert({
+            business_id: businessId,
+            branch_id: branchId,
+            product_id: productId,
+            batch_number: 'B-UNBATCHED',
+            expiry_date: new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            quantity: quantityChange,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        }
+      }
+    } catch (batchErr) {
+      console.error('[recordStockMovement] Failed to sync batch log:', batchErr);
     }
 
     // 4. Update or insert inventory stock count directly in Supabase

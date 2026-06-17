@@ -239,6 +239,23 @@
         "effective_date": { "type": "string" }
       },
       "required": ["id", "currency_id", "rate", "effective_date"]
+    },
+    "InventoryBatch": {
+      "title": "InventoryBatch",
+      "description": "Tracks batch numbers and expiration dates for compliance with health regulations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "business_id": { "type": "string" },
+        "branch_id": { "type": "string" },
+        "product_id": { "type": "string" },
+        "batch_number": { "type": "string" },
+        "expiry_date": { "type": "string" },
+        "quantity": { "type": "number" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id", "business_id", "branch_id", "product_id", "batch_number", "expiry_date", "quantity"]
     }
   },
   "firestore": {
@@ -269,6 +286,10 @@
     "/inventory/{inventoryId}": {
       "schema": "Inventory",
       "description": "Current stock levels per branch"
+    },
+    "/inventory_batches/{batchId}": {
+      "schema": "InventoryBatch",
+      "description": "Stock levels tracked per specific batch and expiration date"
     },
     "/sales/{saleId}": {
       "schema": "Sale",

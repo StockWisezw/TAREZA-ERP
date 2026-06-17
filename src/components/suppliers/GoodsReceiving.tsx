@@ -18,6 +18,7 @@ export interface ReceivableItem {
   quantityOrdered: number;
   quantityReceived: number;
   batchNumber: string;
+  expiryDate: string;
   costPrice: number;
 }
 
@@ -59,6 +60,7 @@ export default function GoodsReceiving() {
   const [extraQty, setExtraQty] = useState('0.00');
   const [extraCostPrice, setExtraCostPrice] = useState('0.00');
   const [extraBatchNum, setExtraBatchNum] = useState('');
+  const [extraExpiryDate, setExtraExpiryDate] = useState('');
   const [extraProductSearch, setExtraProductSearch] = useState('');
   const [standaloneSupplierId, setStandaloneSupplierId] = useState('cash-supplier');
 
@@ -88,6 +90,7 @@ export default function GoodsReceiving() {
           quantityOrdered: Number(it.quantity || 0),
           quantityReceived: Number(it.quantity || 0), // Default to receive remaining full amount
           batchNumber: `B-${new Date().getFullYear().toString().slice(-2)}${Math.floor(100+Math.random()*900)}`,
+          expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           costPrice: Number(it.price || prod?.cost_price || 0)
         };
       });
@@ -201,6 +204,8 @@ export default function GoodsReceiving() {
       return;
     }
 
+    const nextExpiry = extraExpiryDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
     setReceivableItems(prev => [
       ...prev,
       {
@@ -210,6 +215,7 @@ export default function GoodsReceiving() {
         quantityOrdered: 0,
         quantityReceived: qty,
         batchNumber: nextBatch,
+        expiryDate: nextExpiry,
         costPrice: price
       }
     ]);
@@ -219,6 +225,7 @@ export default function GoodsReceiving() {
     setExtraQty('0.00');
     setExtraCostPrice('0.00');
     setExtraBatchNum('');
+    setExtraExpiryDate('');
     setExtraProductSearch('');
   };
 
@@ -238,6 +245,10 @@ export default function GoodsReceiving() {
 
   const updateBatchNumber = (index: number, val: string) => {
     setReceivableItems(prev => prev.map((item, i) => i === index ? { ...item, batchNumber: val } : item));
+  };
+
+  const updateExpiryDate = (index: number, val: string) => {
+    setReceivableItems(prev => prev.map((item, i) => i === index ? { ...item, expiryDate: val } : item));
   };
 
   const handleReceiveGoods = async (e: React.FormEvent) => {
@@ -338,7 +349,9 @@ export default function GoodsReceiving() {
           associatedTxRef,
           item.costPrice, // Pass the cost price to post correctly in ledger
           formattedNotes,
-          selectedDate
+          selectedDate,
+          item.batchNumber,
+          item.expiryDate
         );
 
         if (!result.success) {
@@ -577,20 +590,21 @@ export default function GoodsReceiving() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="col-span-1 border-zinc-200">
-          <CardHeader>
-            <CardTitle className="text-base text-zinc-805">Pending Purchase Orders</CardTitle>
-            <CardDescription>POs currently ready to be bulk or partially cleared.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {purchaseOrders.filter(po => po.status !== 'RECEIVED').length === 0 ? (
-              <p className="text-sm text-zinc-400 py-8 text-center bg-zinc-50 rounded-lg border border-dashed">No pending purchase orders found.</p>
-            ) : (
-              purchaseOrders.filter(po => po.status !== 'RECEIVED').map(po => {
+      {/* Pending Purchase Orders Section */}
+      <Card className="w-full border-zinc-200">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base text-zinc-805">Pending Purchase Orders</CardTitle>
+          <CardDescription>POs currently ready to be bulk or partially cleared.</CardDescription>
+        </CardHeader>
+        <CardContent className="px-6 pb-6 pt-0">
+          {purchaseOrders.filter(po => po.status !== 'RECEIVED').length === 0 ? (
+            <p className="text-sm text-zinc-400 py-8 text-center bg-zinc-50 rounded-lg border border-dashed">No pending purchase orders found.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {purchaseOrders.filter(po => po.status !== 'RECEIVED').map(po => {
                 const supplier = suppliers.find(s => s.id === po.supplier_id);
                 return (
-                  <div key={po.id} className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg flex justify-between items-center transition-all hover:bg-zinc-50">
+                  <div key={po.id} className="p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex justify-between items-center transition-all hover:bg-zinc-50/70">
                     <div>
                       <p className="font-mono text-xs font-semibold text-blue-600">{po.po_number || 'PO-GEN'}</p>
                       <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{supplier ? supplier.name : 'Unknown Supplier'}</p>
@@ -599,94 +613,95 @@ export default function GoodsReceiving() {
                     <Badge variant="secondary" className="text-[10px] text-zinc-650 bg-amber-50 text-amber-700 border border-amber-200 capitalize">{po.status?.toLowerCase().replace('_', ' ')}</Badge>
                   </div>
                 );
-              })
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="col-span-1 lg:col-span-2 border-zinc-200">
-          <CardHeader>
-            <CardTitle className="text-base text-zinc-805">Recent Bulk Receipts (GRN Audit Logs)</CardTitle>
-            <CardDescription>Verified log entries showing historical stock arrivals of product batches.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-zinc-100 dark:bg-zinc-900/40">
-                  <TableRow>
-                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Time Received</TableHead>
-                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Product SKU / Name</TableHead>
-                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Linked Supplier / Cost</TableHead>
-                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Storage Location</TableHead>
-                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300 text-right">Received Count</TableHead>
-                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300 text-center w-[160px]">Action / Reversal</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {grnHistory.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-12 text-zinc-400 text-sm">
-                        No recent receiving logs. Press the button above to initiate a bulk stock arrival.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    grnHistory.map((log) => {
-                      const isReversed = log.notes && log.notes.startsWith('[REVERSED]');
-                      return (
-                        <TableRow key={log.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
-                          <TableCell className="text-xs text-zinc-500">{new Date(log.created_at).toLocaleString()}</TableCell>
-                          <TableCell>
-                            <p className="font-semibold text-xs text-zinc-900 dark:text-zinc-100">{log.product_name}</p>
-                            <p className="font-mono text-[10px] text-zinc-400">{log.sku || '-'}</p>
-                            {log.notes && (
-                              <p className={`text-[10px] px-1.5 py-0.5 rounded italic mt-1 inline-block whitespace-nowrap overflow-hidden text-ellipsis max-w-xs ${
-                                isReversed ? 'bg-red-50 text-red-600 dark:bg-red-955' : 'bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400'
-                              }`}>
-                                {log.notes}
-                              </p>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                              {log.supplier_name || 'Cash Supplier'}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-xs text-zinc-650 dark:text-zinc-400">{log.branch_name}</TableCell>
-                          <TableCell className={`text-right font-mono font-bold ${log.quantity < 0 ? 'text-rose-650' : 'text-emerald-600'}`}>
-                            {log.quantity > 0 ? `+${log.quantity}` : log.quantity} units
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {isReversed ? (
-                              <Badge className="bg-red-50 text-red-600 border border-red-200 select-none text-[10.5px]">
-                                Reversed Correction
-                              </Badge>
-                            ) : (
-                              <div className="flex gap-1.5 justify-center">
-                                <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 select-none">
-                                  <Check className="h-3 w-3 text-emerald-600 mr-1" /> Checked
-                                </Badge>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleReverseGRN(log)}
-                                  disabled={submitting}
-                                  className="text-red-650 border-red-200 hover:bg-rose-50 text-[10.5px] font-bold h-6 py-0 px-2 rounded cursor-pointer select-none"
-                                >
-                                  Reverse
-                                </Button>
-                              </div>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
+              })}
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recent Bulk Receipts (GRN Audit Logs) Section in Full screen / Full width */}
+      <Card className="w-full border-zinc-200">
+        <CardHeader>
+          <CardTitle className="text-base text-zinc-805">Recent Bulk Receipts (GRN Audit Logs)</CardTitle>
+          <CardDescription>Verified log entries showing historical stock arrivals of product batches.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto w-full">
+            <Table className="min-w-full">
+              <TableHeader className="bg-zinc-100 dark:bg-zinc-900/40">
+                <TableRow>
+                  <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Time Received</TableHead>
+                  <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Product SKU / Name</TableHead>
+                  <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Linked Supplier / Cost</TableHead>
+                  <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Storage Location</TableHead>
+                  <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300 text-right">Received Count</TableHead>
+                  <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300 text-center w-[160px]">Action / Reversal</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {grnHistory.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-12 text-zinc-400 text-sm">
+                      No recent receiving logs. Press the button above to initiate a bulk stock arrival.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  grnHistory.map((log) => {
+                    const isReversed = log.notes && log.notes.startsWith('[REVERSED]');
+                    return (
+                      <TableRow key={log.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
+                        <TableCell className="text-xs text-zinc-500">{new Date(log.created_at).toLocaleString()}</TableCell>
+                        <TableCell>
+                          <p className="font-semibold text-xs text-zinc-900 dark:text-zinc-100">{log.product_name}</p>
+                          <p className="font-mono text-[10px] text-zinc-400">{log.sku || '-'}</p>
+                          {log.notes && (
+                            <p className={`text-[10px] px-1.5 py-0.5 rounded italic mt-1 inline-block whitespace-nowrap overflow-hidden text-ellipsis max-w-xs ${
+                              isReversed ? 'bg-red-50 text-red-600 dark:bg-red-955' : 'bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400'
+                            }`}>
+                              {log.notes}
+                            </p>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                            {log.supplier_name || 'Cash Supplier'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs text-zinc-650 dark:text-zinc-400">{log.branch_name}</TableCell>
+                        <TableCell className={`text-right font-mono font-bold ${log.quantity < 0 ? 'text-rose-650' : 'text-emerald-600'}`}>
+                          {log.quantity > 0 ? `+${log.quantity}` : log.quantity} units
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {isReversed ? (
+                            <Badge className="bg-red-50 text-red-600 border border-red-200 select-none text-[10.5px]">
+                              Reversed Correction
+                            </Badge>
+                          ) : (
+                            <div className="flex gap-1.5 justify-center">
+                              <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-202 select-none">
+                                <Check className="h-3 w-3 text-emerald-600 mr-1" /> Checked
+                              </Badge>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleReverseGRN(log)}
+                                disabled={submitting}
+                                className="text-red-650 border-red-200 hover:bg-rose-50 text-[10.5px] font-bold h-6 py-0 px-2 rounded cursor-pointer select-none"
+                              >
+                                Reverse
+                              </Button>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* FULL SCREEN DEDICATED GRN DIALOG */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -855,13 +870,14 @@ export default function GoodsReceiving() {
                             <th className="p-3 text-center">Received Qty (Wider)</th>
                             <th className="p-3 text-center">Unit Cost ($) (Wider)</th>
                             <th className="p-3 text-center">Batch Label (Required)</th>
+                            <th className="p-3 text-center">Expiry Date (Required)</th>
                             <th className="p-3 text-center w-12 border-l border-zinc-200 dark:border-zinc-800">Rem</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                           {receivableItems.length === 0 ? (
                             <tr>
-                              <td colSpan={7} className="text-center py-10 text-zinc-400 dark:text-zinc-500 italic">
+                              <td colSpan={8} className="text-center py-10 text-zinc-400 dark:text-zinc-500 italic">
                                 No products are currently staged. Select a PO from above or add custom products manually below.
                               </td>
                             </tr>
@@ -902,6 +918,14 @@ export default function GoodsReceiving() {
                                     onChange={e => updateBatchNumber(index, e.target.value)}
                                     placeholder="e.g. B-GEN-01"
                                     className="w-36 mx-auto text-center h-8 font-mono text-xs border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-850 dark:text-zinc-100"
+                                  />
+                                </td>
+                                <td className="p-3 text-center">
+                                  <Input
+                                    type="date"
+                                    value={item.expiryDate}
+                                    onChange={e => updateExpiryDate(index, e.target.value)}
+                                    className="w-36 mx-auto text-center h-8 text-xs border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-850 dark:text-zinc-100"
                                   />
                                 </td>
                                 <td className="p-3 text-center border-l border-zinc-200 dark:border-zinc-850 bg-zinc-50 dark:bg-zinc-900">

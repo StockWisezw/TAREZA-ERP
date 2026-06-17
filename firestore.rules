@@ -175,6 +175,12 @@ service cloud.firestore {
       allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
                     (resource == null || businessIdUnchanged()));
     }
+
+    match /inventory_batches/{id} {
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
+                    (resource == null || businessIdUnchanged()));
+    }
     
     match /subscriptions/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
