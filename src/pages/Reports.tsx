@@ -27,6 +27,8 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { supabase } from '../lib/firebaseClient';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
+import { RegulatoryComplianceExports } from '../components/reports/RegulatoryComplianceExports';
+import { AIForecasting } from '../components/reports/AIForecasting';
 
 interface ProductStat {
   id: string;
@@ -47,8 +49,8 @@ export default function Reports() {
   const [activeMainTab, setActiveMainTab] = useState('pl'); // 'pl' | 'balance' | 'equity' | 'cashflow' | 'notes' | 'sales'
   const [salesIntervalTab, setSalesIntervalTab] = useState('daily'); // 'daily' | 'weekly' | 'branch' | 'product' | 'custom'
 
-  const [revaluationSurplus, setRevaluationSurplus] = useState(12000); 
-  const [taxRatePct, setTaxRatePct] = useState(10);
+  const [revaluationSurplus, setRevaluationSurplus] = useState(0); 
+  const [taxRatePct, setTaxRatePct] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState<any[]>([]);
@@ -212,30 +214,16 @@ export default function Reports() {
 
     // Current Assets
     const currentAssets = cashVal + arVal + invVal;
-    
-    // Non-Current Assets (Standard Property, Plant & Equipment + carrying to fair value adjustment)
-    const ppeCost = 120000;
-    const ppeAdjustment = plSummary.ociRevaluationSurplusGross;
-    const nonCurrentAssets = ppeCost + ppeAdjustment;
-    
-    const totalAssets = currentAssets + nonCurrentAssets;
+    const totalAssets = currentAssets;
 
-    // Current Liabilities
+    // Liabilities
     const currentLiabilities = apVal;
-    
-    // Non-Current Liabilities
-    const longTermLoan = 40000;
-    const deferredTaxLiability = plSummary.ociRevaluationSurplusTax + plSummary.taxExpense;
-    
-    const totalLiabilities = currentLiabilities + longTermLoan + deferredTaxLiability;
+    const totalLiabilities = currentLiabilities;
 
-    // Shareholder Equity (complying with IAS 1 Statement of Changes in Equity)
-    const shareCapital = 80000;
-    const currentPeriodNetProfit = plSummary.netProfitAfterTax; // Profit for the period
-    const revaluationReserve = plSummary.ociRevaluationSurplusNet;
-    
+    // Shareholders' Equity
+    const currentPeriodNetProfit = plSummary.netProfitAfterTax;
     const closingRetainedEarnings = equityVal + currentPeriodNetProfit;
-    const totalEquity = shareCapital + closingRetainedEarnings + revaluationReserve;
+    const totalEquity = closingRetainedEarnings;
 
     const totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
 
@@ -244,25 +232,25 @@ export default function Reports() {
       receivableAsset: arVal,
       inventoryAsset: invVal,
       currentAssets,
-      ppeCost,
-      ppeAdjustment,
-      nonCurrentAssets,
+      ppeCost: 0,
+      ppeAdjustment: 0,
+      nonCurrentAssets: 0,
       totalAssets,
       
       payableLiability: apVal,
-      longTermLoan,
-      deferredTaxLiability,
+      longTermLoan: 0,
+      deferredTaxLiability: 0,
       totalLiabilities,
       
-      shareCapital,
+      shareCapital: 0,
       closingRetainedEarnings,
-      revaluationReserve,
+      revaluationReserve: 0,
       totalEquity,
       totalLiabilitiesAndEquity,
       currentEarningsEquity: currentPeriodNetProfit,
       retainedEquity: equityVal
     };
-  }, [accounts, plSummary, revaluationSurplus, taxRatePct]);
+  }, [accounts, plSummary]);
 
   // -----------------------------------------------------------------
   // 2B. IAS 1 STATEMENT OF CHANGES IN EQUITY (CHECKERBOARD TABLE)
@@ -768,13 +756,12 @@ export default function Reports() {
 
       {/* Main Segment Tabs */}
       <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full space-y-4 font-sans">
-        <TabsList className="grid w-full sm:max-w-4xl grid-cols-2 md:grid-cols-6 bg-zinc-100 p-1 border rounded-lg h-auto shadow-sm">
-          <TabsTrigger value="pl" className="text-[11px] md:text-xs h-9 rounded font-medium">1. Comprehensive Income</TabsTrigger>
-          <TabsTrigger value="balance" className="text-[11px] md:text-xs h-9 rounded font-medium">2. Financial Position</TabsTrigger>
-          <TabsTrigger value="equity" className="text-[11px] md:text-xs h-9 rounded font-medium">3. Changes in Equity</TabsTrigger>
-          <TabsTrigger value="cashflow" className="text-[11px] md:text-xs h-9 rounded font-medium">4. Cash Flows</TabsTrigger>
-          <TabsTrigger value="notes" className="text-[11px] md:text-xs h-9 rounded font-medium">5. Explanatory Notes</TabsTrigger>
-          <TabsTrigger value="sales" className="text-[11px] md:text-xs h-9 rounded font-medium">Sales Analysis</TabsTrigger>
+        <TabsList className="grid w-full sm:max-w-3xl grid-cols-2 sm:grid-cols-5 bg-zinc-100 p-1 border rounded-lg h-auto shadow-sm">
+          <TabsTrigger value="pl" className="text-[11px] md:text-xs h-9 rounded font-medium">1. Profit & Loss</TabsTrigger>
+          <TabsTrigger value="balance" className="text-[11px] md:text-xs h-9 rounded font-medium">2. Balance Sheet</TabsTrigger>
+          <TabsTrigger value="compliance" className="text-[11px] md:text-xs h-9 rounded font-medium">3. Compliance Exports</TabsTrigger>
+          <TabsTrigger value="forecasting" className="text-[11px] md:text-xs h-9 rounded font-medium">✨ 4. AI Forecasting</TabsTrigger>
+          <TabsTrigger value="sales" className="text-[11px] md:text-xs h-9 rounded font-medium">5. Sales Analysis</TabsTrigger>
         </TabsList>
 
         {/* 1. STATEMENT OF COMPREHENSIVE INCOME VIEW */}
@@ -875,47 +862,21 @@ export default function Reports() {
                       <span className="text-red-600">(${plSummary.taxExpense.toLocaleString('en-US', { minimumFractionDigits: 2 })})</span>
                     </div>
 
-                    <div className="flex justify-between font-extrabold text-sm py-2 px-3 bg-indigo-50/40 text-indigo-900 rounded-lg">
-                      <span className="uppercase text-xs tracking-wider">PROFIT FOR THE PERIOD (NET INCOME)</span>
+                    <div className="flex justify-between font-extrabold text-sm py-2.5 px-3 bg-zinc-900 text-white rounded-lg">
+                      <span className="uppercase text-xs tracking-wider flex items-center">NET PROFIT FOR THE PERIOD</span>
                       <span className="font-bold font-mono">${plSummary.netProfitAfterTax.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                     </div>
                   </div>
-
-                  {/* OTHER COMPREHENSIVE INCOME (OCI) SECTION */}
-                  <div className="space-y-3 pt-3 border-t border-zinc-200">
-                    <div className="font-extrabold text-zinc-905 uppercase text-xs tracking-wide">OTHER COMPREHENSIVE INCOME SECTION</div>
-                    
-                    <div className="space-y-1.5 text-xs text-zinc-750 pl-4">
-                      <div className="flex justify-between">
-                        <span>Changes in revaluation surplus on property, plant & equipment</span>
-                        <span className="text-emerald-700">+${plSummary.ociRevaluationSurplusGross.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between text-[11px] text-zinc-500">
-                        <span>Income tax relating to components of OCI (IAS 12 deflection)</span>
-                        <span className="text-red-500">(${plSummary.ociRevaluationSurplusTax.toLocaleString('en-US', { minimumFractionDigits: 2 })})</span>
-                      </div>
-                      <div className="flex justify-between font-semibold text-zinc-800 border-t border-dashed pt-1">
-                        <span>Total Other Comprehensive Income Net of Tax</span>
-                        <span className="text-emerald-700">${plSummary.ociRevaluationSurplusNet.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                    </div>
-
-                    {/* Total Comprehensive Income for the period */}
-                    <div className="border-t-2 border-b-4 border-zinc-900 py-3.5 px-4 bg-indigo-950 text-white rounded-lg mt-2 shadow-md">
-                      <div className="flex justify-between font-black text-sm md:text-base">
-                        <span className="uppercase tracking-wider text-xs flex items-center">TOTAL COMPREHENSIVE INCOME FOR THE YEAR</span>
-                        <span className="font-mono text-emerald-350 font-bold">
-                          ${plSummary.totalComprehensiveIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-zinc-350 text-right mt-1.5 uppercase font-semibold">
-                        Gross margin efficiency: {plSummary.profitMargin.toFixed(1)}% | IAS 1 Compliant presentation model
-                      </div>
-                    </div>
+                  
+                  {/* Real-time metrics footing */}
+                  <div className="border-t border-zinc-200 pt-4 px-1 text-right">
+                    <span className="text-[10px] text-zinc-400 font-sans">
+                      Gross margin efficiency: {plSummary.profitMargin.toFixed(1)}% | Derived from standard ledger account metrics
+                    </span>
                   </div>
                   
                   <div className="text-center font-sans text-xs text-zinc-400 max-w-sm mx-auto pt-2 leading-relaxed">
-                    Disclaimer: Generated directly from real-time double entry balanced journal entries. Fully audited complying with standard IFRS guidelines.
+                    Disclaimer: Generated directly from real-time double entry balanced journal entries. Fully audited complying with standard accounting guidelines.
                   </div>
                 </div>
               )}
@@ -989,74 +950,8 @@ export default function Reports() {
           </Card>
             </div>
 
-            {/* COLUMN 2 (Sidebar) - Interactive IAS 1 Parameters Panel */}
+            {/* COLUMN 2 (Sidebar) - Accounting Adjustments */}
             <div className="lg:col-span-4 space-y-6">
-              <Card className="border shadow bg-white rounded-2xl overflow-hidden">
-                <CardHeader className="bg-zinc-50 border-b pb-4">
-                  <CardTitle className="text-sm font-bold text-zinc-900 flex items-center gap-1.5 font-sans">
-                    <SlidersHorizontal className="w-4 h-4 text-indigo-650" /> IAS 1 Interactive Simulator
-                  </CardTitle>
-                  <CardDescription className="text-xs">Adjust core revaluation parameters dynamically to observe real-time Statement of Comprehensive Income and Reserve fluctuations.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-5 space-y-5">
-                  
-                  {/* Revaluation Input */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <label className="text-xs font-bold text-zinc-700">PPE Revaluation Surplus (Gross)</label>
-                      <span className="font-mono text-xs text-indigo-700 font-extrabold bg-indigo-50 px-2 py-0.5 rounded">${revaluationSurplus.toLocaleString()}</span>
-                    </div>
-                    <input 
-                      type="range" 
-                      min="0" 
-                      max="100000" 
-                      step="5000"
-                      value={revaluationSurplus} 
-                      onChange={(e) => setRevaluationSurplus(Number(e.target.value))}
-                      className="w-full accent-indigo-600 h-1.5 bg-zinc-100 rounded-lg cursor-pointer"
-                    />
-                    <p className="text-[10px] text-zinc-450 leading-relaxed">Simulates property revaluation carrying-to-fair-value gains under IAS 16 & IAS 38 models (Refer to page 8 Example 2).</p>
-                  </div>
-
-                  {/* Effective Tax Rate Input */}
-                  <div className="space-y-2 pt-2 border-t border-zinc-105">
-                    <div className="flex justify-between items-center">
-                      <label className="text-xs font-bold text-zinc-700">Effective Corporate Tax Rate</label>
-                      <span className="font-mono text-xs text-rose-700 font-extrabold bg-rose-50 px-2 py-0.5 rounded">{taxRatePct}%</span>
-                    </div>
-                    <input 
-                      type="range" 
-                      min="0" 
-                      max="40" 
-                      step="5"
-                      value={taxRatePct} 
-                      onChange={(e) => setTaxRatePct(Number(e.target.value))}
-                      className="w-full accent-indigo-600 h-1.5 bg-zinc-100 rounded-lg cursor-pointer"
-                    />
-                    <p className="text-[10px] text-zinc-450 leading-relaxed">Used to compute current Income Tax Expense (IAS 12) AND deferred tax liability adjustments on OCI components.</p>
-                  </div>
-
-                  {/* Live Simulation Indicators Recap */}
-                  <div className="bg-zinc-50 rounded-xl p-3 border space-y-2 font-sans">
-                    <h5 className="text-[10.5px] font-bold text-zinc-650 uppercase tracking-wider">Live IAS 1 Impact Checklist</h5>
-                    <div className="space-y-1.5 text-xs text-zinc-700">
-                      <div className="flex justify-between items-center">
-                        <span>P&L Tax Paid (IAS 12)</span>
-                        <span className="font-mono font-bold">${plSummary.taxExpense.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span>OCI Net Revaluation Reserve</span>
-                        <span className="font-mono text-emerald-700 font-bold">${plSummary.ociRevaluationSurplusNet.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span>Deferred Tax Liability on OCI</span>
-                        <span className="font-mono text-rose-700 font-bold">${plSummary.ociRevaluationSurplusTax.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                </CardContent>
-              </Card>
 
               {/* COGS Formula & Inventory Adjuster Card */}
               <Card className="border shadow bg-white rounded-2xl overflow-hidden">
@@ -1244,7 +1139,7 @@ export default function Reports() {
                   
                   {/* Assets */}
                   <div className="space-y-3">
-                    <div className="flex justify-between font-extrabold text-xs text-zinc-500 uppercase border-b border-zinc-900 pb-1">
+                    <div className="flex justify-between font-extrabold text-xs text-zinc-505 uppercase border-b border-zinc-900 pb-1">
                       <span>ASSETS (CURRENT AND NON-CURRENT CLASSIFICATION)</span>
                       <span>Balance (USD)</span>
                     </div>
@@ -1263,27 +1158,6 @@ export default function Reports() {
                       <div className="flex justify-between pl-4 text-zinc-650">
                         <span>Merchandise Inventory Account (1200)</span>
                         <span>${balanceSheet.inventoryAsset.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between font-semibold pr-2 pl-4 text-zinc-750 text-xs border-t border-dashed pt-1">
-                        <span>Subtotal Current Assets</span>
-                        <span>${balanceSheet.currentAssets.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                    </div>
-
-                    {/* Non-Current Assets */}
-                    <div className="space-y-1.5 pl-2 pt-2">
-                      <div className="font-bold text-zinc-800 uppercase text-xs">Non-Current Assets (IAS 16 Property, Plant & Equipment)</div>
-                      <div className="flex justify-between pl-4 text-zinc-650">
-                        <span>Cost Basis Equipment (carrying initial)</span>
-                        <span>${balanceSheet.ppeCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between pl-4 text-zinc-650 text-[12px]">
-                        <span>Accumulated Revaluation Adjustments</span>
-                        <span className="text-emerald-700">+${balanceSheet.ppeAdjustment.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between font-semibold pr-2 pl-4 text-zinc-750 text-xs border-t border-dashed pt-1">
-                        <span>Subtotal Non-Current Assets (PPE)</span>
-                        <span>${balanceSheet.nonCurrentAssets.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                       </div>
                     </div>
 
@@ -1308,27 +1182,6 @@ export default function Reports() {
                         <span>Accounts Payable & Operational (2000)</span>
                         <span>${balanceSheet.payableLiability.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                       </div>
-                      <div className="flex justify-between font-semibold pr-2 pl-4 text-zinc-750 text-xs border-t border-dashed pt-1">
-                        <span>Subtotal Current Liabilities</span>
-                        <span>${balanceSheet.payableLiability.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                    </div>
-
-                    {/* Non-Current Liabilities */}
-                    <div className="space-y-1.5 pl-2 pt-2">
-                      <div className="font-bold text-zinc-800 uppercase text-xs">Non-Current Liabilities</div>
-                      <div className="flex justify-between pl-4 text-zinc-650">
-                        <span>Long Term Bank Loans (unsecured)</span>
-                        <span>${balanceSheet.longTermLoan.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between pl-4 text-zinc-650">
-                        <span>Deferred Tax Liability (IAS 12)</span>
-                        <span className="text-rose-600">${balanceSheet.deferredTaxLiability.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between font-semibold pr-2 pl-4 text-zinc-750 text-xs border-t border-dashed pt-1">
-                        <span>Subtotal Non-Current Liabilities</span>
-                        <span>${(balanceSheet.longTermLoan + balanceSheet.deferredTaxLiability).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
                     </div>
 
                     {/* Total Liabilities */}
@@ -1345,20 +1198,8 @@ export default function Reports() {
                       <span>Balance (USD)</span>
                     </div>
                     <div className="flex justify-between pl-4 text-zinc-650">
-                      <span>Paid-In Share Capital (Original)</span>
-                      <span>${balanceSheet.shareCapital.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="flex justify-between pl-4 text-zinc-650">
                       <span>Accumulated Retained Earnings (3000)</span>
                       <span>${balanceSheet.closingRetainedEarnings.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="flex justify-between pl-4 text-zinc-650">
-                      <span>Asset Revaluation Reserve (OCI surplus net)</span>
-                      <span className="text-emerald-700">${balanceSheet.revaluationReserve.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="flex justify-between font-semibold py-1 border-t px-2 text-zinc-800 text-xs bg-zinc-50">
-                      <span>TOTAL SHAREHOLDERS' EQUITY</span>
-                      <span>${balanceSheet.totalEquity.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                     </div>
                   </div>
 
@@ -1383,329 +1224,23 @@ export default function Reports() {
           </Card>
         </TabsContent>
 
-        {/* 3. STATEMENT OF CHANGES IN EQUITY (IAS 1 COMPLIANT) VIEW */}
-        <TabsContent value="equity" className="space-y-6">
-          <Card className="border shadow bg-white rounded-2xl overflow-hidden">
-            <CardHeader className="bg-gradient-to-r from-slate-50 to-zinc-50 border-b pb-5">
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle className="text-lg font-bold text-zinc-900 flex items-center gap-1.5 font-sans">
-                    <CheckCircle2 className="w-5 h-5 text-indigo-650" /> Statement of Changes in Equity
-                  </CardTitle>
-                  <CardDescription className="text-xs">IAS 1 compliant checkerboard grid reconciling opening balances, profit allocations, and revaluation reserve components net of tax.</CardDescription>
-                </div>
-                <Button size="sm" onClick={() => exportFinancialReport('equity')} className="bg-zinc-900 text-white hover:bg-zinc-805">
-                  <Download className="w-4 h-4 mr-1.5" /> Export Equity (CSV)
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-6 sm:p-8">
-              {loading ? (
-                <div className="py-20 text-center text-zinc-400 font-mono text-xs">Syncing reserve matrices...</div>
-              ) : (
-                <div className="space-y-6">
-                  <div className="overflow-x-auto border rounded-xl shadow-sm bg-white">
-                    <table className="w-full text-left border-collapse text-xs font-mono">
-                      <thead>
-                        <tr className="bg-zinc-100/80 border-b border-zinc-200 text-zinc-650 font-bold uppercase text-[10px] tracking-wider">
-                          <th className="p-4 pl-6">Equity Reserve Category</th>
-                          <th className="p-4 text-right">Share Capital (USD)</th>
-                          <th className="p-4 text-right">Retained Earnings (USD)</th>
-                          <th className="p-4 text-right">Revaluation Reserve (USD)</th>
-                          <th className="p-4 pr-6 text-right text-indigo-900 font-extrabold">Total Shareholders' Equity</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-100 text-zinc-750">
-                        {/* Row 1: Opening balance */}
-                        <tr className="hover:bg-zinc-50/40">
-                          <td className="p-4 pl-6 font-sans font-semibold text-zinc-900">Opening Balance (at Jan 1)</td>
-                          <td className="p-4 text-right">${balanceSheet.shareCapital.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-4 text-right">${balanceSheet.retainedEquity.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-4 text-right">$0.00</td>
-                          <td className="p-4 pr-6 text-right font-bold text-zinc-900">
-                            ${(balanceSheet.shareCapital + balanceSheet.retainedEquity).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-
-                        {/* Row 2: Comprehensive Income for the period */}
-                        <tr className="hover:bg-zinc-50/40">
-                          <td className="p-4 pl-6 font-sans font-semibold text-zinc-900">Allocated Profit for the Period</td>
-                          <td className="p-4 text-right">$0.00</td>
-                          <td className="p-4 text-right text-emerald-700 font-bold">
-                            +${plSummary.netProfitAfterTax.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="p-4 text-right">$0.00</td>
-                          <td className="p-4 pr-6 text-right font-bold text-emerald-700">
-                            +${plSummary.netProfitAfterTax.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-
-                        {/* Row 3: Revaluation surplus */}
-                        <tr className="hover:bg-zinc-50/40">
-                          <td className="p-4 pl-6 font-sans font-semibold text-zinc-900">PPE Revaluation Surplus (OCI Net of Tax)</td>
-                          <td className="p-4 text-right">$0.00</td>
-                          <td className="p-4 text-right">$0.00</td>
-                          <td className="p-4 text-right text-indigo-700 font-bold">
-                            +${plSummary.ociRevaluationSurplusNet.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="p-4 pr-6 text-right font-bold text-indigo-700">
-                            +${plSummary.ociRevaluationSurplusNet.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-
-                        {/* Row 4: Final closing balance highlighting triple reserves */}
-                        <tr className="bg-zinc-50/80 font-bold border-t-2 border-b-4 border-zinc-900 text-zinc-900">
-                          <td className="p-4 pl-6 font-sans font-black uppercase text-[10px] tracking-wider">UNAUDITED CLOSING BALANCE</td>
-                          <td className="p-4 text-right">${balanceSheet.shareCapital.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-4 text-right">${balanceSheet.closingRetainedEarnings.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-4 text-right">${balanceSheet.revaluationReserve.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-4 pr-6 text-right font-extrabold text-indigo-950 text-sm">
-                            ${balanceSheet.totalEquity.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-xs text-zinc-650 leading-relaxed font-sans mt-4">
-                    <p className="font-bold text-zinc-800 mb-1 flex items-center gap-1.5"><SlidersHorizontal className="w-4 h-4 text-zinc-500" /> Changes in Equity Interpretation:</p>
-                    Reconciliation of beginning capital to final net assets values. The model accurately represents initial equity capital of <strong>${balanceSheet.shareCapital.toLocaleString()} USD</strong>, combined with operational cumulative earnings and IAS 16 compliant fair market value increments (the PPE Revaluation Surplus) net of the deferred taxation reserve of <strong>{taxRatePct}%</strong> under IAS 12 rules, verifying the ultimate zero-sum balance layout.
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* 6. REGULATORY COMPLIANCE EXPORTS VIEW */}
+        <TabsContent value="compliance">
+          <RegulatoryComplianceExports 
+            plSummary={plSummary}
+            balanceSheet={balanceSheet}
+            productSalesData={productSalesData}
+            startDate={startDate}
+            endDate={endDate}
+          />
         </TabsContent>
 
-        {/* 4. STATEMENT OF CASH FLOWS (IAS 7 COMPLIANT) VIEW */}
-        <TabsContent value="cashflow" className="space-y-6">
-          <Card className="border shadow bg-white rounded-2xl overflow-hidden">
-            <CardHeader className="bg-gradient-to-r from-slate-50 to-zinc-50 border-b pb-5">
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle className="text-lg font-bold text-zinc-900 flex items-center gap-1.5 font-sans">
-                    <DollarSign className="w-5 h-5 text-indigo-600" /> Statement of Cash Flows (Indirect Method)
-                  </CardTitle>
-                  <CardDescription className="text-xs">IAS 7 compliant statement tracing cash generation from operating, investing, and financing channels directly to the POS till balance.</CardDescription>
-                </div>
-                <Button size="sm" onClick={() => exportFinancialReport('cashflow')} className="bg-zinc-900 text-white hover:bg-zinc-805">
-                  <Download className="w-4 h-4 mr-1.5" /> Export Cashflows (CSV)
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-6 sm:p-8">
-              {loading ? (
-                <div className="py-20 text-center text-zinc-400 font-mono text-xs font-semibold">Generating cash lifecycle flow diagrams...</div>
-              ) : (
-                <div className="max-w-2xl mx-auto space-y-6 font-mono text-sm text-zinc-805">
-                  
-                  {/* Operating Cash */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between font-extrabold text-xs text-zinc-500 uppercase border-b border-zinc-900 pb-1">
-                      <span>1. Cash Flows from Operating Activities</span>
-                      <span>Amount (USD)</span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between pl-2 text-zinc-805 font-bold">
-                        <span>Profit for the period (after Income Tax)</span>
-                        <span>${plSummary.netProfitAfterTax.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="text-[11px] font-semibold text-zinc-500 pl-4 uppercase tracking-wider">Working Capital Adjustments:</div>
-                      
-                      <div className="flex justify-between pl-6 text-zinc-650">
-                        <span>(Increase) / Decrease in trade accounts receivable</span>
-                        <span className={balanceSheet.receivableAsset > 0 ? 'text-red-650' : ''}>
-                          {balanceSheet.receivableAsset > 0 ? `(${balanceSheet.receivableAsset.toLocaleString('en-US', { minimumFractionDigits: 2 })})` : '0.00'}
-                        </span>
-                      </div>
-                      
-                      <div className="flex justify-between pl-6 text-zinc-650">
-                        <span>(Increase) / Decrease in merchandise inventory asset</span>
-                        <span className={balanceSheet.inventoryAsset > 0 ? 'text-red-650' : ''}>
-                          {balanceSheet.inventoryAsset > 0 ? `(${balanceSheet.inventoryAsset.toLocaleString('en-US', { minimumFractionDigits: 2 })})` : '0.00'}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between pl-6 text-zinc-650">
-                        <span>Increase / (Decrease) in trade accounts payable</span>
-                        <span className="text-emerald-700">
-                          +${balanceSheet.payableLiability.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between font-bold pr-2 pl-4 text-zinc-800 text-xs border-t border-dashed pt-1.5 bg-zinc-50 rounded-lg p-2 mt-1">
-                        <span>Net Cash Provided by Operating Activities</span>
-                        <span>
-                          ${(
-                            plSummary.netProfitAfterTax - 
-                            balanceSheet.receivableAsset - 
-                            balanceSheet.inventoryAsset + 
-                            balanceSheet.payableLiability
-                          ).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Investing Cash */}
-                  <div className="space-y-3 pt-3">
-                    <div className="flex justify-between font-extrabold text-xs text-zinc-505 uppercase border-b border-zinc-900 pb-1">
-                      <span>2. Cash Flows from Investing Activities</span>
-                      <span>Amount (USD)</span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between pl-2 text-zinc-650">
-                        <span>Capital Acquisition of Equipment & PPE</span>
-                        <span className="text-red-650">(${balanceSheet.ppeCost.toLocaleString('en-US', { minimumFractionDigits: 2 })})</span>
-                      </div>
-                      
-                      <div className="flex justify-between font-bold pr-2 pl-4 text-zinc-800 text-xs border-t border-dashed pt-1.5 bg-zinc-50 rounded-lg p-2">
-                        <span>Net Cash Used in Investing Activities</span>
-                        <span className="text-red-650">(${balanceSheet.ppeCost.toLocaleString('en-US', { minimumFractionDigits: 2 })})</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Financing Cash */}
-                  <div className="space-y-3 pt-3">
-                    <div className="flex justify-between font-extrabold text-xs text-zinc-505 uppercase border-b border-zinc-900 pb-1">
-                      <span>3. Cash Flows from Financing Activities</span>
-                      <span>Amount (USD)</span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between pl-2 text-zinc-650">
-                        <span>Proceeds from Issuance of Share Capital</span>
-                        <span className="text-emerald-700">+${balanceSheet.shareCapital.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between pl-2 text-zinc-650">
-                        <span>Proceeds from unsecured Bank Loans (40000)</span>
-                        <span className="text-emerald-700">+${balanceSheet.longTermLoan.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between pl-2 text-zinc-650">
-                        <span>Dividends & Distributions paid to members</span>
-                        <span>$0.00</span>
-                      </div>
-
-                      <div className="flex justify-between font-bold pr-2 pl-4 text-zinc-800 text-xs border-t border-dashed pt-1.5 bg-zinc-50 rounded-lg p-2">
-                        <span>Net Cash Provided by Financing Activities</span>
-                        <span className="text-emerald-700">
-                          +${(balanceSheet.shareCapital + balanceSheet.longTermLoan).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Cash Summary */}
-                  <div className="border-t-2 border-b-4 border-zinc-900 py-4 px-4 bg-indigo-950 text-white rounded-xl mt-6 space-y-1 font-sans shadow-md">
-                    <div className="flex justify-between font-bold text-sm md:text-base font-mono">
-                      <span className="uppercase tracking-wider text-xs flex items-center font-sans"><Layers className="w-4 h-4 mr-1.5 text-emerald-350" /> NET INCREASE IN CASH EQUIVALENTS</span>
-                      <span>${balanceSheet.cashAsset.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-zinc-350 pr-1 border-t border-indigo-900/45 pt-1 font-mono">
-                      <span>Cash balances at beginning of reporting period (Jan 1)</span>
-                      <span>$0.00</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-zinc-350 pr-1 font-mono">
-                      <span>Cash balances at ending ledger date (computed till)</span>
-                      <span className="font-bold text-emerald-350">${balanceSheet.cashAsset.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
-
-                  <div className="text-center font-sans text-xs text-zinc-400 max-w-sm mx-auto pt-2">
-                    Note: Zero-discrepancy reconcile matches exactly with standard IAS 7 specifications.
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* 5. NOTES AND IFRS DECLARATIONS VIEW */}
-        <TabsContent value="notes" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            
-            {/* Column 1: Mandatory Accounting Policies Disclosures */}
-            <div className="lg:col-span-8 space-y-6">
-              <Card className="border shadow bg-white rounded-2xl overflow-hidden">
-                <CardHeader className="bg-gradient-to-r from-slate-50 to-zinc-50 border-b pb-4">
-                  <span className="text-[10px] text-zinc-400 font-extrabold uppercase font-mono tracking-wider">Section 5 — Mandatory Disclosures</span>
-                  <CardTitle className="text-base font-bold text-zinc-900 flex items-center gap-2 font-sans">
-                    <FileText className="w-5 h-5 text-indigo-650" /> Explanatory Annex & Significant Accounting Policies
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6 sm:p-8 space-y-6 text-xs text-zinc-750 leading-relaxed font-sans">
-                  
-                  {/* Note 1: Reporting Entity */}
-                  <section className="space-y-2">
-                    <h4 className="font-bold text-slate-900 text-sm border-b pb-1 flex items-center gap-1.5 text-xs uppercase tracking-wide">
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 block"></span> Note 1: General Business Information
-                    </h4>
-                    <p className="pl-3 text-zinc-650">
-                      The entity is registered to conduct professional medical therapeutics, diagnostics clinic diagnostics, and core clinic operations. Its principal place of business is domiciled within the municipality as set out in standard state records. These consolidated ledger indices report activities across all clinic branches.
-                    </p>
-                  </section>
-
-                  {/* Note 2: Declaration of full IFRS compliance */}
-                  <section className="space-y-2">
-                    <h4 className="font-bold text-slate-900 text-sm border-b pb-1 flex items-center gap-1.5 text-xs uppercase tracking-wide">
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 block"></span> Note 2: Statement of Full Compliance (IAS 1.16)
-                    </h4>
-                    <p className="pl-3 bg-zinc-50/80 p-3 rounded-lg border border-zinc-100 italic text-zinc-655 leading-relaxed">
-                      "These dynamic financial statements have been meticulously prepared by the automated general ledger system in full accordance with International Financial Reporting Standards (IFRS) as issued by the International Accounting Standards Board (IASB) and are strictly compliant with the presentation layout conditions of IAS 1 and related interpretations."
-                    </p>
-                  </section>
-
-                  {/* Note 3: Measurement Basis & Revaluation Policy */}
-                  <section className="space-y-2">
-                    <h4 className="font-bold text-slate-900 text-sm border-b pb-1 flex items-center gap-1.5 text-xs uppercase tracking-wide">
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 block"></span> Note 3: Significant Accounting Estimates & Model Bases
-                    </h4>
-                    <ul className="list-disc pl-7 space-y-2 text-zinc-650">
-                      <li>
-                        <strong>Accrual Basis Accounting:</strong> All revenues arising from medical diagnostics and diagnostic checkouts are recorded when the diagnostic procedure has been finalized, regardless of when invoice payments are captured.
-                      </li>
-                      <li>
-                        <strong>Inventory Policies (IAS 2):</strong> Merchandise and clinic dispensary inventories are measured at the lower of purchase cost and Net Realizable Value (NRV) using the standard FIFO pricing model.
-                      </li>
-                      <li>
-                        <strong>Revaluation Model (IAS 16 Property, Plant & Equipment):</strong> Equipment assets are carried under the revaluation model at fair value at the date of revaluation less accumulated depreciation. Revaluation gains are designated to Other Comprehensive Income (OCI) and aggregated inside the Revaluation Reserve within Equity, net of the corresponding tax effect.
-                      </li>
-                      <li>
-                        <strong>Taxation & Deferred Tax Reserves (IAS 12):</strong> Balance sheet accounts carry standard deferred tax liability allocations calculating revaluation adjustments multiplying carrying-value deviations by the effective corporate tax rate of <strong>{taxRatePct}%</strong>.
-                      </li>
-                    </ul>
-                  </section>
-
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Column 2: Specific Audit metadata for professional presentation */}
-            <div className="lg:col-span-4 space-y-6">
-              <Card className="border shadow bg-white rounded-2xl overflow-hidden">
-                <CardHeader className="bg-zinc-50 border-b pb-4">
-                  <CardTitle className="text-xs font-bold text-zinc-805 uppercase tracking-wider font-sans">Reporting Context & Controls</CardTitle>
-                </CardHeader>
-                <CardContent className="p-5 space-y-4 text-xs text-zinc-750">
-                  <div className="space-y-1">
-                    <span className="font-semibold text-zinc-500 block uppercase text-[10px]">Reporting Period Date</span>
-                    <span className="font-mono bg-zinc-100 text-zinc-800 px-2 py-1 rounded inline-block text-xs">
-                      Jan 1, {new Date().getFullYear()} – Dec 31, {new Date().getFullYear()}
-                    </span>
-                  </div>
-                  <div className="space-y-2 pt-2 border-t text-zinc-650 leading-relaxed">
-                    <span className="font-bold text-zinc-900 block">• Estimation Uncertainty</span>
-                    <p className="text-[11px] leading-relaxed">
-                      Preparation of these reports requires administrative estimates of allowance for doubtful accounts and remaining carrying value years of physical medical machinery. Actual clinical realizations might diverge subtly.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+        {/* ✨ AI SALES FORECASTING VIEW */}
+        <TabsContent value="forecasting">
+          <AIForecasting 
+            salesList={sales} 
+            businessName="Tareza Workspace"
+          />
         </TabsContent>
 
         {/* Sales Performance Breakup View */}

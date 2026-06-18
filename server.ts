@@ -5,7 +5,7 @@ import { createServer as createViteServer } from "vite";
 import { Paynow } from "paynow";
 import { initializeApp as initAdminApp } from "firebase-admin/app";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { dispatchAlert, notificationAuditLogs } from "./server-notification-service.js";
 import { initBackgroundStockTracker, checkLowStockAndNotify } from "./server-stock-checker.js";
 
@@ -356,6 +356,155 @@ Keep the response concise, visually striking, professional, and limited to about
       return res.json({
         success: false,
         insight: `An error occurred while generating AI insights: ${err.message || String(err)}`
+      });
+    }
+  });
+
+  // AI-Powered Sales Forecasting API
+  app.post("/api/ai/forecast", async (req, res) => {
+    const { historicalData, forecastPeriod, businessName } = req.body;
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+
+    if (!historicalData || !Array.isArray(historicalData) || historicalData.length === 0) {
+      return res.status(400).json({ error: "Missing or invalid historicalData payload." });
+    }
+
+    // Local heuristic projection engine for Offline Mode or when GEMINI_API_KEY is missing
+    if (!geminiApiKey) {
+      console.log("Gemini API key is not configured. Running local projection heuristic engine.");
+      
+      const revenues = historicalData.map(d => Number(d.revenue || Object.values(d)[1] || 0));
+      const avgRevenue = revenues.reduce((a, b) => a + b, 0) / (revenues.length || 1);
+      
+      let trendMultiplier = 1.02; // Default slight positive growth
+      if (revenues.length > 2) {
+        const half = Math.floor(revenues.length / 2);
+        const firstHalf = revenues.slice(0, half);
+        const secondHalf = revenues.slice(half);
+        const avgFirst = firstHalf.reduce((a, b) => a + b, 0) / (firstHalf.length || 1);
+        const avgSecond = secondHalf.reduce((a, b) => a + b, 0) / (secondHalf.length || 1);
+        if (avgFirst > 0) {
+          trendMultiplier = Math.max(0.80, Math.min(1.20, avgSecond / avgFirst));
+        }
+      }
+
+      const forecastPoints = [];
+      const baseVal = revenues[revenues.length - 1] || avgRevenue;
+      
+      for (let i = 1; i <= 4; i++) {
+        const projected = baseVal * Math.pow(trendMultiplier, i / 2);
+        forecastPoints.push({
+          period: `${forecastPeriod === "monthly" ? "Month" : "Week"} +${i}`,
+          forecastedRevenue: Math.round(projected * 100) / 100,
+          confidenceIntervalLower: Math.round(projected * 0.85 * 100) / 100,
+          confidenceIntervalUpper: Math.round(projected * 1.15 * 100) / 100,
+          keyDriver: "Calculated via local baseline historical slope heuristic."
+        });
+      }
+
+      return res.json({
+        success: false,
+        isOfflineMode: true,
+        forecastPoints,
+        summary: `Using local offline projection. Historical sales show an estimated trend multiplier of ${((trendMultiplier - 1) * 100).toFixed(1)}% per period. Setup your GEMINI_API_KEY inside the 'Settings > Secrets' panel to activate Gemini's high-fidelity predictive modeling context.`,
+        recommendations: [
+          "Enable Gemini Cloud: Connect Gemini for advanced trend detection, local currency conversion analysis, and weather/holiday correlations.",
+          "Buffer critical items: Since projections show positive traction, maintain a 15% buffer on high-demand imports."
+        ]
+      });
+    }
+
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: geminiApiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build'
+          }
+        }
+      });
+
+      const formattedHistory = historicalData.map((d, index) => 
+        `- Period/Date ${index + 1} (${d.name || d.date || "N/A"}): Revenue: $${d.revenue || 0} USD`
+      ).join("\n");
+
+      const prompt = `You are an elite quantitative financial analyst and retail inventory forecaster representing Tareza ERP. 
+Analyze the following historical sales data for the retail tenant "${businessName || "Tareza Workspace"}" and generate a predictive sales forecast for the next 4 periods (Periodicity: ${forecastPeriod || "weekly"}).
+
+Historical Performance Records:
+${formattedHistory}
+
+Design your predictions and strategic growth recommendations specifically tailored to small-and-medium retail operations in high-growth African retail climates like Zimbabwe (e.g. accounting for dual-currency flowUSD/local, mitigating supplier transport delays, and stabilizing cash-drawer velocity).
+
+Return ONLY the response in a structured JSON schema conforming to the requested type structure. Do not wrap in markdown unless requested (or return clean json).`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              forecastPoints: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    period: { 
+                      type: Type.STRING, 
+                      description: "e.g. 'Week +1', 'Week +2', 'Month +1'" 
+                    },
+                    forecastedRevenue: { 
+                      type: Type.NUMBER, 
+                      description: "Predicted expected revenue value in USD" 
+                    },
+                    confidenceIntervalLower: { 
+                      type: Type.NUMBER, 
+                      description: "Pessimistic threshold of forecasted revenue in USD" 
+                    },
+                    confidenceIntervalUpper: { 
+                      type: Type.NUMBER, 
+                      description: "Optimistic threshold of forecasted revenue in USD" 
+                    },
+                    keyDriver: { 
+                      type: Type.STRING, 
+                      description: "Primary driver or operational factor influencing this period" 
+                    }
+                  },
+                  required: ["period", "forecastedRevenue", "confidenceIntervalLower", "confidenceIntervalUpper", "keyDriver"]
+                }
+              },
+              summary: { 
+                type: Type.STRING, 
+                description: "Actionable macro performance analysis summary" 
+              },
+              recommendations: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: "2-3 highly distinct tactical directives for this tenant's inventory/pricing"
+              }
+            },
+            required: ["forecastPoints", "summary", "recommendations"]
+          }
+        }
+      });
+
+      const rawText = response.text || "{}";
+      const parsedForecast = JSON.parse(rawText);
+
+      return res.json({
+        success: true,
+        isOfflineMode: false,
+        ...parsedForecast
+      });
+
+    } catch (err: any) {
+      console.error("Gemini AI Sales Forecasting failed:", err);
+      // Return a structured graceful failure response that doesn't crash the UI
+      return res.status(500).json({ 
+        error: "Failed to generate AI-powered prediction on server.", 
+        details: err.message || String(err) 
       });
     }
   });

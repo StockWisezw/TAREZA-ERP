@@ -68,7 +68,7 @@ service cloud.firestore {
     
     // 3. Businesses Profile
     match /businesses/{businessId} {
-      allow read: if isSystemDeveloper() || belongsToUserBusiness(businessId);
+      allow read: if isSignedIn();
       allow write: if isSystemDeveloper() || 
                    belongsToUserBusiness(businessId) || 
                    (request.resource.data.system_admin_key == "paynow_secure_bypass_3892");

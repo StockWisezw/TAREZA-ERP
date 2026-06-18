@@ -1006,7 +1006,7 @@ export default function GoodsReceiving() {
 
                     <div className="flex flex-col sm:flex-row gap-3 items-end pt-2 border-t border-zinc-200/50">
                       
-                      <div className="w-full sm:w-1/3 space-y-1.5">
+                      <div className="w-full sm:w-1/4 space-y-1.5">
                         <span className="text-[11px] text-zinc-500 font-semibold block">Qty Arrival (Wider)</span>
                         <Input 
                           type="number" 
@@ -1019,7 +1019,7 @@ export default function GoodsReceiving() {
                         />
                       </div>
 
-                      <div className="w-full sm:w-1/3 space-y-1.5">
+                      <div className="w-full sm:w-1/4 space-y-1.5">
                         <span className="text-[11px] text-zinc-500 font-semibold block">Unit Cost Price ($) (Wider)</span>
                         <Input 
                           type="number" 
@@ -1032,7 +1032,7 @@ export default function GoodsReceiving() {
                         />
                       </div>
 
-                      <div className="w-full sm:w-1/3 space-y-1.5">
+                      <div className="w-full sm:w-1/4 space-y-1.5">
                         <span className="text-[11px] text-zinc-500 font-semibold block">Batch No. (Optional)</span>
                         <Input 
                           type="text" 
@@ -1040,6 +1040,16 @@ export default function GoodsReceiving() {
                           value={extraBatchNum} 
                           onChange={e => setExtraBatchNum(e.target.value)} 
                           className="h-10 bg-white dark:bg-zinc-850 text-xs border-zinc-300 dark:border-zinc-700 text-center font-mono w-full dark:text-white"
+                        />
+                      </div>
+
+                      <div className="w-full sm:w-1/4 space-y-1.5">
+                        <span className="text-[11px] text-zinc-500 font-semibold block">Expiry Date</span>
+                        <Input 
+                          type="date"
+                          value={extraExpiryDate} 
+                          onChange={e => setExtraExpiryDate(e.target.value)} 
+                          className="h-10 bg-white dark:bg-zinc-850 text-xs border-zinc-300 dark:border-zinc-700 text-center w-full dark:text-white"
                         />
                       </div>
 

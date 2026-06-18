@@ -3,6 +3,7 @@ import { Activity, CreditCard, DollarSign, Package, Sparkles, Clock, Lock, Unloc
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, Legend, PieChart, Pie } from 'recharts';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/firebaseClient';
+import { DynamicBranchOverview } from '../components/dashboard/DynamicBranchOverview';
 import { toast } from 'sonner';
 import { useTheme } from 'next-themes';
 import { Button } from '../components/ui/button';
@@ -1027,6 +1028,9 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* 📊 Dynamic Branch-wise Revenue vs Stock Valuation Overview */}
+      <DynamicBranchOverview />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4 border-border/60 shadow-sm">
