@@ -1089,7 +1089,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
         
-        {/* Enterprise Upgrade & ZIMRA Fiscalization Card */}
+        {/* Enterprise Upgrade & Stock Take Audit Card */}
         <Card className="col-span-3 border-0 shadow-xl bg-gradient-to-br from-indigo-900 to-indigo-950 text-white relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20"></div>
           <CardHeader className="relative z-10">
@@ -1097,23 +1097,23 @@ export default function Dashboard() {
               <div className="p-1.5 bg-indigo-500/20 rounded-md">
                  <Package className="h-5 w-5 text-indigo-300" />
               </div>
-              <span className="tracking-tight">Enterprise Sync & ZIMRA Fiscalization Gateway</span>
+              <span className="tracking-tight">Enterprise Sync & Stock Take Auditing Hub</span>
             </CardTitle>
-            <CardDescription className="text-zinc-400">Scale your retail chain with our ZIMRA fiscal digital tax gateway and real-time Multi-Branch Sync module built directly into the central cloud ledger.</CardDescription>
+            <CardDescription className="text-zinc-400">Scale your retail chain with our comprehensive Stock Take Auditing Module and real-time Multi-Branch Sync engine built directly into the central cloud ledger.</CardDescription>
           </CardHeader>
           <CardContent className="relative z-10 w-full">
             <div className="flex flex-col p-6 bg-white/5 rounded-xl border border-white/10 space-y-4">
               <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold text-white">$25</span>
-                <span className="text-zinc-400 text-sm">/month compliance fee</span>
+                <span className="text-3xl font-extrabold text-white">$15</span>
+                <span className="text-zinc-400 text-sm">/month plan fee</span>
               </div>
               <p className="text-xs text-zinc-300 leading-relaxed">
-                Connect your physical registers automatically. Transmit real-time cryptographic signatures and digital tax audits directly to the official ZIMRA sandbox.
+                Connect your warehouses and physical retail branches automatically. Manage stocktakes, review discrepancies, and minimize cash or product leakages with easy physical-to-digital inventory reconciliations.
               </p>
               <div className="space-y-1.5 text-xs text-zinc-400 border-t border-white/5 pt-3">
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                  <span><strong>ZIMRA Compliance Ready</strong>: Automatic, real-time fiscal tax validation on every sale</span>
+                  <span><strong>Comprehensive Stock Taking</strong>: Automatic physical-to-digital inventory reconciling with margin protection</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>

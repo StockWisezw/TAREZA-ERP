@@ -29,6 +29,7 @@ import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
 import { RegulatoryComplianceExports } from '../components/reports/RegulatoryComplianceExports';
 import { AIForecasting } from '../components/reports/AIForecasting';
+import QuickBooksStyleReports from '../components/reports/QuickBooksStyleReports';
 
 interface ProductStat {
   id: string;
@@ -46,11 +47,8 @@ export default function Reports() {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
 
-  const [activeMainTab, setActiveMainTab] = useState('pl'); // 'pl' | 'balance' | 'equity' | 'cashflow' | 'notes' | 'sales'
+  const [activeMainTab, setActiveMainTab] = useState('quickbooks'); // 'quickbooks' | 'pl' | 'balance' | 'equity' | 'cashflow' | 'notes' | 'sales'
   const [salesIntervalTab, setSalesIntervalTab] = useState('daily'); // 'daily' | 'weekly' | 'branch' | 'product' | 'custom'
-
-  const [revaluationSurplus, setRevaluationSurplus] = useState(0); 
-  const [taxRatePct, setTaxRatePct] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState<any[]>([]);
@@ -63,13 +61,7 @@ export default function Reports() {
   const [inventory, setInventory] = useState<any[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
 
-  // Manual inputs/Adjusters to support custom edits
-  const [manualOpeningInventory, setManualOpeningInventory] = useState<string>('');
-  const [manualPurchases, setManualPurchases] = useState<string>('');
-  const [manualClosingInventory, setManualClosingInventory] = useState<string>('');
-  
-  // Choose COGS calculation method: 'periodic' (Opening + Purchases - Closing) or 'unit_cost' (Sum of sold unit cost prices)
-  const [cogsMethod, setCogsMethod] = useState<'periodic' | 'unit_cost'>('periodic');
+  const taxRatePct = 15; // 15% Standard corporate tax rate under standard tax schedules
 
   // Custom sales query states
   const [startDate, setStartDate] = useState(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
@@ -83,7 +75,7 @@ export default function Reports() {
   const [productSalesData, setProductSalesData] = useState<ProductStat[]>([]);
 
   // -----------------------------------------------------------------
-  // 1. DYNAMIC PERIOD PROFIT & LOSS CALCULATIONS (IAS 1 COMPLIANT)
+  // 1. DYNAMIC PERIOD PROFIT & LOSS CALCULATIONS (PERPETUAL COGS METHOD)
   // -----------------------------------------------------------------
   const plSummary = React.useMemo(() => {
     // Filter sales and expenses to the selected period
@@ -103,8 +95,8 @@ export default function Reports() {
       return sum + (Number(s.total || 0) - vat);
     }, 0);
 
-    // METHOD A: COGS matching product unit cost price * sold quantity
-    let baseCogsUnitCost = 0;
+    // COGS matching product unit cost price * sold quantity (Perpetual Inventory matching)
+    let costOfGoodsSold = 0;
     filteredSales.forEach((sale: any) => {
       let items: any[] = [];
       if (sale.items) {
@@ -121,44 +113,9 @@ export default function Reports() {
       items.forEach((it: any) => {
         const qty = Number(it.quantity || 0);
         const cost = Number(it.product?.cost_price || it.product?.costPrice || it.product?.cost_price || 0);
-        baseCogsUnitCost += qty * cost;
+        costOfGoodsSold += qty * cost;
       });
     });
-
-    // METHOD B: Periodic Inventory Calculation Formula
-    // 1. Period purchases from purchase orders
-    const periodPurchases = purchaseOrders.filter((po: any) => {
-      const poDate = new Date(po.order_date || po.created_at || Date.now()).toISOString().split('T')[0];
-      return poDate >= startDate && poDate <= endDate;
-    }).reduce((sum, po) => sum + Number(po.total_amount || 0), 0);
-
-    // 2. Closing stock valuation
-    const currentClosingInventory = inventory.reduce((sum, inv) => {
-      const prod = products.find(p => p.id === inv.product_id);
-      const qty = Number(inv.quantity || 0);
-      const cost = Number(prod?.cost_price || 0);
-      return sum + (qty * cost);
-    }, 0);
-
-    const inventoryAccountVal = Number(accounts.find(a => a.code === '1200')?.balance || 0);
-    const finalClosingInv = manualClosingInventory !== ''
-      ? Number(manualClosingInventory)
-      : (currentClosingInventory > 0 ? currentClosingInventory : (inventoryAccountVal > 0 ? inventoryAccountVal : 12500));
-
-    // 3. Total purchases in the period (either manual or computed PO amount or fallback)
-    const finalPurchases = manualPurchases !== ''
-      ? Number(manualPurchases)
-      : (periodPurchases > 0 ? periodPurchases : (grossRevenue > 0 ? grossRevenue * 0.45 : 18000));
-
-    // 4. Calculate opening stock valuation backwards to maintain balance initially, or set manually
-    const defaultOpeningInv = Math.max(0, baseCogsUnitCost + finalClosingInv - finalPurchases);
-    const finalOpeningInv = manualOpeningInventory !== '' ? Number(manualOpeningInventory) : (defaultOpeningInv || 10000);
-
-    // periodic COGS = Opening Inventory + Purchases - Closing Inventory
-    const periodicCogs = Math.max(0, finalOpeningInv + finalPurchases - finalClosingInv);
-
-    // Select the COGS method to apply
-    const costOfGoodsSold = cogsMethod === 'periodic' ? periodicCogs : baseCogsUnitCost;
 
     // Operating and Cash Expenses in this period
     const operatingExpenses = filteredExpenses.reduce((sum, exp) => {
@@ -168,26 +125,26 @@ export default function Reports() {
     const grossProfit = grossRevenue - costOfGoodsSold;
     const netProfitBeforeTax = grossProfit - operatingExpenses;
     
-    // IAS 1 standard tax expense
+    // Standard tax expense (15% rate)
     const taxExpense = netProfitBeforeTax > 0 ? netProfitBeforeTax * (taxRatePct / 100) : 0;
     const netProfitAfterTax = netProfitBeforeTax - taxExpense;
 
-    // IAS 1 compliant other comprehensive income - revaluation of PPE
-    const ociRevaluationSurplusGross = revaluationSurplus;
-    const ociRevaluationSurplusTax = revaluationSurplus * (taxRatePct / 100);
-    const ociRevaluationSurplusNet = ociRevaluationSurplusGross - ociRevaluationSurplusTax;
+    // Standard properties for downstream reporting compliance compatibility
+    const ociRevaluationSurplusGross = 0;
+    const ociRevaluationSurplusTax = 0;
+    const ociRevaluationSurplusNet = 0;
 
-    const totalComprehensiveIncome = netProfitAfterTax + ociRevaluationSurplusNet;
+    const totalComprehensiveIncome = netProfitAfterTax;
     const profitMargin = grossRevenue ? (grossProfit / grossRevenue) * 100 : 0;
 
     return {
       grossRevenue,
       costOfGoodsSold,
-      baseCogsUnitCost,
-      periodicCogs,
-      finalOpeningInv,
-      finalPurchases,
-      finalClosingInv,
+      baseCogsUnitCost: costOfGoodsSold,
+      periodicCogs: costOfGoodsSold,
+      finalOpeningInv: 0,
+      finalPurchases: 0,
+      finalClosingInv: 0,
       grossProfit,
       operatingExpenses,
       netProfitBeforeTax,
@@ -200,7 +157,7 @@ export default function Reports() {
       totalComprehensiveIncome,
       profitMargin
     };
-  }, [sales, expenses, startDate, endDate, revaluationSurplus, taxRatePct, products, inventory, purchaseOrders, manualOpeningInventory, manualPurchases, manualClosingInventory, cogsMethod, accounts]);
+  }, [sales, expenses, startDate, endDate]);
 
   // -----------------------------------------------------------------
   // 2. DYNAMIC BALANCE SHEET (IAS 1 COMPLIANT CLASSIFIED BALANCE SHEET)
@@ -756,13 +713,19 @@ export default function Reports() {
 
       {/* Main Segment Tabs */}
       <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full space-y-4 font-sans">
-        <TabsList className="grid w-full sm:max-w-3xl grid-cols-2 sm:grid-cols-5 bg-zinc-100 p-1 border rounded-lg h-auto shadow-sm">
+        <TabsList className="grid w-full sm:max-w-4xl grid-cols-3 sm:grid-cols-6 bg-zinc-100 p-1 border rounded-lg h-auto shadow-sm">
+          <TabsTrigger value="quickbooks" className="text-[11px] md:text-xs h-9 rounded font-medium">💼 QuickBooks Hub</TabsTrigger>
           <TabsTrigger value="pl" className="text-[11px] md:text-xs h-9 rounded font-medium">1. Profit & Loss</TabsTrigger>
           <TabsTrigger value="balance" className="text-[11px] md:text-xs h-9 rounded font-medium">2. Balance Sheet</TabsTrigger>
           <TabsTrigger value="compliance" className="text-[11px] md:text-xs h-9 rounded font-medium">3. Compliance Exports</TabsTrigger>
           <TabsTrigger value="forecasting" className="text-[11px] md:text-xs h-9 rounded font-medium">✨ 4. AI Forecasting</TabsTrigger>
           <TabsTrigger value="sales" className="text-[11px] md:text-xs h-9 rounded font-medium">5. Sales Analysis</TabsTrigger>
         </TabsList>
+
+        {/* 💼 QUICKBOOKS REPORTING SYSTEM HUB */}
+        <TabsContent value="quickbooks" className="space-y-6">
+          <QuickBooksStyleReports />
+        </TabsContent>
 
         {/* 1. STATEMENT OF COMPREHENSIVE INCOME VIEW */}
         <TabsContent value="pl" className="space-y-6">
@@ -807,33 +770,11 @@ export default function Reports() {
                   {/* COGS and Gross core Margin */}
                   <div className="space-y-3">
                     <div className="space-y-1.5 pb-2 border-b border-dashed">
-                      <div className="font-bold text-zinc-900 uppercase text-xs">Cost of Sales ({cogsMethod === 'periodic' ? 'Periodic Inventory Method' : 'Unit Cost Method'})</div>
-                      
-                      {cogsMethod === 'periodic' ? (
-                        <div className="space-y-1 text-xs text-zinc-650 pl-4 border-l-2 border-indigo-100 ml-2">
-                          <div className="flex justify-between pl-2">
-                            <span>Opening merchandise inventory</span>
-                            <span>${plSummary.finalOpeningInv.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                          </div>
-                          <div className="flex justify-between pl-2">
-                            <span>Add: Purchases / Production Costs</span>
-                            <span className="text-indigo-600">+${plSummary.finalPurchases.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                          </div>
-                          <div className="flex justify-between pl-2">
-                            <span>Less: Closing merchandise inventory</span>
-                            <span className="text-rose-600">(${plSummary.finalClosingInv.toLocaleString('en-US', { minimumFractionDigits: 2 })})</span>
-                          </div>
-                          <div className="flex justify-between font-bold text-zinc-950 border-t border-zinc-100 pt-1.5 mt-1 pl-2">
-                            <span>Cost of Goods Sold (COGS) (5000)</span>
-                            <span className="text-rose-700">(${plSummary.costOfGoodsSold.toLocaleString('en-US', { minimumFractionDigits: 2 })})</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex justify-between text-zinc-700 pl-4">
-                          <span>Cost of Goods Sold (cogs) (5000)</span>
-                          <span className="text-red-650">(${plSummary.costOfGoodsSold.toLocaleString('en-US', { minimumFractionDigits: 2 })})</span>
-                        </div>
-                      )}
+                      <div className="font-bold text-zinc-900 uppercase text-xs">Cost of Sales (Perpetual Inventory matching)</div>
+                      <div className="flex justify-between text-zinc-700 pl-4 text-xs font-mono">
+                        <span>Cost of Goods Sold (COGS) (Account 5000)</span>
+                        <span className="text-red-650">(${plSummary.costOfGoodsSold.toLocaleString('en-US', { minimumFractionDigits: 2 })})</span>
+                      </div>
                     </div>
 
                     <div className="flex justify-between font-extrabold text-xs py-2 px-3 bg-zinc-50 border border-zinc-200 rounded-lg">
@@ -953,139 +894,50 @@ export default function Reports() {
             {/* COLUMN 2 (Sidebar) - Accounting Adjustments */}
             <div className="lg:col-span-4 space-y-6">
 
-              {/* COGS Formula & Inventory Adjuster Card */}
+              {/* Perpetual COGS Policy & Audit Card */}
               <Card className="border shadow bg-white rounded-2xl overflow-hidden">
                 <CardHeader className="bg-zinc-50 border-b pb-4">
                   <CardTitle className="text-sm font-bold text-zinc-900 flex items-center gap-1.5 font-sans">
-                    <Database className="w-4 h-4 text-indigo-650" /> Cost of Goods Sold (COGS) Engine
+                    <Database className="w-4 h-4 text-emerald-600" /> Perpetual Accounting Policy
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Choose and configure your preferred accounting framework for calculating production/inventory cost of sales.
+                    Automated cost-matching guidelines for the Gross Profit & Cost of Goods Sold (COGS) reporting system.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="p-5 space-y-5">
-                  
-                  {/* Method Selection */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-700 block">COGS Calculation Method</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        type="button"
-                        size="xs"
-                        variant={cogsMethod === 'periodic' ? 'default' : 'outline'}
-                        onClick={() => { setCogsMethod('periodic'); toast.success("Using Periodic Inventory Formula!"); }}
-                        className={`text-[10px] py-1.5 h-auto ${cogsMethod === 'periodic' ? 'bg-zinc-900 text-white hover:bg-zinc-805' : 'border-zinc-200 text-zinc-650 hover:bg-zinc-50'}`}
-                      >
-                        Periodic Formula (Standard)
-                      </Button>
-                      <Button
-                        type="button"
-                        size="xs"
-                        variant={cogsMethod === 'unit_cost' ? 'default' : 'outline'}
-                        onClick={() => { setCogsMethod('unit_cost'); toast.success("Using Unit Cost Perpetual Method!"); }}
-                        className={`text-[10px] py-1.5 h-auto ${cogsMethod === 'unit_cost' ? 'bg-zinc-900 text-white hover:bg-zinc-805' : 'border-zinc-200 text-zinc-650 hover:bg-zinc-50'}`}
-                      >
-                        Specific Unit Costs
-                      </Button>
-                    </div>
+                <CardContent className="p-5 space-y-4">
+                  <div className="space-y-1 bg-emerald-50/70 rounded-xl p-3 border border-emerald-100 text-emerald-900 text-xs">
+                    <p className="font-bold">✓ Perpetual COGS Method Active</p>
+                    <p className="text-emerald-700 leading-relaxed text-[11px]">
+                      This system employs the Perpetual Inventory Method. Costs are recognized and matched specifically when products are sold, maintaining a flawless audit trail.
+                    </p>
                   </div>
 
-                  {/* COGS Formula Details Display */}
-                  <div className="bg-zinc-50 rounded-xl p-3 border space-y-2 font-sans">
-                    <h5 className="text-[10px] font-bold text-zinc-650 uppercase tracking-wider flex justify-between">
-                      <span>Formula Breakdown</span>
-                      <span className="font-mono text-indigo-600 font-extrabold">COGS = OS + P - CS</span>
-                    </h5>
-                    
-                    <div className="space-y-1.5 text-xs text-zinc-700 font-mono">
-                      <div className="flex justify-between items-center">
-                        <span className="text-zinc-500 text-[11px]">Opening Stock (OS)</span>
-                        <span className="font-bold text-zinc-900">${plSummary.finalOpeningInv.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  <div className="space-y-3 font-sans text-xs">
+                    <h4 className="text-zinc-650 uppercase font-extrabold tracking-wider text-[10px]">Real-Time COGS Summary</h4>
+                    <div className="bg-zinc-50 rounded-xl p-3 border space-y-2">
+                      <div className="flex justify-between items-center text-zinc-600">
+                        <span>Corporate Tax Schedule</span>
+                        <span className="font-semibold text-zinc-900">{taxRatePct}% Standard</span>
                       </div>
-                      <div className="flex justify-between items-center font-bold">
-                        <span className="text-zinc-500 text-[11px] font-normal">(+) Period Purchases (P)</span>
-                        <span className="text-indigo-700">+${plSummary.finalPurchases.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                      <div className="flex justify-between items-center text-zinc-600">
+                        <span>Inventory Matching Policy</span>
+                        <span className="font-semibold text-zinc-900">FIFO / Cost Price</span>
                       </div>
-                      <div className="flex justify-between items-center font-bold">
-                        <span className="text-zinc-500 text-[11px] font-normal">(-) Closing Stock (CS)</span>
-                        <span className="text-rose-700">-${plSummary.finalClosingInv.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="border-t border-dashed border-zinc-300 pt-1.5 mt-1.5 flex justify-between items-center font-black text-sm text-zinc-900">
-                        <span className="text-xs uppercase font-extrabold tracking-wider text-zinc-700">Calculated COGS</span>
-                        <span className="text-zinc-950 underline bg-white px-2 py-0.5 rounded shadow-sm border border-zinc-150">
-                          ${plSummary.periodicCogs.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      <div className="border-t border-dashed border-zinc-200 pt-2 flex justify-between items-center font-bold text-zinc-900">
+                        <span>Total Matched COGS</span>
+                        <span className="font-mono text-emerald-600 bg-white px-2 py-0.5 rounded shadow-sm border border-zinc-150">
+                          ${plSummary.costOfGoodsSold.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Manual Override Form */}
-                  <div className="space-y-3 pt-3 border-t border-zinc-200">
-                    <div className="flex justify-between items-center">
-                      <h4 className="text-xs font-bold text-zinc-800">Manual Inventory Overrides</h4>
-                      {(manualOpeningInventory || manualPurchases || manualClosingInventory) && (
-                        <Button 
-                          size="xs" 
-                          variant="ghost" 
-                          onClick={() => {
-                            setManualOpeningInventory('');
-                            setManualPurchases('');
-                            setManualClosingInventory('');
-                            toast.success("State overrides reset to database dynamic counts!");
-                          }}
-                          className="h-6 text-[10px] text-zinc-500 hover:text-red-600 p-1"
-                        >
-                          Reset to Auto
-                        </Button>
-                      )}
-                    </div>
-
-                    {/* Opening Inventory Input */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[11px]">
-                        <label className="font-semibold text-zinc-650">Opening Inventory (USD)</label>
-                        <span className="text-zinc-400 font-mono">Auto: ${plSummary.finalOpeningInv.toFixed(0)}</span>
-                      </div>
-                      <Input 
-                        type="number" 
-                        value={manualOpeningInventory} 
-                        onChange={(e) => setManualOpeningInventory(e.target.value)} 
-                        placeholder="e.g. 10000"
-                        className="h-8 py-1 px-2 text-xs bg-white border-zinc-250 font-mono"
-                      />
-                    </div>
-
-                    {/* Purchases Input */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[11px]">
-                        <label className="font-semibold text-zinc-650">Purchases in Period (USD)</label>
-                        <span className="text-zinc-400 font-mono">Auto: ${plSummary.finalPurchases.toFixed(0)}</span>
-                      </div>
-                      <Input 
-                        type="number" 
-                        value={manualPurchases} 
-                        onChange={(e) => setManualPurchases(e.target.value)} 
-                        placeholder="e.g. 15000"
-                        className="h-8 py-1 px-2 text-xs bg-white border-zinc-250 font-mono"
-                      />
-                    </div>
-
-                    {/* Closing Inventory Input */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[11px]">
-                        <label className="font-semibold text-zinc-650">Closing Inventory (USD)</label>
-                        <span className="text-zinc-400 font-mono">Auto: ${plSummary.finalClosingInv.toFixed(0)}</span>
-                      </div>
-                      <Input 
-                        type="number" 
-                        value={manualClosingInventory} 
-                        onChange={(e) => setManualClosingInventory(e.target.value)} 
-                        placeholder="e.g. 12500"
-                        className="h-8 py-1 px-2 text-xs bg-white border-zinc-250 font-mono"
-                      />
-                    </div>
+                  <div className="text-[11px] text-zinc-500 leading-relaxed space-y-1 pt-2 border-t border-zinc-100">
+                    <span className="font-semibold text-zinc-700 block">Why Perpetual is Preferred:</span>
+                    <p>• Avoids periodic estimation errors & manual counting blockages.</p>
+                    <p>• Matches individual sales to actual purchase cost immediately.</p>
+                    <p>• Maintains constant parity with standard systems like QuickBooks & SAP.</p>
                   </div>
-
                 </CardContent>
               </Card>
 

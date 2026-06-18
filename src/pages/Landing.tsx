@@ -15,7 +15,7 @@ export default function Landing() {
     },
     {
       question: "What premium upgraded features are available in Tareza ERP?",
-      answer: "We offer several high-performance upgrades to scale your operations, including our automated Multi-Branch Sync Engine to link remote stores, and our ZIMRA fiscalization compliant gateway for direct digital tax transactions."
+      answer: "We offer several high-performance upgrades to scale your operations, including our automated Multi-Branch Sync Engine to link remote stores, and our Stock Take Auditing Module to manage physical counts and minimize stock leakages."
     },
     {
       question: "Is there an offline-ready POS feature, and how does synchronization work?",
@@ -23,7 +23,7 @@ export default function Landing() {
     },
     {
       question: "How are the software modules and upgrade modules priced?",
-      answer: "We offer a flexible tier budget: Free forever for small setups, Starter at $15/mo, and Professional at $30/mo. Additional connected branches are only $10/mo, and our professional ZIMRA compliance middleware gateway is a flat $25/mo fee."
+      answer: "We offer a flexible tier budget: Free forever for small setups, Starter at $15/mo, and Professional at $30/mo. Additional connected branches are only $10/mo, and our Professional Stock Take Auditing Module is $15/month."
     },
     {
       question: "Where can we follow your online updates and learn how to use Tareza ERP?",
@@ -141,7 +141,7 @@ export default function Landing() {
           <div className="lg:w-1/2 space-y-8 z-10 text-center lg:text-left">
             <div className="inline-flex items-center space-x-2 bg-background/80 dark:bg-background/50 border border-border/50 rounded-full px-4 py-1.5 text-sm font-medium backdrop-blur-md shadow-sm">
               <CheckCircle2 className="w-4 h-4 text-primary" />
-              <span>Includes Multi-Branch Sync & ZIMRA Compliance Gateway</span>
+              <span>Includes Multi-Branch Sync & Stock Take Auditing Module</span>
             </div>
             
             <h1 className="text-5xl md:text-7xl font-bold tracking-tighter leading-[1.1] text-zinc-900 dark:text-zinc-50 drop-shadow-sm">
@@ -349,7 +349,7 @@ export default function Landing() {
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Custom API Access & white-label</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Dedicated Account Manager</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Phone support (same-day)</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> ZIMRA Compliance Ready</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Professional Stock Take Audits</li>
               </ul>
               <a href="mailto:admin@tarezaerp.co.zw?subject=Enterprise Inquiry - Tareza ERP" className="mt-auto block">
                 <Button variant="outline" className="w-full text-xs h-9">Contact Sales</Button>
@@ -390,18 +390,18 @@ export default function Landing() {
 
               {/* Add-on 2 */}
               <div className="bg-background rounded-2xl border border-primary/20 p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
-                <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[8px] font-extrabold px-3 py-1 uppercase tracking-wider rounded-bl-lg">5x Avg ROI</div>
+                <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[8px] font-extrabold px-3 py-1 uppercase tracking-wider rounded-bl-lg">Audit Ready</div>
                 <div>
                   <div className="flex justify-between items-center mb-4">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-mono bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded-full">Compliance Gateway</span>
-                    <span className="text-sm font-bold text-foreground">ZIMRA Fiscalization Gateway</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-mono bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded-full">Auditing & Analytics</span>
+                    <span className="text-sm font-bold text-foreground">Stock Take Auditing Module</span>
                   </div>
-                  <div className="text-3xl font-black text-foreground">$25<span className="text-xs font-semibold text-muted-foreground"> / month flat fee</span></div>
-                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">Transmit real-time cryptographic sales signatures and daily digital tax audits directly to the official ZIMRA compliance database sandbox.</p>
+                  <div className="text-3xl font-black text-foreground">$15<span className="text-xs font-semibold text-muted-foreground"> / month plan fee</span></div>
+                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">Perform automated physical stock takes, barcode-based counts, discrepancy reports, and auto-adjusted ledger alignments to prevent cash and stock leakages.</p>
                 </div>
                 <div className="pt-4 border-t border-border mt-6 flex justify-between items-center text-xs">
-                  <span className="text-muted-foreground font-medium">Fully tax compliant in minutes</span>
-                  <a href="mailto:admin@tarezaerp.co.zw?subject=ZIMRA Interface Integration Request" className="text-primary font-bold hover:underline flex items-center gap-1">Request Integration <ChevronRight className="w-3.5 h-3.5" /></a>
+                  <span className="text-muted-foreground font-medium">Minimize stock leakage today</span>
+                  <a href="mailto:admin@tarezaerp.co.zw?subject=Stock Take Integration Request" className="text-primary font-bold hover:underline flex items-center gap-1">Request Integration <ChevronRight className="w-3.5 h-3.5" /></a>
                 </div>
               </div>
             </div>
