@@ -222,7 +222,7 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
         ) : (
           <div className="flex flex-col h-full overflow-hidden">
             <div ref={cartContainerRef} className="flex-1 overflow-y-auto px-2.5 scroll-smooth">
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {cart.map((item, index) => {
                   const isSelected = selectedCartItemId === item.id;
                   return (
@@ -232,20 +232,20 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
                         setSelectedCartItemId(item.id);
                         setIsNewInput(true);
                       }}
-                      className={`flex justify-between items-start p-1.5 rounded-lg border transition-all cursor-pointer group ${
+                      className={`flex justify-between items-center p-1 rounded-md border transition-all cursor-pointer group ${
                         isSelected 
-                          ? 'border-zinc-900 ring-1 ring-zinc-900/10 bg-zinc-50/20' 
-                          : 'border-zinc-100 hover:border-zinc-250 bg-white'
+                          ? 'border-zinc-950 ring-1 ring-zinc-950/5 bg-zinc-50/10' 
+                          : 'border-zinc-100 hover:border-zinc-200 bg-white'
                       }`}
                     >
                       <div className="flex flex-col flex-1 min-w-0 pr-1">
-                        <h4 className={`text-xs font-bold leading-tight line-clamp-1 ${isSelected ? 'text-zinc-950' : 'text-zinc-800'}`}>
+                        <h4 className={`text-[10px] font-extrabold leading-tight line-clamp-1 ${isSelected ? 'text-zinc-950 font-black' : 'text-zinc-800'}`}>
                           {item.product.name}
                         </h4>
-                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-zinc-500 font-mono">
-                          <span>${item.unitPrice.toFixed(2)}</span>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[9px] text-zinc-500 font-mono">
+                          <span className="font-bold text-zinc-650">${item.unitPrice.toFixed(2)}</span>
                           {item.discount && item.discount.value > 0 && (
-                            <span className="text-rose-600 font-semibold bg-rose-50 px-1 rounded text-[8px]">
+                            <span className="text-rose-600 font-bold bg-rose-50 px-1 rounded text-[8px]">
                               -{item.discount.value}%
                             </span>
                           )}
@@ -257,23 +257,20 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
                                 const selectedTier = e.target.value;
                                 setItemPricingTier(item.id, selectedTier);
                               }}
-                              className="bg-zinc-50 border border-zinc-200 text-zinc-700 text-[9px] font-bold py-0.5 px-1 rounded cursor-pointer max-w-[120px] h-5 focus:outline-none focus:ring-1 focus:ring-zinc-650"
+                              className="bg-zinc-50 border border-zinc-200 text-zinc-700 text-[8px] font-bold py-0.5 px-0.5 rounded cursor-pointer max-w-[80px] h-4.5 focus:outline-none"
                             >
-                              <option value="retail">Unit (1)</option>
+                              <option value="retail">Unit</option>
                               {getPackSize(item.product.sku) > 1 && (
                                 <option value="wholesale">Pack ({getPackSize(item.product.sku)})</option>
                               )}
                               {item.product.bundles?.map((b: any, bIdx: number) => (
-                                <option key={bIdx} value={b.name}>{b.name} ({b.pack_size || b.packSize})</option>
+                                <option key={bIdx} value={b.name}>{b.name}</option>
                               ))}
                             </select>
                           )}
-                        </div>
-
-                        {/* Direct Inline editing for Price or Discount percentage */}
-                        <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-zinc-100" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[9px] text-zinc-400 font-bold font-mono">Price:</span>
+                          
+                          <div className="flex items-center gap-0.5 border-l border-zinc-250 pl-1" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-[8px] text-zinc-400 font-bold">P:</span>
                             <input 
                               type="number"
                               step="any"
@@ -286,12 +283,12 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
                                   }));
                                 }
                               }}
-                              className="w-[60px] h-5 text-center text-[10px] font-bold font-mono border border-zinc-200 bg-zinc-50 hover:bg-white focus:bg-white rounded p-0 text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-650"
+                              className="w-[38px] h-3.5 text-center text-[9px] font-bold font-mono border border-zinc-200 bg-zinc-50 hover:bg-white focus:bg-white rounded p-0 text-zinc-900 focus:outline-none"
                             />
                           </div>
 
-                          <div className="flex items-center gap-1">
-                            <span className="text-[9px] text-zinc-400 font-bold font-mono">Disc%:</span>
+                          <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-[8px] text-zinc-400 font-bold">D%:</span>
                             <input 
                               type="number"
                               min="0"
@@ -306,14 +303,14 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
                                   applyItemDiscount(item.id, { type: 'percentage', value: 0 });
                                 }
                               }}
-                              className="w-[40px] h-5 text-center text-[10px] font-bold font-mono border border-zinc-200 bg-zinc-50 hover:bg-white focus:bg-white rounded p-0 text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-650"
+                              className="w-[28px] h-3.5 text-center text-[9px] font-bold font-mono border border-zinc-200 bg-zinc-50 hover:bg-white focus:bg-white rounded p-0 text-zinc-900 focus:outline-none"
                             />
                           </div>
                         </div>
                       </div>
                       
-                      <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-0.5">
                           <input 
                             type="number"
                             step="any"
@@ -330,17 +327,17 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
                               setSelectedCartItemId(item.id);
                               setIsNewInput(true);
                             }}
-                            className="w-10 h-6 text-center text-xs font-black font-mono border border-zinc-250 bg-zinc-50 rounded focus:bg-white text-zinc-900 p-0 focus:outline-none focus:ring-1 focus:ring-zinc-600 focus:border-zinc-600"
+                            className="w-7 h-4.5 text-center text-[9px] font-black font-mono border border-zinc-250 bg-zinc-50 rounded focus:bg-white text-zinc-900 p-0 focus:outline-none"
                           />
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col gap-0 border-l border-zinc-150 pl-0.5">
                             <button 
-                              className="h-3 w-3 flex items-center justify-center bg-zinc-100 text-zinc-700 text-[8px] hover:bg-zinc-250 rounded border border-zinc-200"
+                              className="h-2.5 w-2.5 flex items-center justify-center bg-zinc-100 text-zinc-700 text-[6px] hover:bg-zinc-200 rounded"
                               onClick={() => updateQuantity(item.id, item.quantity + 1)}
                             >
                               +
                             </button>
                             <button 
-                              className="h-3 w-3 flex items-center justify-center bg-zinc-100 text-zinc-750 text-[8px] hover:bg-zinc-255 rounded border border-zinc-200"
+                              className="h-2.5 w-2.5 flex items-center justify-center bg-zinc-100 text-zinc-700 text-[6px] hover:bg-zinc-200 rounded"
                               onClick={() => updateQuantity(item.id, item.quantity - 1)}
                             >
                               -
@@ -348,17 +345,17 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
                           </div>
                         </div>
                         
-                        <div className="text-right min-w-[50px]">
-                          <span className="font-bold text-xs font-mono text-zinc-900">${(item.subtotal + item.vatAmount).toFixed(2)}</span>
+                        <div className="text-right min-w-[45px]">
+                          <span className="font-bold text-[10px] font-mono text-zinc-900">${(item.subtotal + item.vatAmount).toFixed(2)}</span>
                         </div>
 
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-6 w-6 text-red-450 hover:text-red-650 hover:bg-rose-50 rounded p-0 shrink-0 cursor-pointer" 
+                          className="h-5 w-5 text-red-500 hover:text-red-700 hover:bg-rose-50 rounded p-0 shrink-0 cursor-pointer" 
                           onClick={() => removeFromCart(item.id)}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
                     </div>

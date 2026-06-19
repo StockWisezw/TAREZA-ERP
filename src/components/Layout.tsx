@@ -87,6 +87,7 @@ export default function Layout() {
   const [businessName, setBusinessName] = React.useState<string>('');
   const [subStatus, setSubStatus] = React.useState<string>('ACTIVE');
   const [subEndDate, setSubEndDate] = React.useState<string | null>(null);
+  const [sidebarExpanded, setSidebarExpanded] = React.useState<boolean>(false);
 
   React.useEffect(() => {
     async function fetchBusinessName() {
@@ -211,22 +212,38 @@ export default function Layout() {
   };
 
   const NavLinks = ({ mobile }: { mobile?: boolean }) => (
-    <div className="flex flex-col px-2">
+    <div className="flex flex-col px-1.5 dev-nav-links">
       {navigation.map((item) => {
         const isActive = location.pathname === item.href;
+        const showLabel = mobile || sidebarExpanded;
         
         return (
           <Link
             key={item.name}
             to={item.href}
-            className={`flex items-center space-x-3 rounded-full px-4 py-2.5 text-sm font-medium transition-colors mb-1 ${
+            onClick={() => {
+              if (!mobile) {
+                // Keep collapsed when page is selected so user sees full page
+                setSidebarExpanded(false);
+              }
+            }}
+            title={!showLabel ? item.name : undefined}
+            className={`flex items-center rounded-full transition-all mb-1 h-9 ${
+              showLabel 
+                ? 'px-3.5 py-2 gap-3 justify-start' 
+                : 'p-0 w-9 h-9 mx-auto justify-center'
+            } ${
               isActive 
-                ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400' 
-                : 'text-zinc-600 hover:bg-zinc-100/80 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-50'
+                ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 font-bold shadow-sm' 
+                : 'text-zinc-650 hover:bg-zinc-100/80 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-850/50 dark:hover:text-zinc-50'
             }`}
           >
-            <item.icon className={`h-[18px] w-[18px] ${isActive ? 'text-blue-700 dark:text-blue-400' : 'text-zinc-500 dark:text-zinc-400'}`} />
-            <span>{item.name}</span>
+            <item.icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? 'text-blue-700 dark:text-blue-400' : 'text-zinc-500 dark:text-zinc-400'}`} />
+            {showLabel && (
+              <span className="text-xs font-semibold tracking-tight truncate select-none leading-none">
+                {item.name}
+              </span>
+            )}
           </Link>
         )
       })}
@@ -239,42 +256,79 @@ export default function Layout() {
       <SubscriptionBanner status={subStatus} endDate={subEndDate} />
       <div className="flex flex-1 overflow-hidden">
         
-        {/* Desktop Sidebar */}
-        <aside className="hidden md:flex w-[260px] flex-col bg-zinc-50 dark:bg-[#18181b] border-r border-zinc-200 dark:border-zinc-800/80 overflow-hidden shrink-0">
-          <div className="h-16 px-5 flex items-center border-b border-zinc-150 dark:border-zinc-800/80 bg-zinc-100/20 dark:bg-zinc-900/10">
-            {businessName ? (
-              <div className="flex items-center gap-2 select-none overflow-hidden pr-2">
-                <Store className="h-4.5 w-4.5 text-zinc-700 dark:text-zinc-300 shrink-0" />
-                <span className="font-extrabold text-[15px] tracking-tight bg-gradient-to-r from-zinc-800 to-zinc-600 dark:from-white dark:to-zinc-300 bg-clip-text text-transparent truncate">
-                  {businessName}
-                </span>
-              </div>
+        {/* Desktop Sidebar (Collapsible: Icon-only by default or on selection, Expanded on click logo/expander toggle) */}
+        <aside className={`hidden md:flex flex-col bg-zinc-50 dark:bg-[#121214] border-r border-zinc-200 dark:border-zinc-800/80 overflow-hidden shrink-0 transition-all duration-200 ${
+          sidebarExpanded ? 'w-[250px]' : 'w-[64px]'
+        }`}>
+          <div 
+            onClick={() => setSidebarExpanded(!sidebarExpanded)}
+            className={`h-16 flex items-center border-b border-zinc-150 dark:border-zinc-800/80 bg-zinc-100/20 dark:bg-zinc-900/10 cursor-pointer hover:bg-zinc-100/40 dark:hover:bg-zinc-800/20 transition-colors select-none ${
+              sidebarExpanded ? 'px-4 justify-between font-bold' : 'justify-center p-0'
+            }`}
+            title={sidebarExpanded ? "Collapse Sidebar" : "Expand Sidebar (Only show icons on select)"}
+          >
+            {sidebarExpanded ? (
+              <>
+                {businessName ? (
+                  <div className="flex items-center gap-2 overflow-hidden pr-2">
+                    <Store className="h-4.5 w-4.5 text-zinc-700 dark:text-zinc-300 shrink-0" />
+                    <span className="font-extrabold text-[13px] tracking-tight bg-gradient-to-r from-zinc-800 to-zinc-650 dark:from-white dark:to-zinc-300 bg-clip-text text-transparent truncate">
+                      {businessName}
+                    </span>
+                  </div>
+                ) : (
+                  <TarezaLogo size="sm" showSubtitle={false} />
+                )}
+                <div className="text-zinc-400 hover:text-zinc-700 dark:hover:text-white shrink-0">
+                  <Menu className="h-4 w-4" />
+                </div>
+              </>
             ) : (
-              <TarezaLogo size="sm" showSubtitle={false} />
+              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-zinc-200/50 dark:bg-zinc-805/50 text-zinc-750 dark:text-zinc-350 transition-all active:scale-95 hover:bg-zinc-200 dark:hover:bg-zinc-800">
+                <Menu className="h-[18px] w-[18px]" />
+              </div>
             )}
           </div>
-          <div className="flex-1 overflow-auto py-4">
+          <div className="flex-1 overflow-auto py-3">
             <NavLinks />
           </div>
-          <div className="p-4 flex flex-col gap-2">
+          <div className={`p-4 flex flex-col gap-1.5 border-t border-zinc-150 dark:border-zinc-850 bg-zinc-100/10 dark:bg-[#0c0c0d] ${
+            sidebarExpanded ? 'items-stretch' : 'items-center px-1'
+          }`}>
             {(user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw') && (
-              <div className="px-3 py-1.5 bg-blue-500/10 rounded-full text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase text-center tracking-widest mx-2 mb-2">
-                Superadmin
-              </div>
+              sidebarExpanded ? (
+                <div className="px-3 py-1 bg-blue-500/10 rounded-full text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase text-center tracking-widest mx-2 mb-1.5 select-none">
+                  Superadmin
+                </div>
+              ) : (
+                <div className="h-4 w-4 rounded-full bg-blue-500 flex items-center justify-center text-[7px] font-extrabold text-white select-none mb-1 shadow-sm" title="Superadmin font mode">
+                  S
+                </div>
+              )
             )}
             {isDeveloper && (
               <Button 
                 variant="ghost" 
-                className="w-full justify-start text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/20 rounded-full px-4 mb-1"
+                className={`text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/25 rounded-md ${
+                  sidebarExpanded ? 'w-full justify-start px-3 h-8 text-xs font-semibold' : 'w-9 h-9 p-0 justify-center rounded-full'
+                }`}
                 onClick={() => navigate('/dev-portal')}
+                title={!sidebarExpanded ? "Developer Portal" : undefined}
               >
-                <Lock className="mr-3 h-[18px] w-[18px]" />
-                Developer Portal
+                <Lock className={`${sidebarExpanded ? 'mr-2.5' : ''} h-[16px] w-[16px] shrink-0`} />
+                {sidebarExpanded && "Developer Portal"}
               </Button>
             )}
-            <Button variant="ghost" className="w-full justify-start text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50 rounded-full px-4" onClick={handleSignOut}>
-              <LogOut className="mr-3 h-[18px] w-[18px]" />
-              Logout
+            <Button 
+              variant="ghost" 
+              className={`text-zinc-600 hover:text-rose-600 hover:bg-rose-50 dark:text-zinc-400 dark:hover:bg-rose-950/20 rounded-md ${
+                sidebarExpanded ? 'w-full justify-start px-3 h-8 text-xs font-semibold' : 'w-9 h-9 p-0 justify-center rounded-full'
+              }`} 
+              onClick={handleSignOut}
+              title={!sidebarExpanded ? "Logout" : undefined}
+            >
+              <LogOut className={`${sidebarExpanded ? 'mr-2.5' : ''} h-[16px] w-[16px] shrink-0`} />
+              {sidebarExpanded && "Logout"}
             </Button>
           </div>
         </aside>
