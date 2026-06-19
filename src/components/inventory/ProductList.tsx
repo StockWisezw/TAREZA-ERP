@@ -1095,7 +1095,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
             <DialogTrigger asChild>
               <Button className="shadow-sm"><Plus className="mr-2 h-4 w-4" /> Add Product</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md bg-white border-zinc-200">
+            <DialogContent className="sm:max-w-xl md:max-w-2xl bg-white border-zinc-200 flex flex-col max-h-[90vh] overflow-hidden p-6 shadow-2xl rounded-2xl">
               <DialogHeader>
                 <DialogTitle className="text-lg font-bold text-zinc-900">Add New Product</DialogTitle>
                 <div className="mt-2.5 pb-1 flex items-center justify-between">
@@ -1123,7 +1123,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
                   })()}
                 </div>
               </DialogHeader>
-              <div className="space-y-4 pt-4">
+              <div className="space-y-4 pt-4 overflow-y-auto pr-1.5 flex-1 max-h-[calc(90vh-160px)]">
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-zinc-650 flex items-center justify-between">
                     <span>Product Name *</span>
@@ -1699,11 +1699,11 @@ export function ProductList({ onImportClick }: ProductListProps) {
 
       {/* Dynamic Edit Product Dialog */}
       <Dialog open={!!editingProduct} onOpenChange={(open) => !open && setEditingProduct(null)}>
-        <DialogContent className="bg-white border-zinc-250">
+        <DialogContent className="sm:max-w-xl md:max-w-2xl bg-white border-zinc-250 flex flex-col max-h-[90vh] overflow-hidden p-6 shadow-2xl rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-zinc-900 animate-in fade-in">Edit Product Details</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 pt-3">
+          <div className="space-y-4 pt-3 overflow-y-auto pr-1.5 flex-1 max-h-[calc(90vh-160px)]">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-zinc-600">Product Name *</Label>
               <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="e.g. Mazoe Blackberry 2L" className="bg-white border-zinc-200" />
@@ -1845,11 +1845,11 @@ export function ProductList({ onImportClick }: ProductListProps) {
 
       {/* Adjust Inventory Stock Level Dialog */}
       <Dialog open={!!adjustingProduct} onOpenChange={(open) => !open && setAdjustingProduct(null)}>
-        <DialogContent className="bg-white border-zinc-250 max-w-sm">
+        <DialogContent className="bg-white border-zinc-250 sm:max-w-md max-h-[85vh] overflow-hidden flex flex-col p-6 shadow-xl rounded-xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-zinc-900">Adjust Stock Level</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 pt-3">
+          <div className="space-y-4 pt-3 overflow-y-auto pr-1 flex-1 max-h-[calc(85vh-120px)]">
             <div className="bg-zinc-50 p-3 rounded-lg border border-zinc-200/60 flex flex-col gap-1 text-xs">
               <div><span className="font-semibold text-zinc-500">Product:</span> <span className="font-bold text-zinc-900">{adjustingProduct?.name}</span></div>
               <div><span className="font-semibold text-zinc-500">Branch:</span> <span className="font-bold text-zinc-900">{branches.find(b => b.id === selectedBranchId)?.name || 'Default Branch'}</span></div>

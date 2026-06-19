@@ -10,7 +10,6 @@ import {
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { ScrollArea } from '../ui/scroll-area';
 import { Product, getPackSize } from '../../store/posStore';
 
 interface ProductGridProps {
@@ -133,7 +132,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
       </div>
 
       {/* Main product catalogue view area */}
-      <ScrollArea className="flex-1 p-3">
+      <div className="flex-1 overflow-y-auto p-3">
         <div className={`grid ${gridColsClass} gap-3 bg-white`}>
           {isLoading && filteredProducts.length === 0 ? (
             Array.from({ length: 12 }).map((_, i) => (
@@ -258,7 +257,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
              </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 };

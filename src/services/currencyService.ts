@@ -26,7 +26,12 @@ const DEFAULT_CURRENCIES = [
 export async function syncRBZExchangeRates(force = false): Promise<{ success: boolean; data?: Currency[]; error?: string }> {
   try {
     // 1. Resolve User and Business context
-    const { data: userData } = await auth.currentUser ? { data: { user: auth.currentUser } } : await supabase.auth.getUser();
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      // If there is no user signed in, we cannot fetch anything from DB or sync rates.
+      return { success: false, error: 'No authenticated user session found.' };
+    }
+    const { data: userData } = { data: { user: currentUser } };
     const userId = userData?.user?.id || '00000000-0000-0000-0000-000000000000';
     
     let businessId: string | null = null;
@@ -40,7 +45,7 @@ export async function syncRBZExchangeRates(force = false): Promise<{ success: bo
       businessId = busUser?.business_id || null;
     }
 
-    if (!businessId) {
+    if (!businessId && userData?.user) {
       const { data: fallbackB } = await supabase.from('businesses').select('id').limit(1).maybeSingle();
       businessId = fallbackB?.id || null;
     }

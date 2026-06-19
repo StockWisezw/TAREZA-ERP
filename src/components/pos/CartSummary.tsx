@@ -20,7 +20,7 @@ import {
   DialogTrigger,
   DialogFooter 
 } from '../ui/dialog';
-import { getPackSize, CartItem, Customer } from '../../store/posStore';
+import { getPackSize, CartItem, Customer, usePOSStore } from '../../store/posStore';
 import { cn } from '../../lib/utils';
 
 interface CartSummaryProps {
@@ -38,9 +38,9 @@ interface CartSummaryProps {
   parkSale: () => void;
   totals: any;
   vatEnabled: boolean;
-  numpadMode: 'qty' | 'disc' | 'price';
-  setNumpadMode: (mode: 'qty' | 'disc' | 'price') => void;
-  handleNumpadKey: (key: string) => void;
+  numpadMode?: 'qty' | 'disc' | 'price';
+  setNumpadMode?: (mode: 'qty' | 'disc' | 'price') => void;
+  handleNumpadKey?: (key: string) => void;
   isQuoteDialogOpen: boolean;
   setIsQuoteDialogOpen: (open: boolean) => void;
   quoteCustomerName: string;
@@ -213,7 +213,7 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
       })()}
 
       {/* Dynamic Interactive Shopping Cart items list container */}
-      <Card className="border-zinc-200 shadow-sm flex-1 min-h-[140px] max-h-[350px] flex flex-col pt-1.5 bg-white pb-1.5 rounded-xl overflow-hidden">
+      <Card className="border-zinc-200 shadow-sm flex-1 min-h-[300px] h-full flex flex-col pt-1.5 bg-white pb-1.5 rounded-xl overflow-hidden">
         {cart.length === 0 ? (
           <div className="flex-grow flex flex-col items-center justify-center text-zinc-400 p-3">
             <ShoppingCart className="h-7 w-7 text-zinc-300 mb-1.5" />
@@ -232,7 +232,7 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
                         setSelectedCartItemId(item.id);
                         setIsNewInput(true);
                       }}
-                      className={`flex justify-between items-center p-1.5 rounded-lg border transition-all cursor-pointer group ${
+                      className={`flex justify-between items-start p-1.5 rounded-lg border transition-all cursor-pointer group ${
                         isSelected 
                           ? 'border-zinc-900 ring-1 ring-zinc-900/10 bg-zinc-50/20' 
                           : 'border-zinc-100 hover:border-zinc-250 bg-white'
@@ -268,6 +268,47 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
                               ))}
                             </select>
                           )}
+                        </div>
+
+                        {/* Direct Inline editing for Price or Discount percentage */}
+                        <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-zinc-100" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] text-zinc-400 font-bold font-mono">Price:</span>
+                            <input 
+                              type="number"
+                              step="any"
+                              value={item.unitPrice}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value);
+                                if (!isNaN(val)) {
+                                  usePOSStore.setState((s: any) => ({
+                                    cart: s.cart.map((cartItem: any) => cartItem.id === item.id ? { ...cartItem, unitPrice: val } : cartItem)
+                                  }));
+                                }
+                              }}
+                              className="w-[60px] h-5 text-center text-[10px] font-bold font-mono border border-zinc-200 bg-zinc-50 hover:bg-white focus:bg-white rounded p-0 text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-650"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] text-zinc-400 font-bold font-mono">Disc%:</span>
+                            <input 
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={item.discount?.value || 0}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value);
+                                const applyItemDiscount = usePOSStore.getState().applyItemDiscount;
+                                if (!isNaN(val)) {
+                                  applyItemDiscount(item.id, { type: 'percentage', value: Math.min(100, Math.max(0, val)) });
+                                } else {
+                                  applyItemDiscount(item.id, { type: 'percentage', value: 0 });
+                                }
+                              }}
+                              className="w-[40px] h-5 text-center text-[10px] font-bold font-mono border border-zinc-200 bg-zinc-50 hover:bg-white focus:bg-white rounded p-0 text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-650"
+                            />
+                          </div>
                         </div>
                       </div>
                       
@@ -328,7 +369,7 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
             
             <div className="text-[9px] text-zinc-500 text-center select-none font-medium mt-1 leading-none py-1 border-t border-zinc-100 bg-zinc-50/70 rounded-b-xl flex items-center justify-center gap-1.5 shrink-0">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Select cart row to alter Qty/Disc/Price using the Numpad.
+              Adjust Quantity, Price & Discount directly for any cart row.
             </div>
           </div>
         )}
@@ -361,251 +402,127 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
         </div>
       </div>
 
-      {/* Odoo POS Numpad Actions Widget */}
-      <div className="grid grid-cols-12 gap-1.5 p-1.5 bg-zinc-50/50 border border-zinc-200 rounded-xl shadow-inner shrink-0">
+      {/* Professional Direct Action Checkout Panel */}
+      <div className="flex flex-col gap-2 p-2 bg-zinc-50/50 border border-zinc-200 rounded-xl shadow-inner shrink-0">
         
-        {/* Left Part: 4x4 keypad matrix (takes 8 of 12 width) */}
-        <div className="col-span-8 grid grid-cols-4 gap-1">
+        {/* Row 1: Actions */}
+        <div className="grid grid-cols-3 gap-2">
           <Button 
             variant="outline" 
-            onClick={() => handleNumpadKey('1')} 
-            className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
-          >
-            1
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => handleNumpadKey('2')} 
-            className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
-          >
-            2
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => handleNumpadKey('3')} 
-            className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
-          >
-            3
-          </Button>
-          <Button 
-            type="button"
-            variant={numpadMode === 'qty' ? 'default' : 'outline'} 
-            onClick={() => { setNumpadMode('qty'); setIsNewInput(true); }}
-            className={`h-11 text-[10px] font-extrabold uppercase leading-none rounded-lg border cursor-pointer select-none ${
-              numpadMode === 'qty' ? 'bg-zinc-900 text-white border-zinc-900 shadow' : 'bg-white text-zinc-650 border-zinc-200'
-            }`}
-          >
-            Qty
-          </Button>
-
-          <Button 
-            variant="outline" 
-            onClick={() => handleNumpadKey('4')} 
-            className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
-          >
-            4
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => handleNumpadKey('5')} 
-            className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
-          >
-            5
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => handleNumpadKey('6')} 
-            className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
-          >
-            6
-          </Button>
-          <Button 
-            type="button"
-            variant={numpadMode === 'disc' ? 'default' : 'outline'} 
-            onClick={() => { setNumpadMode('disc'); setIsNewInput(true); }}
-            className={`h-11 text-[10px] font-extrabold uppercase leading-none rounded-lg border cursor-pointer select-none ${
-              numpadMode === 'disc' ? 'bg-zinc-900 text-white border-zinc-900 shadow' : 'bg-white text-zinc-650 border-zinc-200'
-            }`}
+            onClick={clearCart} 
             disabled={cart.length === 0}
+            className="h-10 text-[11px] font-bold text-rose-650 border-rose-200 bg-white hover:bg-rose-50/50 rounded-xl transition-colors cursor-pointer shadow-none flex items-center justify-center gap-1"
+            title="Cancel sale / Clear order items"
           >
-            % Disc
+            🗑️ Clear
           </Button>
 
           <Button 
             variant="outline" 
-            onClick={() => handleNumpadKey('7')} 
-            className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
-          >
-            7
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => handleNumpadKey('8')} 
-            className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
-          >
-            8
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => handleNumpadKey('9')} 
-            className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 shadow-sm rounded-lg"
-          >
-            9
-          </Button>
-          <Button 
-            type="button"
-            variant={numpadMode === 'price' ? 'default' : 'outline'} 
-            onClick={() => { setNumpadMode('price'); setIsNewInput(true); }}
-            className={`h-11 text-[10px] font-extrabold uppercase leading-none rounded-lg border cursor-pointer select-none ${
-              numpadMode === 'price' ? 'bg-zinc-900 text-white border-zinc-900 shadow' : 'bg-white text-zinc-650 border-zinc-200'
-            }`}
+            onClick={parkSale} 
             disabled={cart.length === 0}
+            className="h-10 text-[11px] font-bold text-zinc-705 border-zinc-200 bg-white hover:bg-zinc-100 rounded-xl transition-all cursor-pointer shadow-none flex items-center justify-center gap-1"
+            title="Put items on hold"
           >
-            Price
+            ⏸️ Hold
           </Button>
 
-          <Button 
-            variant="outline" 
-            onClick={() => handleNumpadKey('+/-')} 
-            className="h-10 text-xs font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 rounded-lg shadow-sm"
-          >
-            +/-
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => handleNumpadKey('0')} 
-            className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 rounded-lg shadow-sm"
-          >
-            0
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => handleNumpadKey('.')} 
-            className="h-10 text-base font-bold font-mono bg-white hover:bg-zinc-100 border-zinc-200 rounded-lg shadow-sm"
-          >
-            .
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => handleNumpadKey('backspace')} 
-            className="h-10 text-base font-bold flex items-center justify-center bg-white hover:bg-rose-50 hover:text-rose-600 border-zinc-200 rounded-lg shadow-sm"
-          >
-            ⌫
-          </Button>
-        </div>
+          <Dialog open={isQuoteDialogOpen} onOpenChange={(open) => {
+            setIsQuoteDialogOpen(open);
+            if (open) {
+              setQuoteCustomerName(currentCustomer?.name || '');
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button 
+                variant="outline" 
+                disabled={cart.length === 0}
+                className="h-10 text-[11px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50/50 rounded-xl transition-all shadow-none flex items-center justify-center gap-1 cursor-pointer"
+                title="Generate a Proforma Quotation/Estimate"
+              >
+                📄 Quote
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md bg-white text-zinc-90 w">
+              <DialogHeader>
+                <DialogTitle className="text-sm font-extrabold text-zinc-900">Generate Proforma Quotation</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-650">Customer Name / Direct Billing ID</label>
+                  <Input 
+                    value={quoteCustomerName}
+                    onChange={e => setQuoteCustomerName(e.target.value)}
+                    placeholder="e.g. Acme Corporation Ltd or John Doe" 
+                    className="bg-white border-zinc-200 h-10 text-zinc-900"
+                  />
+                  <p className="text-[10px] text-zinc-400">If customer was selected on POS main, their name is pre-loaded automatically.</p>
+                </div>
 
-        {/* Right Part: Quick checkout macro blocks (takes 4 of 12 width) */}
-        <div className="col-span-4 flex flex-col gap-1.5 justify-between">
-          <div className="flex gap-1">
-            <Button 
-              variant="outline" 
-              onClick={clearCart} 
-              disabled={cart.length === 0}
-              className="flex-1 h-9 px-0.5 text-[9px] font-bold text-rose-650 border-rose-200 bg-white hover:bg-rose-50/50 rounded-lg transition-colors p-0 cursor-pointer shadow-none"
-              title="Cancel sale / Clear order items"
-            >
-              Clear
-            </Button>
-            <Button 
-              variant="outline" 
-              onClick={parkSale} 
-              disabled={cart.length === 0}
-              className="flex-1 h-9 px-0.5 text-[9px] font-bold text-zinc-700 border-zinc-200 bg-white hover:bg-zinc-100 rounded-lg transition-all p-0 cursor-pointer shadow-none"
-              title="Put items on hold"
-            >
-              Hold
-            </Button>
-            <Dialog open={isQuoteDialogOpen} onOpenChange={(open) => {
-              setIsQuoteDialogOpen(open);
-              if (open) {
-                setQuoteCustomerName(currentCustomer?.name || '');
-              }
-            }}>
-              <DialogTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  disabled={cart.length === 0}
-                  className="flex-1 h-9 px-0.5 text-[9px] font-bold text-blue-600 border-blue-200 bg-white hover:bg-blue-50/50 rounded-lg transition-all shadow-none p-0 cursor-pointer"
-                  title="Generate a Proforma Quotation/Estimate"
-                >
-                  Quote
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md bg-white text-zinc-90 w">
-                <DialogHeader>
-                  <DialogTitle className="text-sm font-extrabold text-zinc-900">Generate Proforma Quotation</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 pt-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-zinc-650">Customer Name / Direct Billing ID</label>
-                    <Input 
-                      value={quoteCustomerName}
-                      onChange={e => setQuoteCustomerName(e.target.value)}
-                      placeholder="e.g. Acme Corporation Ltd or John Doe" 
-                      className="bg-white border-zinc-200 h-10 text-zinc-900"
-                    />
-                    <p className="text-[10px] text-zinc-400">If customer was selected on POS main, their name is pre-loaded automatically.</p>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-650">Quotation Terms & Notes</label>
+                  <Input 
+                    value={quoteNotes}
+                    onChange={e => setQuoteNotes(e.target.value)}
+                    placeholder="e.g. Estimate valid for 30 days." 
+                    className="bg-white border-zinc-200 h-10 text-zinc-900"
+                  />
+                </div>
+
+                <div className="bg-zinc-50 border rounded-xl p-3 text-xs text-zinc-700 space-y-2">
+                  <div className="flex justify-between">
+                    <span>Line Items:</span>
+                    <span className="font-semibold text-zinc-800">{cart.length} product(s)</span>
                   </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-zinc-650">Quotation Terms & Notes</label>
-                    <Input 
-                      value={quoteNotes}
-                      onChange={e => setQuoteNotes(e.target.value)}
-                      placeholder="e.g. Estimate valid for 30 days." 
-                      className="bg-white border-zinc-200 h-10 text-zinc-900"
-                    />
+                  <div className="flex justify-between">
+                    <span>Total Items Quantity:</span>
+                    <span className="font-semibold text-zinc-800">{cart.reduce((sum, item) => sum + item.quantity, 0)} units</span>
                   </div>
-
-                  <div className="bg-zinc-50 border rounded-xl p-3 text-xs text-zinc-700 space-y-2">
-                    <div className="flex justify-between">
-                      <span>Line Items:</span>
-                      <span className="font-semibold text-zinc-800">{cart.length} product(s)</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Total Items Quantity:</span>
-                      <span className="font-semibold text-zinc-800">{cart.reduce((sum, item) => sum + item.quantity, 0)} units</span>
-                    </div>
-                    <Separator className="my-1.5 border-zinc-150" />
-                    <div className="flex justify-between font-bold text-sm text-zinc-900">
-                      <span>Estimated Total Cost:</span>
-                      <span className="font-mono text-zinc-950">${totals.total.toFixed(2)} USD</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 text-[11px] text-blue-800 flex items-start gap-2">
-                    <span className="mt-0.5 font-bold">ℹ</span>
-                    <span>Quotations do not hold or deduct stock inventory, and do not process cash or ledger payments. They are proforma only.</span>
+                  <Separator className="my-1.5 border-zinc-150" />
+                  <div className="flex justify-between font-bold text-sm text-zinc-900">
+                    <span>Estimated Total Cost:</span>
+                    <span className="font-mono text-zinc-950">${totals.total.toFixed(2)} USD</span>
                   </div>
                 </div>
-                <DialogFooter className="bg-zinc-50 dark:bg-zinc-900 p-4 border-t border-zinc-100 dark:border-zinc-800 -mx-6 -mb-6 mt-4 flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setIsQuoteDialogOpen(false)}
-                    className="rounded-xl grow text-xs font-bold select-none cursor-pointer"
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    onClick={handleCreateQuotation}
-                    className="bg-zinc-900 hover:bg-zinc-805 dark:bg-zinc-100 dark:hover:bg-zinc-250 text-white dark:text-zinc-950 rounded-xl grow text-xs font-bold select-none cursor-pointer"
-                  >
-                    Save Quote Draft
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
 
-          <Button 
-            onClick={() => setShowPayment(true)} 
-            disabled={cart.length === 0}
-            className="w-full h-18 text-xs font-extrabold uppercase leading-none shadow-md bg-zinc-900 text-white rounded-xl flex flex-col items-center justify-center gap-1.5 shrink-0 transition-all hover:bg-zinc-800 disabled:opacity-50 select-none cursor-pointer"
-          >
-            <span>Proceed Payment</span>
-            <span className="text-sm font-black font-mono tracking-tight">${totals.total.toFixed(2)}</span>
-          </Button>
+                <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 text-[11px] text-blue-800 flex items-start gap-2">
+                  <span className="mt-0.5 font-bold">ℹ</span>
+                  <span>Quotations do not hold or deduct stock inventory, and do not process cash or ledger payments. They are proforma only.</span>
+                </div>
+              </div>
+              <DialogFooter className="bg-zinc-50 dark:bg-zinc-900 p-4 border-t border-zinc-100 dark:border-zinc-800 -mx-6 -mb-6 mt-4 flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsQuoteDialogOpen(false)}
+                  className="rounded-xl grow text-xs font-bold select-none cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleCreateQuotation}
+                  className="bg-zinc-900 hover:bg-zinc-805 dark:bg-zinc-100 dark:hover:bg-zinc-250 text-white dark:text-zinc-950 rounded-xl grow text-xs font-bold select-none cursor-pointer"
+                >
+                  Save Quote Draft
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
+
+        {/* Row 2: Proceed Payment Button */}
+        <Button 
+          onClick={() => setShowPayment(true)} 
+          disabled={cart.length === 0}
+          className="w-full h-14 text-xs font-extrabold uppercase leading-none shadow-md bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-200 rounded-xl flex items-center justify-between px-4 transition-all disabled:opacity-50 select-none cursor-pointer mt-1"
+        >
+          <div className="flex flex-col items-start gap-0.5 text-left">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Checkout Bill</span>
+            <span className="text-xs font-black">Proceed To Payment</span>
+          </div>
+          <span className="text-base font-black font-mono tracking-tight bg-white/10 px-3 py-1 rounded-lg">
+            ${totals.total.toFixed(2)}
+          </span>
+         </Button>
       </div>
       
     </div>

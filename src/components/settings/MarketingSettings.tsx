@@ -16,7 +16,6 @@ Meet Tareza ERP & POS - Zimbabwean retail's ultimate business multiplier.
 
 ✅ Multi-Currency Perfected: Real-time USD, ZWG, and South African Rand (ZAR) conversion.
 ✅ Off-Grid Resilience: Ring up sales offline at your cashier counter. Your data syncs automatically the second electricity or network connection returns.
-✅ ZIMRA Fiscalization compliant ready.
 ✅ Instant Multi-Branch Control from your smartphone or tablet.
 
 Empower your cashiers with Zimbabwe's fastest-growing Cloud POS. Try Tareza ERP today!

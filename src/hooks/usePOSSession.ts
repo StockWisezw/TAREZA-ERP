@@ -37,9 +37,13 @@ export function usePOSSession() {
   const refreshActiveSession = async () => {
     try {
       if (getIsOffline()) {
-        const storedOffActive = localStorage.getItem('tareza_active_offline_session');
+        const storedOffActive = localStorage.getItem('tareza_active_offline_session') || localStorage.getItem('tareza_active_session_cache');
         if (storedOffActive) {
-          setActiveSession(JSON.parse(storedOffActive));
+          const parsed = JSON.parse(storedOffActive);
+          setActiveSession(parsed);
+          if (!localStorage.getItem('tareza_active_offline_session')) {
+            localStorage.setItem('tareza_active_offline_session', JSON.stringify(parsed));
+          }
         } else {
           setActiveSession(null);
         }
@@ -57,6 +61,11 @@ export function usePOSSession() {
         if (userBusiness?.business_id) {
           const activeRS = await getOpenRegisterSession(userBusiness.business_id, userContext.user.id);
           setActiveSession(activeRS || null);
+          if (activeRS) {
+            localStorage.setItem('tareza_active_session_cache', JSON.stringify(activeRS));
+          } else {
+            localStorage.removeItem('tareza_active_session_cache');
+          }
         }
       }
     } catch (e) {
@@ -73,9 +82,13 @@ export function usePOSSession() {
 
         // Check offline first
         if (getIsOffline()) {
-          const storedOffActive = localStorage.getItem('tareza_active_offline_session');
+          const storedOffActive = localStorage.getItem('tareza_active_offline_session') || localStorage.getItem('tareza_active_session_cache');
           if (storedOffActive && active) {
-            setActiveSession(JSON.parse(storedOffActive));
+            const parsed = JSON.parse(storedOffActive);
+            setActiveSession(parsed);
+            if (!localStorage.getItem('tareza_active_offline_session')) {
+              localStorage.setItem('tareza_active_offline_session', JSON.stringify(parsed));
+            }
           } else if (active) {
             setActiveSession(null);
           }
@@ -96,6 +109,11 @@ export function usePOSSession() {
             const activeRS = await getOpenRegisterSession(userBusiness.business_id, userContext.user.id);
             if (!active) return;
             setActiveSession(activeRS || null);
+            if (activeRS) {
+              localStorage.setItem('tareza_active_session_cache', JSON.stringify(activeRS));
+            } else {
+              localStorage.removeItem('tareza_active_session_cache');
+            }
           } else {
             setActiveSession(null);
           }
@@ -119,9 +137,27 @@ export function usePOSSession() {
     };
     window.addEventListener('offline-mode-changed', handleOfflineToggle);
 
+    // Auto-switch to offline/online when network changes
+    const handleAutoOffline = () => {
+      localStorage.setItem('tareza_offline_mode', 'true');
+      toast.info('Network connection lost! Automatically switched to OFFLINE mode.');
+      window.dispatchEvent(new Event('offline-mode-changed'));
+    };
+
+    const handleAutoOnline = () => {
+      localStorage.setItem('tareza_offline_mode', 'false');
+      toast.success('Network connection restored! Automatically restored ONLINE mode.');
+      window.dispatchEvent(new Event('offline-mode-changed'));
+    };
+
+    window.addEventListener('offline', handleAutoOffline);
+    window.addEventListener('online', handleAutoOnline);
+
     return () => {
       active = false;
       window.removeEventListener('offline-mode-changed', handleOfflineToggle);
+      window.removeEventListener('offline', handleAutoOffline);
+      window.removeEventListener('online', handleAutoOnline);
     };
   }, []);
 

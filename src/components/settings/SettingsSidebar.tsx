@@ -44,7 +44,7 @@ const groups: NavGroup[] = [
       { id: 'business', label: 'Business Profile', icon: Building2, description: 'E-signature, headers and business registration details' },
       { id: 'branches', label: 'Branches & Warehouses', icon: Store, description: 'Define logical retail spaces and inventory stores' },
       { id: 'pos', label: 'POS Settings', icon: Settings2, description: 'Speed actions, printers and local preferences' },
-      { id: 'taxation', label: 'Taxation & VAT', icon: Calculator, description: 'ZIMRA fiscal systems and custom tax codes' },
+      { id: 'taxation', label: 'Taxation & VAT', icon: Calculator, description: 'Configure standard tax rates, VAT classes, and custom tax codes' },
       { id: 'currency', label: 'Currencies', icon: Coins, description: 'Exchange index rates and multi-curr preferences' },
       { id: 'themes', label: 'Themes & Branding', icon: Palette, description: 'Color schemas and primary brand styles' },
       { id: 'localization', label: 'Localization', icon: Globe, description: 'UTC zones, date formats and language settings' },

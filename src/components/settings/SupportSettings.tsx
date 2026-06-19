@@ -183,7 +183,7 @@ export function SupportSettings() {
               Developer Help Desk
             </CardTitle>
             <CardDescription className="dark:text-zinc-400">
-              Encountered an issue or require fiscalisation assistance? Raise a direct ticket.
+              Encountered an issue or require technical assistance? Raise a direct ticket.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 relative z-10">
@@ -191,7 +191,7 @@ export function SupportSettings() {
               <div className="space-y-4">
                 <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-zinc-150 dark:border-zinc-800 space-y-3 shadow-none">
                   <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                    Submit digital tickets parsed instantly by our ZIMRA integrations and development team:
+                    Submit digital tickets parsed instantly by our product development team:
                   </p>
                   
                   <div className="grid grid-cols-2 gap-3 text-xs">
@@ -231,7 +231,7 @@ export function SupportSettings() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g., Fiscalisation Not Reaching Zimra"
+                    placeholder="e.g., Cannot load inventory report"
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
                     className="mt-1 w-full p-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs"
@@ -395,9 +395,9 @@ export function SupportSettings() {
             </a>
             <a href="#" className="p-4 border border-zinc-200 dark:border-zinc-800 rounded-lg hover:border-indigo-500/50 hover:shadow-xs transition-all group bg-zinc-50/20 dark:bg-zinc-900/10">
               <h4 className="font-semibold text-zinc-900 dark:text-zinc-50 group-hover:text-primary flex items-center gap-2">
-                ZIMRA Configuration <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                Taxation Configuration <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
               </h4>
-              <p className="text-xs text-zinc-500 mt-1">Step-by-step fiscalisation and tax device setup.</p>
+              <p className="text-xs text-zinc-500 mt-1">Configure standard tax rates, VAT classes, and custom tax codes.</p>
             </a>
           </div>
         </CardContent>

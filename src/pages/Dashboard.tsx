@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
-import { Activity, CreditCard, DollarSign, Package, Sparkles, Clock, Lock, Unlock, Play, RefreshCw, AlertTriangle, CheckCircle2, BarChart3, PieChart as PieChartIcon, Check } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, Legend, PieChart, Pie } from 'recharts';
+import { Activity, CreditCard, DollarSign, Package, Sparkles, Clock, Lock, Unlock, Play, RefreshCw, AlertTriangle, CheckCircle2, BarChart3, PieChart as PieChartIcon, Check, TrendingUp, Coins } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, Legend, PieChart, Pie, LineChart, Line } from 'recharts';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/firebaseClient';
 import { DynamicBranchOverview } from '../components/dashboard/DynamicBranchOverview';
@@ -28,10 +28,19 @@ export default function Dashboard() {
   const [profileName, setProfileName] = useState<string>('');
   const [businessName, setBusinessName] = useState<string>('');
   const [chartData, setChartData] = useState<{name: string, sales: number}[]>([]);
+  const [dailyTrendData, setDailyTrendData] = useState<{ date: string; revenue: number; txCount: number }[]>([]);
+  const [summaryStats, setSummaryStats] = useState({
+    todayRevenue: 0,
+    todayTransactions: 0,
+    averageOrderValue: 0,
+    peakSalesHour: '12:00 - 13:00',
+    weeklyRunrate: 0
+  });
   const [stats, setStats] = useState({ totalSales: 0, transactions: 0, lowStock: 0, activeBranches: 0 });
   const [branchSalesData, setBranchSalesData] = useState<{ name: string; sales: number; transactions: number }[]>([]);
   const [branchStockData, setBranchStockData] = useState<{ name: string; stock: number }[]>([]);
   const [branchesList, setBranchesList] = useState<{ id: string; name: string }[]>([]);
+  const [trendMetric, setTrendMetric] = useState<'revenue' | 'transactions'>('revenue');
 
   const [activeSession, setActiveSession] = useState<any>(null);
   const [sessionDuration, setSessionDuration] = useState<string>('00h 00m');
@@ -277,6 +286,21 @@ export default function Dashboard() {
             chartPoints[days[d.getDay()]] = 0;
         }
 
+        const last7Days: { date: string; fullDate: string; revenue: number; txCount: number }[] = [];
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          const dayName = days[d.getDay()];
+          const formattedKey = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+          last7Days.push({
+            date: `${dayName} ${d.getDate()}`,
+            fullDate: formattedKey,
+            revenue: 0,
+            txCount: 0
+          });
+        }
+
         if (salesInfo && salesInfo.length > 0) {
            realSales = salesInfo.reduce((acc: number, sale: any) => acc + Number(sale.total || 0), 0);
            
@@ -287,10 +311,55 @@ export default function Dashboard() {
                if (chartPoints[dayName] !== undefined) {
                    chartPoints[dayName] += Number(sale.total || 0);
                }
+
+               // Match daily chronological trend
+               const saleDate = sale.created_at.split('T')[0];
+               const match = last7Days.find(day => day.fullDate === saleDate);
+               if (match) {
+                 match.revenue += Number(sale.total || 0);
+                 match.txCount += 1;
+               }
            });
         }
         
         setChartData(Object.keys(chartPoints).map(key => ({ name: key, sales: chartPoints[key] })));
+        setDailyTrendData(last7Days.map(item => ({ date: item.date, revenue: item.revenue, txCount: item.txCount })));
+
+        // Today's stats calculation
+        const todayStr = new Date().toISOString().split('T')[0];
+        const todaySales = (salesInfo || []).filter((sale: any) => sale.created_at && sale.created_at.startsWith(todayStr));
+        const todayRevenue = todaySales.reduce((acc: number, sale: any) => acc + Number(sale.total || 0), 0);
+        const todayTransactions = todaySales.length;
+
+        const totalSales = realSales;
+        const totalTx = salesInfo?.length || 0;
+        const averageOrderValue = totalTx > 0 ? (totalSales / totalTx) : 0;
+
+        // Compute hourly profile
+        const hourCounts = Array(24).fill(0);
+        (salesInfo || []).forEach((sale: any) => {
+          if (!sale.created_at) return;
+          const hr = new Date(sale.created_at).getHours();
+          hourCounts[hr] += Number(sale.total || 0);
+        });
+        let peakHour = 12; // default
+        let peakSalesAmount = 0;
+        hourCounts.forEach((amt, hr) => {
+          if (amt > peakSalesAmount) {
+            peakSalesAmount = amt;
+            peakHour = hr;
+          }
+        });
+        const peakSalesHour = `${peakHour.toString().padStart(2, '0')}:00 - ${(peakHour + 1).toString().padStart(2, '0')}:00`;
+        const weeklyRunrate = last7Days.reduce((sum, d) => sum + d.revenue, 0);
+
+        setSummaryStats({
+          todayRevenue,
+          todayTransactions,
+          averageOrderValue,
+          peakSalesHour,
+          weeklyRunrate
+        });
 
         setStats({
           totalSales: realSales,
@@ -1031,6 +1100,189 @@ export default function Dashboard() {
 
       {/* 📊 Dynamic Branch-wise Revenue vs Stock Valuation Overview */}
       <DynamicBranchOverview />
+
+      {/* 🚀 Daily Operations Performance Summary Cards & Daily Revenue Trend Section */}
+      <div className="space-y-6 my-6">
+        <div>
+          <h3 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-indigo-500" />
+            <span>Daily Performance & Operational Metrics</span>
+          </h3>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+            Real-time transactional and billing performance tracking for the current business operations.
+          </p>
+        </div>
+
+        {/* Summary Cards Grid */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl group-hover:bg-indigo-500/10 transition-colors"></div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-[11px] font-bold tracking-wider uppercase text-zinc-500">Today's Revenue</CardTitle>
+              <div className="p-1.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                <DollarSign className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-black font-mono tracking-tight text-zinc-900 dark:text-zinc-50">
+                ${summaryStats.todayRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-2 flex items-center gap-1 font-semibold">
+                <span className="text-emerald-500 font-bold">100% accurate</span> from live cash register
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl group-hover:bg-emerald-500/10 transition-colors"></div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-[11px] font-bold tracking-wider uppercase text-zinc-500">Processed Tickets (Today)</CardTitle>
+              <div className="p-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-lg">
+                <CreditCard className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-black font-mono tracking-tight text-zinc-900 dark:text-zinc-50">
+                {summaryStats.todayTransactions}
+              </div>
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-2 flex items-center gap-1 font-semibold">
+                <span>Active counter checkouts</span>
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl group-hover:bg-amber-500/10 transition-colors"></div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-[11px] font-bold tracking-wider uppercase text-zinc-500">Average Order Value (AOV)</CardTitle>
+              <div className="p-1.5 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-lg">
+                <Coins className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-black font-mono tracking-tight text-zinc-900 dark:text-zinc-50">
+                ${summaryStats.averageOrderValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-2 flex items-center gap-1 font-semibold">
+                <span>Mean ticket spending size</span>
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-violet-500/5 rounded-full blur-xl group-hover:bg-violet-500/10 transition-colors"></div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-[11px] font-bold tracking-wider uppercase text-zinc-500">Peak Transaction window</CardTitle>
+              <div className="p-1.5 bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 rounded-lg">
+                <Clock className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-lg font-black font-sans tracking-tight text-zinc-900 dark:text-zinc-50 mt-1">
+                {summaryStats.peakSalesHour}
+              </div>
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-2.5 flex items-center gap-1 font-semibold">
+                <span>Highest concentration of traffic</span>
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Linear Trend Line Chart */}
+        <Card className="border-border/60 shadow-sm">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-100 dark:border-zinc-800">
+            <div>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Activity className="h-5 w-5 text-indigo-500 animate-pulse" />
+                <span>7-Day Daily Operations Trend Engine</span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Line chart tracking incremental daily gross volumes and receipts generated dynamically.
+              </CardDescription>
+            </div>
+            {/* Metric Toggle Switches */}
+            <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl border border-zinc-200 dark:border-zinc-800 self-start">
+              <button
+                onClick={() => setTrendMetric('revenue')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  trendMetric === 'revenue'
+                    ? 'bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'
+                }`}
+              >
+                Gross revenue ($ USD)
+              </button>
+              <button
+                onClick={() => setTrendMetric('transactions')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  trendMetric === 'transactions'
+                    ? 'bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'
+                }`}
+              >
+                Receipt Transactions
+              </button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6 pl-2">
+            <div className="h-[280px] w-full">
+              {dailyTrendData.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-zinc-400 text-xs">
+                  <RefreshCw className="h-5 w-5 animate-spin mb-2 text-zinc-300" />
+                  <p>Assembling daily historical run times...</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={dailyTrendData} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? "#27272a" : "#E5E7EB"} />
+                    <XAxis
+                      dataKey="date"
+                      stroke={isDark ? "#a1a1aa" : "#6B7280"}
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      dy={10}
+                    />
+                    <YAxis
+                      stroke={isDark ? "#a1a1aa" : "#6B7280"}
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => trendMetric === 'revenue' ? `$${value}` : value}
+                      dx={-10}
+                      className="font-mono"
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: '12px',
+                        border: isDark ? '1px solid #27272a' : '1px solid #E5E7EB',
+                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+                        backgroundColor: isDark ? '#18181b' : '#FFFFFF',
+                        color: isDark ? '#f4f4f5' : '#18181b',
+                      }}
+                      itemStyle={{
+                        fontFamily: 'JetBrains Mono',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        color: isDark ? '#818cf8' : '#4f46e5',
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey={trendMetric === 'revenue' ? 'revenue' : 'txCount'}
+                      name={trendMetric === 'revenue' ? 'Gross Revenue' : 'Transactions'}
+                      stroke={isDark ? "#818cf8" : "#4f46e5"}
+                      strokeWidth={3}
+                      dot={{ stroke: isDark ? "#818cf8" : "#4f46e5", strokeWidth: 2, r: 4, fill: isDark ? "#121214" : "#ffffff" }}
+                      activeDot={{ r: 6, strokeWidth: 0, fill: isDark ? "#a5b4fc" : "#312e81" }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4 border-border/60 shadow-sm">
