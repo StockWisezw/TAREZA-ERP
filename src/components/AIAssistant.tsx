@@ -85,6 +85,20 @@ export function AIAssistant() {
     }
   }, [aiMessages, activeTab]);
 
+  useEffect(() => {
+    const handleToggle = () => setIsOpen(prev => !prev);
+    const handleOpen = () => setIsOpen(true);
+    const handleClose = () => setIsOpen(false);
+    window.addEventListener('toggle-ai-assistant', handleToggle);
+    window.addEventListener('open-ai-assistant', handleOpen);
+    window.addEventListener('close-ai-assistant', handleClose);
+    return () => {
+      window.removeEventListener('toggle-ai-assistant', handleToggle);
+      window.removeEventListener('open-ai-assistant', handleOpen);
+      window.removeEventListener('close-ai-assistant', handleClose);
+    };
+  }, []);
+
   // Compile local developer-mode diagnostic details
   const compileDiagnostics = () => {
     const isOnline = navigator.onLine;
@@ -126,7 +140,7 @@ export function AIAssistant() {
     if (text.includes('pos') || text.includes('quantity') || text.includes('decimal') || text.includes('float')) {
       return `🛒 **POS Terminal Troubleshooting**\n\n` +
              `*   **Current Cart Size:** **${diag.cartCount} items**\n` +
-             `*   **Start Quantity Rule:** Updated to **0** by default, allowing quick typing of decimals like \`0.124\` via the Odoo keypad.\n` +
+             `*   **Start Quantity Rule:** Updated to **0** by default, allowing quick typing of decimals like \`0.124\` via the Tareza keypad.\n` +
              `*   **Shift status:** ${localStorage.getItem('tareza_require_float') === 'true' ? '🔒 Required opening float check' : '🔓 Instant register start active'}.\n\n` +
              `If you need assistance logging in or beginning a cashier shift, click the 'Shift Controls' button at the top-left of the POS panel.`;
     }
@@ -207,24 +221,6 @@ export function AIAssistant() {
 
   return (
     <>
-      {/* Floating launcher button */}
-      <button
-        id="floating-support-btn"
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 shadow-2xl flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition-all z-50 group border border-zinc-200 dark:border-zinc-800"
-      >
-        {isOpen ? (
-          <X className="h-5.5 w-5.5" />
-        ) : (
-          <div className="relative">
-            <MessageSquare className="h-5.5 w-5.5" />
-            <span className="absolute -top-1.5 -right-1.5 h-3.5 w-3.5 bg-indigo-500 rounded-full flex items-center justify-center text-[8px] text-white font-bold animate-pulse">
-              1
-            </span>
-          </div>
-        )}
-      </button>
-
       {/* Launcher Panel container */}
       <AnimatePresence>
         {isOpen && (

@@ -714,7 +714,7 @@ export default function Reports() {
       {/* Main Segment Tabs */}
       <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full space-y-4 font-sans">
         <TabsList className="grid w-full sm:max-w-4xl grid-cols-3 sm:grid-cols-6 bg-zinc-100 p-1 border rounded-lg h-auto shadow-sm">
-          <TabsTrigger value="quickbooks" className="text-[11px] md:text-xs h-9 rounded font-medium">💼 QuickBooks Hub</TabsTrigger>
+          <TabsTrigger value="quickbooks" className="text-[11px] md:text-xs h-9 rounded font-medium">💼 Tareza Hub</TabsTrigger>
           <TabsTrigger value="pl" className="text-[11px] md:text-xs h-9 rounded font-medium">1. Profit & Loss</TabsTrigger>
           <TabsTrigger value="balance" className="text-[11px] md:text-xs h-9 rounded font-medium">2. Balance Sheet</TabsTrigger>
           <TabsTrigger value="compliance" className="text-[11px] md:text-xs h-9 rounded font-medium">3. Compliance Exports</TabsTrigger>
@@ -831,7 +831,7 @@ export default function Reports() {
                 <Calendar className="w-4 h-4 text-indigo-650" /> Live Day-by-day P&L Timeline
               </CardTitle>
               <CardDescription className="text-xs">
-                QuickBooks-level match of operational sales revenues against its specific production unit costs and cash payouts on a day-to-day frequency.
+                Professional-level match of operational sales revenues against its specific production unit costs and cash payouts on a day-to-day frequency.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
@@ -936,7 +936,7 @@ export default function Reports() {
                     <span className="font-semibold text-zinc-700 block">Why Perpetual is Preferred:</span>
                     <p>• Avoids periodic estimation errors & manual counting blockages.</p>
                     <p>• Matches individual sales to actual purchase cost immediately.</p>
-                    <p>• Maintains constant parity with standard systems like QuickBooks & SAP.</p>
+                    <p>• Maintains constant parity with standard systems like Tareza ERP & SAP.</p>
                   </div>
                 </CardContent>
               </Card>

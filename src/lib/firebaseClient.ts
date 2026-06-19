@@ -127,16 +127,22 @@ export const fireAuth = getAuth(app);
 
 // Immediate validation of Firestore connection
 async function testConnection() {
+  if (typeof window !== 'undefined' && !navigator.onLine) {
+    console.warn('[Firebase] Device reports offline. Caching engines active. App remains completely operational.');
+    return;
+  }
   try {
     const connectionPromise = getDocFromServer(fireDoc(db, 'test_connection', 'ping'));
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000));
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
     await Promise.race([connectionPromise, timeoutPromise]);
     console.log('[Firebase] Connection validated successfully.');
   } catch (error) {
     console.warn('[Firebase] Connection validation completed (offline-ready caching is active). App remains completely operational.');
   }
 }
-testConnection();
+setTimeout(() => {
+  testConnection();
+}, 3000);
 
 // Dynamic user caching for seamless synchronous access to user context
 let firebaseCurrentUser: any = null;

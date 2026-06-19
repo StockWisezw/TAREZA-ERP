@@ -111,9 +111,20 @@ export function HelpCenter() {
       }
     };
 
+    const handleOpenHelp = () => setIsHelpDeskOpen(true);
+    const handleCloseHelp = () => setIsHelpDeskOpen(false);
+    const handleToggleHelp = () => setIsHelpDeskOpen(prev => !prev);
+
     window.addEventListener('start-tour', handleStartTourEvent);
+    window.addEventListener('open-help-desk', handleOpenHelp);
+    window.addEventListener('close-help-desk', handleCloseHelp);
+    window.addEventListener('toggle-help-desk', handleToggleHelp);
+
     return () => {
       window.removeEventListener('start-tour', handleStartTourEvent);
+      window.removeEventListener('open-help-desk', handleOpenHelp);
+      window.removeEventListener('close-help-desk', handleCloseHelp);
+      window.removeEventListener('toggle-help-desk', handleToggleHelp);
     };
   }, [location.pathname]);
 
@@ -179,17 +190,6 @@ export function HelpCenter() {
 
   return (
     <>
-      {/* Floating Trigger Button - Positioned exactly above or beside AI Assistant */}
-      <div className="fixed bottom-[88px] right-5 z-[45]" id="guided-tours-floating-trigger">
-        <Button 
-          onClick={() => setIsHelpDeskOpen(true)}
-          className="h-10 px-4 rounded-full bg-slate-900 border border-slate-750 text-white dark:bg-zinc-800 dark:border-zinc-700 shadow-xl hover:bg-indigo-600 hover:border-indigo-500 transition-all duration-300 font-bold text-xs flex items-center gap-1.5 animate-pulse"
-        >
-          <Compass className="h-4 w-4 text-indigo-400 rotate-180" />
-          <span>Interactive Tours</span>
-        </Button>
-      </div>
-
       {/* MASTER HELP DESK MODAL: SELECT DEPLOYED TOURS & VIDEOS */}
       {isHelpDeskOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300" id="guided-tours-selection-overlay">

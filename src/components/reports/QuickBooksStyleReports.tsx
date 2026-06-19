@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
-// QuickBooks Theme constants
+// Tareza Theme constants
 const QB_COLORS = {
   primaryBlue: '#0D47A1',
   successGreen: '#2E7D32',
@@ -915,7 +915,7 @@ export default function QuickBooksStyleReports() {
       // Header company identity card
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(22);
-      pdf.setTextColor(13, 71, 161); // QuickBooks Blue
+      pdf.setTextColor(13, 71, 161); // Tareza Blue
       pdf.text('TAREZA ERP', margin, y);
       
       pdf.setFont('helvetica', 'normal');
@@ -1112,7 +1112,7 @@ export default function QuickBooksStyleReports() {
         pdf.setFontSize(8);
         pdf.setTextColor(140, 140, 140);
         pdf.text(
-          `TAREZA ERP QuickBooks-Style Statement -- Confidential Compliance Document -- Page ${i} of ${pageCount}`,
+          `TAREZA ERP Statement -- Confidential Compliance Document -- Page ${i} of ${pageCount}`,
           pageWidth / 2,
           pageHeight - 30,
           { align: 'center' }
@@ -1120,7 +1120,7 @@ export default function QuickBooksStyleReports() {
       }
 
       pdf.save(`tareza-report-${config.type}-${config.startDate}.pdf`);
-      toast.success('Professional QuickBooks Statement exported successfully.');
+      toast.success('Professional Statement exported successfully.');
     } catch (err) {
       console.error(err);
       toast.error('Could not construct statement layout.');
@@ -1136,7 +1136,7 @@ export default function QuickBooksStyleReports() {
             <div>
               <CardTitle className="text-base font-bold text-zinc-900 flex items-center gap-2">
                 <SlidersHorizontal className="w-4 h-4 text-emerald-600" />
-                QuickBooks-Style Audited Report Hub
+                Tareza Audited Report Hub
               </CardTitle>
               <CardDescription className="text-xs">
                 Accrual matching engines, multi-column variance options, custom valuation styles, and IRS compliance formats.
@@ -1353,7 +1353,7 @@ export default function QuickBooksStyleReports() {
                 {reportData.reportTitle}
               </CardTitle>
               <CardDescription className="text-xs">
-                Accrual ledger sheets corresponding strictly to QuickBooks standard structures and GAAP guidelines.
+                Accrual ledger sheets corresponding strictly to Tareza standard structures and GAAP guidelines.
               </CardDescription>
             </div>
             <div className="text-right text-[11px] font-mono text-zinc-400 mt-2 sm:mt-0 font-bold uppercase">

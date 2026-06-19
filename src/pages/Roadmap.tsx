@@ -505,7 +505,7 @@ export default function Roadmap() {
               <textarea
                 value={newSuggestion}
                 onChange={(e) => setNewSuggestion(e.target.value)}
-                placeholder="Example: Auto-export local transactions directly into Sage-paste accounting cycles..."
+                placeholder="Example: Auto-export local transactions directly into external GAAP compliance systems..."
                 required
                 rows={3}
                 className="w-full text-xs bg-white dark:bg-zinc-90 w/20 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-inner outline-none focus:ring-2 focus:ring-blue-500/20 text-zinc-800 dark:text-zinc-200 leading-normal"

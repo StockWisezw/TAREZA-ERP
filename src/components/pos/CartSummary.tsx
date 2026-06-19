@@ -232,7 +232,7 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
                         setSelectedCartItemId(item.id);
                         setIsNewInput(true);
                       }}
-                      className={`flex justify-between items-center p-1 rounded-md border transition-all cursor-pointer group ${
+                      className={`flex justify-between items-center py-0.5 px-1.5 rounded-md border transition-all cursor-pointer group ${
                         isSelected 
                           ? 'border-zinc-950 ring-1 ring-zinc-950/5 bg-zinc-50/10' 
                           : 'border-zinc-100 hover:border-zinc-200 bg-white'

@@ -39,6 +39,7 @@ import { PWAInstallPrompt } from './PWAInstallPrompt';
 import { TarezaLogo } from './ui/Logo';
 import { AIAssistant } from './AIAssistant';
 import { HelpCenter } from './HelpCenter';
+import { SupportHub } from './SupportHub';
 import { supabase } from '../lib/firebaseClient';
 import { Breadcrumbs } from './Breadcrumbs';
 import { CommandPalette } from './CommandPalette';
@@ -538,6 +539,7 @@ export default function Layout() {
       </div>
       <AIAssistant />
       <HelpCenter />
+      <SupportHub />
       <CommandPalette />
     </div>
   );
