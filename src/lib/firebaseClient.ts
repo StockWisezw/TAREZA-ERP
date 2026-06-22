@@ -103,16 +103,34 @@ export const firebaseConfig = resolvedConfig;
 export const app = initializeApp(resolvedConfig);
 
 function createFirestoreInstance() {
-  // Use memoryLocalCache to guarantee 100% stability against IndexedDb transaction restrictions in sandboxed iframes
+  const isPersistenceEnabled = typeof window !== 'undefined' && localStorage.getItem('tareza_firestore_persistence') !== 'disabled';
+  
+  if (isPersistenceEnabled) {
+    try {
+      return initializeFirestore(app, {
+        experimentalForceLongPolling: true,
+        experimentalAutoDetectLongPolling: true,
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager()
+        })
+      }, resolvedConfig.firestoreDatabaseId);
+    } catch (err: any) {
+      console.warn('[Firebase] Fallback to memoryLocalCache due to IndexedDb or container restriction: ', err);
+    }
+  }
+
+  // Fallback to memoryLocalCache to guarantee 100% stability against IndexedDb transaction restrictions in sandboxed iframes
   try {
     return initializeFirestore(app, {
       experimentalForceLongPolling: true,
+      experimentalAutoDetectLongPolling: true,
       localCache: memoryLocalCache()
     }, resolvedConfig.firestoreDatabaseId);
   } catch (err: any) {
     console.warn('[Firebase] Fallback to standard initializeFirestore: ', err);
     return initializeFirestore(app, {
-      experimentalForceLongPolling: true
+      experimentalForceLongPolling: true,
+      experimentalAutoDetectLongPolling: true
     }, resolvedConfig.firestoreDatabaseId);
   }
 }
