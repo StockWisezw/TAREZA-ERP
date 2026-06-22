@@ -664,11 +664,8 @@ class SupabaseQueryBuilder {
     try {
       const email = fireAuth.currentUser?.email?.toLowerCase();
       const isSystemDev = email && (
-        email.endsWith('@tarezaerp.co.zw') ||
-        email === 'admin@tarezaerp.co.zw' ||
-        email === 'developer@tarezaerp.co.zw' ||
-        email === 'dev@tarezaerp.co.zw' ||
-        email === 'tapsforex@gmail.com'
+        email === 'tapsforex@gmail.com' ||
+        email === 'tapiwagahadza54@gmail.com'
       );
       
       const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
@@ -804,11 +801,8 @@ class SupabaseQueryBuilder {
  
      const email = fireAuth.currentUser?.email?.toLowerCase();
      const isSystemDev = email && (
-       email.endsWith('@tarezaerp.co.zw') ||
-       email === 'admin@tarezaerp.co.zw' ||
-       email === 'developer@tarezaerp.co.zw' ||
-       email === 'dev@tarezaerp.co.zw' ||
-       email === 'tapsforex@gmail.com'
+       email === 'tapsforex@gmail.com' ||
+       email === 'tapiwagahadza54@gmail.com'
      );
      
      const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];

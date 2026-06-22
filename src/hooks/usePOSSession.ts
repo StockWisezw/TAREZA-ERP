@@ -6,6 +6,7 @@ import {
   closeRegisterSession 
 } from '../services/ledgerService';
 import { supabase } from '../lib/firebaseClient';
+import { indexedDbService } from '../services/indexedDbService';
 
 export interface RegisterSession {
   id: string;
@@ -19,6 +20,7 @@ export interface RegisterSession {
   closing_balance: number | null;
   sales_count: number;
   variance: number | null;
+  sales_total?: number;
 }
 
 export function usePOSSession() {
@@ -37,21 +39,32 @@ export function usePOSSession() {
   const refreshActiveSession = async () => {
     try {
       if (getIsOffline()) {
-        const storedOffActive = localStorage.getItem('tareza_active_offline_session') || localStorage.getItem('tareza_active_session_cache');
+        const storedOffActive = await indexedDbService.getActiveShift();
         if (storedOffActive) {
-          const parsed = JSON.parse(storedOffActive);
-          setActiveSession(parsed);
-          if (!localStorage.getItem('tareza_active_offline_session')) {
-            localStorage.setItem('tareza_active_offline_session', JSON.stringify(parsed));
-          }
+          setActiveSession(storedOffActive);
         } else {
-          setActiveSession(null);
+          const storedOffActiveLS = localStorage.getItem('tareza_active_offline_session') || localStorage.getItem('tareza_active_session_cache');
+          if (storedOffActiveLS) {
+            const parsed = JSON.parse(storedOffActiveLS);
+            setActiveSession(parsed);
+          } else {
+            setActiveSession(null);
+          }
         }
         return;
       }
 
       const { data: userContext } = await supabase.auth.getUser();
       if (userContext?.user) {
+        const storedOffActive = localStorage.getItem('tareza_active_offline_session');
+        if (storedOffActive) {
+          const parsed = JSON.parse(storedOffActive);
+          if (parsed.id.startsWith('off-shift-')) {
+            setActiveSession(parsed);
+            return;
+          }
+        }
+
         const { data: userBusiness } = await supabase
           .from('business_users')
           .select('business_id')
@@ -60,6 +73,16 @@ export function usePOSSession() {
           .maybeSingle();
         if (userBusiness?.business_id) {
           const activeRS = await getOpenRegisterSession(userBusiness.business_id, userContext.user.id);
+          
+          if (activeRS && storedOffActive) {
+            const parsed = JSON.parse(storedOffActive);
+            if (parsed.id === activeRS.id && (Number(parsed.sales_count || 0) > Number(activeRS.sales_count || 0) || Number(parsed.sales_total || 0) > Number(activeRS.sales_total || 0))) {
+              setActiveSession(parsed);
+              localStorage.setItem('tareza_active_session_cache', JSON.stringify(parsed));
+              return;
+            }
+          }
+
           setActiveSession(activeRS || null);
           if (activeRS) {
             localStorage.setItem('tareza_active_session_cache', JSON.stringify(activeRS));
@@ -70,6 +93,11 @@ export function usePOSSession() {
       }
     } catch (e) {
       console.error("Failed to refresh active session metrics:", e);
+      // Fallback to IndexedDB
+      const storedOffActive = await indexedDbService.getActiveShift();
+      if (storedOffActive) {
+        setActiveSession(storedOffActive);
+      }
     }
   };
 
@@ -82,15 +110,17 @@ export function usePOSSession() {
 
         // Check offline first
         if (getIsOffline()) {
-          const storedOffActive = localStorage.getItem('tareza_active_offline_session') || localStorage.getItem('tareza_active_session_cache');
+          const storedOffActive = await indexedDbService.getActiveShift();
           if (storedOffActive && active) {
-            const parsed = JSON.parse(storedOffActive);
-            setActiveSession(parsed);
-            if (!localStorage.getItem('tareza_active_offline_session')) {
-              localStorage.setItem('tareza_active_offline_session', JSON.stringify(parsed));
+            setActiveSession(storedOffActive);
+          } else {
+            const storedOffActiveLS = localStorage.getItem('tareza_active_offline_session') || localStorage.getItem('tareza_active_session_cache');
+            if (storedOffActiveLS && active) {
+              const parsed = JSON.parse(storedOffActiveLS);
+              setActiveSession(parsed);
+            } else if (active) {
+              setActiveSession(null);
             }
-          } else if (active) {
-            setActiveSession(null);
           }
           return;
         }
@@ -98,6 +128,16 @@ export function usePOSSession() {
         const { data: userContext } = await supabase.auth.getUser();
         if (!active) return;
         if (userContext?.user) {
+          const storedOffActive = localStorage.getItem('tareza_active_offline_session');
+          if (storedOffActive) {
+            const parsed = JSON.parse(storedOffActive);
+            if (parsed.id.startsWith('off-shift-')) {
+              setActiveSession(parsed);
+              setSessionLoading(false);
+              return;
+            }
+          }
+
           const { data: userBusiness } = await supabase
             .from('business_users')
             .select('business_id')
@@ -108,6 +148,17 @@ export function usePOSSession() {
           if (userBusiness?.business_id) {
             const activeRS = await getOpenRegisterSession(userBusiness.business_id, userContext.user.id);
             if (!active) return;
+
+            if (activeRS && storedOffActive) {
+              const parsed = JSON.parse(storedOffActive);
+              if (parsed.id === activeRS.id && (Number(parsed.sales_count || 0) > Number(activeRS.sales_count || 0) || Number(parsed.sales_total || 0) > Number(activeRS.sales_total || 0))) {
+                setActiveSession(parsed);
+                localStorage.setItem('tareza_active_session_cache', JSON.stringify(parsed));
+                setSessionLoading(false);
+                return;
+              }
+            }
+
             setActiveSession(activeRS || null);
             if (activeRS) {
               localStorage.setItem('tareza_active_session_cache', JSON.stringify(activeRS));
@@ -122,6 +173,14 @@ export function usePOSSession() {
         }
       } catch (e) {
         console.error("Failed to load active register session on mount:", e);
+        // Fallback to IndexedDB
+        if (active) {
+          const storedOffActive = await indexedDbService.getActiveShift();
+          if (storedOffActive) {
+            setActiveSession(storedOffActive);
+            toast.info("Resumed active register session from local IndexedDB cache.");
+          }
+        }
       } finally {
         if (active) {
           setSessionLoading(false);
@@ -172,6 +231,19 @@ export function usePOSSession() {
       window.removeEventListener('offline-mode-changed', handleSessionRefresh);
     };
   }, []);
+
+  // Sync active shift session to IndexedDB in real-time
+  useEffect(() => {
+    if (activeSession) {
+      indexedDbService.saveActiveShift(activeSession).catch(err => {
+        console.error("Failed to backup active shift session to IndexedDB:", err);
+      });
+    } else if (!sessionLoading) {
+      indexedDbService.clearActiveShift().catch(err => {
+        console.error("Failed to clear shift session from IndexedDB:", err);
+      });
+    }
+  }, [activeSession, sessionLoading]);
 
   // Check state requirement on mount
   useEffect(() => {

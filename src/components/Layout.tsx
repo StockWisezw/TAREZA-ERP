@@ -78,11 +78,8 @@ export default function Layout() {
   const { signOut, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const isDeveloper = user?.email?.toLowerCase().endsWith('@tarezaerp.co.zw') || 
-                      user?.email?.toLowerCase() === 'admin@tarezaerp.co.zw' || 
-                      user?.email?.toLowerCase() === 'developer@tarezaerp.co.zw' || 
-                      user?.email?.toLowerCase() === 'dev@tarezaerp.co.zw' || 
-                      user?.email?.toLowerCase() === 'tapsforex@gmail.com';
+  const isDeveloper = user?.email?.toLowerCase() === 'tapsforex@gmail.com' || 
+                      user?.email?.toLowerCase() === 'tapiwagahadza54@gmail.com';
   // Screen lock removed per user request
   const isLocked = false;
   const [businessName, setBusinessName] = React.useState<string>('');
@@ -296,7 +293,7 @@ export default function Layout() {
           <div className={`p-4 flex flex-col gap-1.5 border-t border-zinc-150 dark:border-zinc-850 bg-zinc-100/10 dark:bg-[#0c0c0d] ${
             sidebarExpanded ? 'items-stretch' : 'items-center px-1'
           }`}>
-            {(user?.email?.endsWith('@tarezaerp.co.zw') || user?.email === 'admin@tarezaerp.co.zw' || user?.email === 'developer@tarezaerp.co.zw') && (
+            {(user?.email?.toLowerCase() === 'tapsforex@gmail.com' || user?.email?.toLowerCase() === 'tapiwagahadza54@gmail.com') && (
               sidebarExpanded ? (
                 <div className="px-3 py-1 bg-blue-500/10 rounded-full text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase text-center tracking-widest mx-2 mb-1.5 select-none">
                   Superadmin

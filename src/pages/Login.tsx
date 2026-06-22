@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, signOut as fireSignOut } from 'firebase/auth';
 import { fireAuth, supabase } from '../lib/firebaseClient';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -276,8 +276,14 @@ export default function Login() {
           })
         }).catch(err => console.error("Signup notification dispatch failed", err));
 
-        toast.success('Signup successful! Welcome to Tareza ERP.');
-        navigate('/dashboard');
+        // Send Email Verification
+        await sendEmailVerification(firebaseUser);
+        
+        // Log out immediately so status remains unverified until link is confirmed
+        await fireSignOut(fireAuth);
+
+        toast.success('Signup successful! A verification link has been sent to ' + email + '. Please verify your email before logging in.');
+        setIsSignUp(false);
       } catch (error: any) {
         authError = error;
       }
@@ -291,15 +297,25 @@ export default function Login() {
         return;
       }
 
-      const isDeveloperEmail = email?.toLowerCase().endsWith('@tarezaerp.co.zw') || 
-                               email?.toLowerCase() === 'admin@tarezaerp.co.zw' || 
-                               email?.toLowerCase() === 'developer@tarezaerp.co.zw' || 
-                               email?.toLowerCase() === 'dev@tarezaerp.co.zw' || 
-                               email?.toLowerCase() === 'tapsforex@gmail.com';
+      const isDeveloperEmail = email?.toLowerCase() === 'tapsforex@gmail.com' || 
+                               email?.toLowerCase() === 'tapiwagahadza54@gmail.com';
 
       try {
         const userCredential = await signInWithEmailAndPassword(fireAuth, email, password);
         const firebaseUser = userCredential.user;
+
+        // Check if verified
+        const isBypass = firebaseUser.email?.toLowerCase() === 'tapsforex@gmail.com' || 
+                         firebaseUser.email?.toLowerCase() === 'tapiwagahadza54@gmail.com';
+
+        if (!firebaseUser.emailVerified && !isBypass) {
+          // Block immediately, sign out, and advise
+          await sendEmailVerification(firebaseUser).catch(err => console.error("Could not send verification email on demand", err));
+          await fireSignOut(fireAuth);
+          toast.error("Email verification is required. We have sent a confirmation email to " + email + ". Please verify your email before logging in.");
+          setLoading(false);
+          return;
+        }
 
         toast.success('Welcome back to Tareza ERP');
         navigate('/dashboard');

@@ -24,6 +24,7 @@ import {
 } from '../services/ledgerService';
 import { db, doc, getDoc, updateDoc, supabase } from '../lib/firebaseClient';
 import { usePOSSession } from '../hooks/usePOSSession';
+import { indexedDbService } from '../services/indexedDbService';
 import { useCartCalculations } from '../hooks/useCartCalculations';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
 import { ProductGrid } from '../components/pos/ProductGrid';
@@ -44,7 +45,7 @@ export default function POS() {
   const { 
     cart, getTotals, addToCart, removeFromCart, updateQuantity, pricingTier, setPricingTier, setItemPricingTier,
     clearCart, completeSale, currentCustomer, setCurrentCustomer, parkSale, parkedSales, resumeSale,
-    applyGlobalDiscount, applyItemDiscount
+    applyGlobalDiscount, applyItemDiscount, payments, globalDiscount
   } = usePOSStore();
   
   const totals = getTotals();
@@ -81,6 +82,54 @@ export default function POS() {
     isSyncing,
     syncOfflineSales
   } = useOfflineQueue();
+
+  // Load saved active transaction state on initial mount/resume from IndexedDB
+  useEffect(() => {
+    const resumeStoredActiveTransaction = async () => {
+      try {
+        const storedTx = await indexedDbService.getActiveTransaction();
+        if (storedTx && usePOSStore.getState().cart.length === 0) {
+          usePOSStore.setState({
+            cart: storedTx.cart || [],
+            payments: storedTx.payments || [],
+            pricingTier: (storedTx.pricingTier as any) || 'retail',
+            currentCustomer: storedTx.currentCustomer || null,
+            globalDiscount: storedTx.globalDiscount
+          });
+          toast.info("Resumed active transaction state from local IndexedDB cache.");
+        }
+      } catch (err) {
+        console.error("Failed to restore active transaction from IndexedDB:", err);
+      }
+    };
+    resumeStoredActiveTransaction();
+  }, []);
+
+  // Sync active transaction state to IndexedDB in real-time on any changes
+  useEffect(() => {
+    const backupActiveTransaction = async () => {
+      const txState = {
+        id: 'current_active_transaction',
+        cart,
+        payments,
+        pricingTier,
+        currentCustomer,
+        globalDiscount,
+        updatedAt: new Date().toISOString()
+      };
+      
+      try {
+        if (cart.length > 0 || payments.length > 0) {
+          await indexedDbService.saveActiveTransaction(txState);
+        } else {
+          await indexedDbService.clearActiveTransaction();
+        }
+      } catch (err) {
+        console.error("Failed to sync active transaction to IndexedDB:", err);
+      }
+    };
+    backupActiveTransaction();
+  }, [cart, payments, pricingTier, currentCustomer, globalDiscount]);
 
   // Local States
   const [products, setProducts] = useState<Product[]>([]);
@@ -819,6 +868,25 @@ export default function POS() {
         return updated;
       });
 
+      const updateLocalSessionWithOfflineSale = (saleAmount: number) => {
+        if (activeSession) {
+          const currentTotalSales = Number(activeSession.sales_total || 0) + saleAmount;
+          const currentCountSales = Number(activeSession.sales_count || 0) + 1;
+          const currentExpectedObj = Number(activeSession.expected_balance || activeSession.opening_balance || 0) + saleAmount;
+          
+          const updatedSession = {
+            ...activeSession,
+            sales_total: currentTotalSales,
+            sales_count: currentCountSales,
+            expected_balance: currentExpectedObj
+          };
+
+          setActiveSession(updatedSession as any);
+          localStorage.setItem('tareza_active_offline_session', JSON.stringify(updatedSession));
+          localStorage.setItem('tareza_active_session_cache', JSON.stringify(updatedSession));
+        }
+      };
+
       if (!isOffline) {
         try {
           const { supabase } = await import('../lib/firebaseClient');
@@ -1076,8 +1144,11 @@ export default function POS() {
           usePOSStore.setState((s: any) => ({
             offlineQueue: [...s.offlineQueue, offlineSale]
           }));
+          updateLocalSessionWithOfflineSale(sale.total);
           toast.warning('Could not save to database — sale queued for automatic retry.');
         }
+      } else {
+        updateLocalSessionWithOfflineSale(sale.total);
       }
     }
   };

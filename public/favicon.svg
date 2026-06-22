@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="98 102 295 352" fill="none">
+  <defs>
+    <!-- Left and right crossbar elements: Flat vibrant magenta-purple as shown in the logo -->
+    <linearGradient id="tareza-purple-fill" x1="110" y1="115" x2="380" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#9333EA" />
+      <stop offset="100%" stopColor="#9333EA" />
+    </linearGradient>
+
+    <!-- Diagonal slash ribbon: High-contrast bright cyan/teal to high-tech blue -->
+    <linearGradient id="tareza-cyan-grad" x1="240" y1="115" x2="180" y2="245" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#00B5E2" />
+      <stop offset="100%" stopColor="#0066FF" />
+    </linearGradient>
+
+    <!-- Primary vertical stem column: Deep business violet-blue as shown in the logo -->
+    <linearGradient id="tareza-stem-fill" x1="200" y1="190" x2="290" y2="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#4F46E5" />
+      <stop offset="100%" stopColor="#4318FF" />
+    </linearGradient>
+  </defs>
+  <!-- Top-Left crossbar element -->
+  <path d="M 110 115 L 245 115 L 215 180 L 110 180 Z" fill="url(#tareza-purple-fill)" />
+  <!-- Top-Right crossbar element -->
+  <path d="M 260 115 L 380 115 L 350 180 L 230 180 Z" fill="url(#tareza-purple-fill)" />
+  <!-- Primary stem vertical column -->
+  <path d="M 200 440 L 200 250 L 230 190 L 290 190 L 290 440 Z" fill="url(#tareza-stem-fill)" />
+  <!-- Sliding Diagonal Slash Ribbon segment overlay -->
+  <path d="M 240 115 L 275 115 L 215 245 L 180 245 Z" fill="url(#tareza-cyan-grad)" />
+</svg>

@@ -42,47 +42,53 @@ export function TarezaLogo({
       className="shrink-0 animate-fade-in"
     >
       <defs>
-        {/* Left segment gradient: rich purple (magenta/violet) to deep purple */}
-        <linearGradient id="tareza-left-grad" x1="110" y1="115" x2="245" y2="180" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#8b00ff" />
-          <stop offset="100%" stopColor="#a855f7" />
+        {/* Left and right crossbar elements: Flat vibrant magenta-purple as shown in the logo */}
+        <linearGradient id="tareza-purple-fill" x1="110" y1="115" x2="380" y2="180" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#9333EA" />
+          <stop offset="100%" stopColor="#9333EA" />
         </linearGradient>
 
-        {/* Right segment gradient: neon cyan/teal to deep royal blue */}
-        <linearGradient id="tareza-right-grad" x1="260" y1="115" x2="350" y2="180" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#06b6d4" />
-          <stop offset="100%" stopColor="#2563eb" />
+        {/* Diagonal slash ribbon: High-contrast bright cyan/teal to high-tech blue */}
+        <linearGradient id="tareza-cyan-grad" x1="240" y1="115" x2="180" y2="245" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#00B5E2" />
+          <stop offset="100%" stopColor="#0066FF" />
         </linearGradient>
 
-        {/* Vertical stem gradient: vivid purple to deep royal blue/dark purple */}
-        <linearGradient id="tareza-stem-grad" x1="200" y1="190" x2="290" y2="440" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#5c10eb" />
-          <stop offset="100%" stopColor="#4f46e5" />
+        {/* Primary vertical stem column: Deep business violet-blue as shown in the logo */}
+        <linearGradient id="tareza-stem-fill" x1="200" y1="190" x2="290" y2="440" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#4F46E5" />
+          <stop offset="100%" stopColor="#4318FF" />
         </linearGradient>
         
-        {/* Glow drop shadow for professional touch */}
+        {/* Subtle drop shadow for depth */}
         <filter id="logo-glow" x="-10%" y="-10%" width="120%" height="120%" filterUnits="userSpaceOnUse">
-          <feDropShadow dx="0" dy="8" stdDeviation="12" floodColor="#8b00ff" floodOpacity="0.15" />
+          <feDropShadow dx="0" dy="6" stdDeviation="10" floodColor="#4F46E5" floodOpacity="0.12" />
         </filter>
       </defs>
 
       <g filter="url(#logo-glow)">
-        {/* Top-Left crossbar element: Purple gradient slanted parallelogram-shape */}
+        {/* Top-Left crossbar element */}
         <path
           d="M 110 115 L 245 115 L 215 180 L 110 180 Z"
-          fill="url(#tareza-left-grad)"
+          fill="url(#tareza-purple-fill)"
         />
 
-        {/* Top-Right crossbar element: Cyan/Blue gradient slanted parallelogram */}
+        {/* Top-Right crossbar element */}
         <path
           d="M 260 115 L 380 115 L 350 180 L 230 180 Z"
-          fill="url(#tareza-right-grad)"
+          fill="url(#tareza-purple-fill)"
         />
 
-        {/* Primary stem vertical column: slanted top chamfer matching the exact gaps */}
+        {/* Primary stem vertical column */}
         <path
           d="M 200 440 L 200 250 L 230 190 L 290 190 L 290 440 Z"
-          fill="url(#tareza-stem-grad)"
+          fill="url(#tareza-stem-fill)"
+        />
+
+        {/* Sliding Diagonal Slash Ribbon segment overlay */}
+        <path
+          d="M 240 115 L 275 115 L 215 245 L 180 245 Z"
+          fill="url(#tareza-cyan-grad)"
         />
       </g>
     </svg>
@@ -123,8 +129,8 @@ export function TarezaLogo({
         <div className={`flex flex-col justify-center select-none ${textLayout.textMargin}`}>
           {/* Logo Name Display 'areza' with zero gap next to the cropped T symbol */}
           <div className="flex items-baseline leading-none">
-            <span className={`${textLayout.title} font-black tracking-tight ${textClass} font-sans`}>
-              a<span className="text-cyan-500 dark:text-cyan-400">r</span>eza
+            <span className={`${textLayout.title} font-extrabold tracking-tight ${textClass} font-sans`}>
+              a<span className="text-[#00B5E2] dark:text-[#38bdf8]">r</span>e<span className="text-[#8b5cf6] dark:text-[#a78bfa]">z</span>a
             </span>
           </div>
           {showSubtitle && (
