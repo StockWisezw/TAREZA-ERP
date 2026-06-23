@@ -833,7 +833,7 @@ export default function POS() {
       return;
     }
 
-    const isOffline = !navigator.onLine;
+    const isOffline = !navigator.onLine || localStorage.getItem('tareza_offline_mode') === 'true';
 
     let sale = null;
     try {
