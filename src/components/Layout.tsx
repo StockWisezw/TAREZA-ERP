@@ -21,7 +21,8 @@ import {
   MessageSquare,
   Trash2,
   Check,
-  Compass
+  Compass,
+  HelpCircle
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from './ui/button';
@@ -56,6 +57,7 @@ const navigation = [
   { name: 'Reports', href: '/reports', icon: FileText },
   { name: 'Staff Messenger', href: '/messenger', icon: MessageSquare },
   { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Support Hub', href: '/support', icon: HelpCircle },
 ];
 
 function SubscriptionBanner({ status, endDate }: { status: string; endDate: string | null }) {
@@ -77,6 +79,7 @@ interface NotificationItem {
 export default function Layout() {
   const { signOut, user } = useAuth();
   const location = useLocation();
+  const isPosPage = location.pathname === '/pos';
   const navigate = useNavigate();
   const isDeveloper = user?.email?.toLowerCase() === 'tapsforex@gmail.com' || 
                       user?.email?.toLowerCase() === 'tapiwagahadza54@gmail.com';
@@ -526,9 +529,9 @@ export default function Layout() {
             </div>
           </header>
 
-          <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
-            <div className="mx-auto max-w-[1400px]">
-              <Breadcrumbs />
+          <main className={`flex-1 ${isPosPage ? 'p-2 sm:p-3 h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950' : 'overflow-auto p-4 sm:p-6 lg:p-8'}`}>
+            <div className={`mx-auto ${isPosPage ? 'w-full max-w-none h-full flex flex-col overflow-hidden' : 'max-w-[1400px]'}`}>
+              {!isPosPage && <Breadcrumbs />}
               <Outlet />
             </div>
           </main>
@@ -536,7 +539,6 @@ export default function Layout() {
       </div>
       <AIAssistant />
       <HelpCenter />
-      <SupportHub />
       <CommandPalette />
     </div>
   );

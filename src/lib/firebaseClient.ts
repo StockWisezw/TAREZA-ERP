@@ -102,6 +102,13 @@ export const firebaseConfig = resolvedConfig;
 // Initialize Firebase App
 export const app = initializeApp(resolvedConfig);
 
+// Set log level early to suppress any startup warning/connection logs
+try {
+  setLogLevel('error');
+} catch (logErr) {
+  console.warn('[Firebase] Failed to set log level:', logErr);
+}
+
 function createFirestoreInstance() {
   const isPersistenceEnabled = typeof window !== 'undefined' && localStorage.getItem('tareza_firestore_persistence') !== 'disabled';
   
@@ -133,11 +140,6 @@ function createFirestoreInstance() {
 }
 
 export const db = createFirestoreInstance();
-try {
-  setLogLevel('error');
-} catch (logErr) {
-  console.warn('[Firebase] Failed to set log level:', logErr);
-}
 export const fireAuth = getAuth(app);
 
 // Immediate validation of Firestore connection

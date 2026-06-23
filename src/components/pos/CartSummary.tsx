@@ -213,7 +213,7 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
       })()}
 
       {/* Dynamic Interactive Shopping Cart items list container */}
-      <Card className="border-zinc-200 shadow-sm flex-1 min-h-[300px] h-full flex flex-col pt-1.5 bg-white pb-1.5 rounded-xl overflow-hidden">
+      <Card className="border-zinc-200 shadow-sm flex-1 min-h-[120px] h-full flex flex-col pt-1.5 bg-white pb-1.5 rounded-xl overflow-hidden">
         {cart.length === 0 ? (
           <div className="flex-grow flex flex-col items-center justify-center text-zinc-400 p-3">
             <ShoppingCart className="h-7 w-7 text-zinc-300 mb-1.5" />
@@ -327,7 +327,7 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
                               setSelectedCartItemId(item.id);
                               setIsNewInput(true);
                             }}
-                            className="w-7 h-4.5 text-center text-[9px] font-black font-mono border border-zinc-250 bg-zinc-50 rounded focus:bg-white text-zinc-900 p-0 focus:outline-none"
+                            className="w-16 h-4.5 text-center text-[9px] font-black font-mono border border-zinc-250 bg-zinc-50 rounded focus:bg-white text-zinc-900 p-0 focus:outline-none"
                           />
                           <div className="flex flex-col gap-0 border-l border-zinc-150 pl-0.5">
                             <button 

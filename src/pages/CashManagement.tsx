@@ -841,7 +841,75 @@ export default function CashManagement() {
   };
 
   // Printing a formal print receipt on a separate visual DOM for physical audits (80mm & standard compliant)
-  const handlePrintAuditReceipt = (session: RegisterSession, customLogs: CashLog[] = []) => {
+  const handlePrintAuditReceipt = async (session: RegisterSession, customLogs: CashLog[] = []) => {
+    const toastId = toast.loading('Compiling advanced reconciliation items, inventory values & profitability metrics...');
+    
+    let dbProducts: any[] = [];
+    let dbInventory: any[] = [];
+    let dbCategories: any[] = [];
+    let salesInShift: any[] = [];
+
+    try {
+      const bizId = session.business_id || businessId;
+
+      // Fetch products, categories, stock levels and sales in parallel
+      const [prodRes, invRes, catRes] = await Promise.all([
+        supabase.from('products').select('*').eq('business_id', bizId),
+        supabase.from('inventory').select('*').eq('business_id', bizId),
+        supabase.from('categories').select('*').eq('business_id', bizId)
+      ]);
+
+      dbProducts = prodRes.data || [];
+      dbInventory = invRes.data || [];
+      dbCategories = catRes.data || [];
+
+      // Convert arrays to quick lookup maps
+      const categoryMap: Record<string, string> = {};
+      const productMap: Record<string, any> = {};
+
+      dbProducts.forEach(p => {
+        productMap[p.id] = p;
+      });
+
+      dbCategories.forEach(c => {
+        categoryMap[c.id] = c.name;
+      });
+
+      // Fetch sales inside this register's active timeframe
+      const openedAt = session.opened_at;
+      const closedAt = session.closed_at || new Date().toISOString();
+
+      const { data: dbSales } = await supabase.from('sales')
+        .select('*')
+        .eq('business_id', bizId)
+        .gte('created_at', openedAt)
+        .lte('created_at', closedAt);
+
+      salesInShift = [...(dbSales || [])];
+
+      // Merge local offline sales from POS state store
+      const localSales = usePOSStore.getState()?.localSales || [];
+      localSales.forEach((localSale: any) => {
+        const localTime = new Date(localSale.timestamp || localSale.created_at || new Date()).toISOString();
+        if (localTime >= openedAt && localTime <= closedAt) {
+          const exists = salesInShift.some(s => s.receiptNumber === localSale.receiptNumber || s.id === localSale.id || s.receipt_number === localSale.receiptNumber);
+          if (!exists) {
+            salesInShift.push({
+              ...localSale,
+              created_at: localSale.timestamp || localSale.created_at,
+              status: localSale.status || 'COMPLETED'
+            });
+          }
+        }
+      });
+
+      toast.dismiss(toastId);
+    } catch (err: any) {
+      console.error('Error compiling advanced reconciliation documents:', err);
+      toast.dismiss(toastId);
+      toast.error('Failed to load transaction details. Proceeding with basic metrics only.');
+    }
+
     const pWindow = window.open('', '_blank');
     if (!pWindow) {
       toast.error('Print popup blocked. Please allow popups.');
@@ -851,224 +919,764 @@ export default function CashManagement() {
     const tellerName = profilesMap[session.user_id]?.full_name || 'System Operator';
     const finalVariance = session.variance ?? ((session.closing_balance || 0) - (session.expected_balance || 0));
 
+    // ----------------------------------------------------
+    // AGGREGATE DETAILED SALES ITEMS BY CATEGORIES
+    // ----------------------------------------------------
+    const categoryAggregate: Record<string, {
+      categoryName: string;
+      totalQty: number;
+      totalRevenue: number;
+      totalCost: number;
+      items: Record<string, {
+        name: string;
+        sku: string;
+        qty: number;
+        revenue: number;
+        cost: number;
+        unitPrice: number;
+      }>;
+    }> = {};
+
+    let totalCalculatedCOGS = 0;
+    let totalCalculatedRevenue = 0;
+
+    salesInShift.forEach((sale: any) => {
+      const sStatus = String(sale.status || '').toUpperCase();
+      const allowedStatuses = ['COMPLETED', 'PAID', 'SYNCED', 'OFFLINE_PENDING'];
+      if (sale.status && !allowedStatuses.includes(sStatus)) return;
+
+      let itemsList: any[] = [];
+      if (Array.isArray(sale.items)) {
+        itemsList = sale.items;
+      } else if (typeof sale.items === 'string') {
+        try {
+          itemsList = JSON.parse(sale.items);
+        } catch {
+          itemsList = [];
+        }
+      }
+
+      itemsList.forEach((it: any) => {
+        const pId = it.product?.id || it.id || '';
+        const prod = dbProducts.find(p => p.id === pId) || it.product || {};
+        const pName = prod.name || it.name || 'Miscellaneous Item';
+        const pSku = prod.sku || it.sku || 'N/A';
+
+        const categoryId = prod.category_id || '';
+        const categoryName = dbCategories.find(c => c.id === categoryId)?.name || prod.category || 'General/Miscellaneous';
+
+        const qty = Number(it.quantity || it.qty || 1);
+        const revenue = Number(it.line_total || it.subtotal || (qty * (it.unitPrice || it.price || 0)));
+        const costPerUnit = Number(prod.cost_price || prod.costPrice || it.cost_price || 0);
+        const cost = costPerUnit * qty;
+
+        totalCalculatedRevenue += revenue;
+        totalCalculatedCOGS += cost;
+
+        if (!categoryAggregate[categoryName]) {
+          categoryAggregate[categoryName] = {
+            categoryName,
+            totalQty: 0,
+            totalRevenue: 0,
+            totalCost: 0,
+            items: {}
+          };
+        }
+
+        const cat = categoryAggregate[categoryName];
+        cat.totalQty += qty;
+        cat.totalRevenue += revenue;
+        cat.totalCost += cost;
+
+        const itemKey = `${pId}_${pName}`;
+        if (!cat.items[itemKey]) {
+          cat.items[itemKey] = {
+            name: pName,
+            sku: pSku,
+            qty: 0,
+            revenue: 0,
+            cost: 0,
+            unitPrice: Number(it.unitPrice || it.price || 0)
+          };
+        }
+
+        const itemAgg = cat.items[itemKey];
+        itemAgg.qty += qty;
+        itemAgg.revenue += revenue;
+        itemAgg.cost += cost;
+      });
+    });
+
+    const grossProfitAnalysed = totalCalculatedRevenue - totalCalculatedCOGS;
+    const grossMarginAnalysed = totalCalculatedRevenue > 0 ? (grossProfitAnalysed / totalCalculatedRevenue) * 100 : 0;
+    const netCashShiftRealized = grossProfitAnalysed + finalVariance;
+
+    // ----------------------------------------------------
+    // INVENTORY REMAINING & STOCK VALUATION REPORT
+    // ----------------------------------------------------
+    const inventoryValuationAggregate: Record<string, {
+      categoryName: string;
+      totalQtyOnHand: number;
+      totalCostValue: number;
+      totalRetailValue: number;
+      products: Array<{
+        name: string;
+        sku: string;
+        qtyOnHand: number;
+        unitCost: number;
+        costValue: number;
+        retailValue: number;
+      }>;
+    }> = {};
+
+    let totalCatalogQtyOnHand = 0;
+    let totalCatalogCostValue = 0;
+    let totalCatalogRetailValue = 0;
+
+    dbProducts.forEach((prod: any) => {
+      const matches = dbInventory.filter(inv => inv.product_id === prod.id && inv.branch_id === session.branch_id);
+      const qtyOnHand = matches.length ? matches.reduce((sum, m) => sum + Number(m.quantity || 0), 0) : 0;
+
+      const unitCost = Number(prod.cost_price || 0);
+      const unitRetail = Number(prod.retail_price || prod.price || 0);
+      const costValue = unitCost * qtyOnHand;
+      const retailValue = unitRetail * qtyOnHand;
+
+      totalCatalogQtyOnHand += qtyOnHand;
+      totalCatalogCostValue += costValue;
+      totalCatalogRetailValue += retailValue;
+
+      const categoryId = prod.category_id || '';
+      const categoryName = dbCategories.find(c => c.id === categoryId)?.name || 'General/Miscellaneous';
+
+      if (!inventoryValuationAggregate[categoryName]) {
+        inventoryValuationAggregate[categoryName] = {
+          categoryName,
+          totalQtyOnHand: 0,
+          totalCostValue: 0,
+          totalRetailValue: 0,
+          products: []
+        };
+      }
+
+      const catInv = inventoryValuationAggregate[categoryName];
+      catInv.totalQtyOnHand += qtyOnHand;
+      catInv.totalCostValue += costValue;
+      catInv.totalRetailValue += retailValue;
+
+      catInv.products.push({
+        name: prod.name,
+        sku: prod.sku || 'N/A',
+        qtyOnHand,
+        unitCost,
+        costValue,
+        retailValue
+      });
+    });
+
+    // ----------------------------------------------------
+    // DYNAMIC EXPERT ADVISORY LOGIC FOR BUSINESS SUCCESS
+    // ----------------------------------------------------
+    const advisoryBullets: string[] = [];
+
+    // 1. Advice based on cash discrepancy
+    if (finalVariance < 0) {
+      advisoryBullets.push(`<strong>🚨 Cash Shortage Alert ($${Math.abs(finalVariance).toFixed(2)}):</strong> A physical cash variance of this size presents clear transaction leakages. We advise conducting mandatory "blind till counts" where cashiers submit their coins and bills without seeing expectation values. Audit manual register payouts, check system audit logs for cash-drawer overrides, and review CCTV footage around high-value drop-offs.`);
+    } else if (finalVariance > 0) {
+      advisoryBullets.push(`<strong>⚠️ Cash Overage Alert ($${finalVariance.toFixed(2)}):</strong> This indicates customer change counting inaccuracies, unreceipted petty cash-ins, or a transaction made offline but left unlogged. While not an immediate cash loss, it frustrates client trust or bookkeeping records. Re-train till operators on exact checkout change protocols.`);
+    } else {
+      advisoryBullets.push(`<strong>⭐ Perfect Register Alignment:</strong> The drawer count perfectly registers with standard sales expectations. Operator <strong>${tellerName}</strong> showed exceptional cash handling precision during this shift session.`);
+    }
+
+    // 2. Advice based on stock replenishment
+    const reorderAlerts: string[] = [];
+    dbProducts.forEach((prod: any) => {
+      const matches = dbInventory.filter(inv => inv.product_id === prod.id && inv.branch_id === session.branch_id);
+      const qtyOnHand = matches.reduce((sum, m) => sum + Number(m.quantity || 0), 0);
+      const reorderLvl = Number(prod.reorder_level || 5);
+      if (qtyOnHand <= reorderLvl && qtyOnHand < 15) {
+        reorderAlerts.push(`${prod.name} (${qtyOnHand} left)`);
+      }
+    });
+
+    if (reorderAlerts.length > 0) {
+      advisoryBullets.push(`<strong>📦 Reorder Stock warning:</strong> Stockout alerts detected on <em>${reorderAlerts.slice(0, 4).join(', ')}${reorderAlerts.length > 4 ? ' and ' + (reorderAlerts.length - 4) + ' other items' : ''}</em>. We strongly recommend generating draft purchase orders inside the Procurement tab matching these item SKUs immediately to prevent customer walkaways.`);
+    }
+
+    // 3. Margin & Profit optimization
+    let highMarginCatName = '';
+    let highestMarginVal = -1;
+    Object.entries(categoryAggregate).forEach(([name, cat]) => {
+      const margin = cat.totalRevenue > 0 ? ((cat.totalRevenue - cat.totalCost) / cat.totalRevenue) * 100 : 0;
+      if (margin > highestMarginVal && cat.totalRevenue > 10) {
+        highestMarginVal = margin;
+        highMarginCatName = name;
+      }
+    });
+
+    if (highMarginCatName && highestMarginVal > 0) {
+      advisoryBullets.push(`<strong>📈 High-Margin Expansion:</strong> Your highest-margin business category during this shift was <strong>"${highMarginCatName}"</strong> at an impressive <strong>${highestMarginVal.toFixed(1)}% gross profit</strong>. Consider allocating higher physical placement space, initiating bulk package discounts, or offering cashier selling commissions to capitalize on this category’s momentum.`);
+    }
+
+    // 4. Operational Cash flow advice
+    const payouts = Number(session.payouts_total || 0);
+    if (payouts > 100) {
+      advisoryBullets.push(`<strong>💸 High Cash Outflow warning:</strong> High volume of hand-to-hand register drops ($${payouts.toFixed(2)}) leaves operations vulnerable to false invoices. Require that manager signature receipts are stapled directly to supplier restock documentation before register drawers open.`);
+    }
+
     const html = `
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Shift Audit Report - Ref ${session.id.substring(0, 8)}</title>
+          <title>Shift Valuation & Reconciliation Audit Report</title>
           <meta charset="utf-8" />
           <style>
-            @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Inter:wght@400;500;600;700&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
+            
             body {
-              font-family: 'JetBrains Mono', monospace;
-              color: #111827;
-              padding: 24px;
-              max-width: 420px;
+              font-family: 'Inter', sans-serif;
+              color: #1f2937;
+              padding: 20px;
+              max-width: 820px;
               margin: 0 auto;
-              background-color: white;
+              background-color: #f9fafb;
               font-size: 13px;
               line-height: 1.5;
             }
-            .header {
-              text-align: center;
-              border-bottom: 2px dashed #e4e4e7;
-              padding-bottom: 16px;
-              margin-bottom: 16px;
+            .paper {
+              background-color: white;
+              border: 1px solid #e5e7eb;
+              box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+              padding: 40px;
+              border-radius: 8px;
             }
-            .title {
-              font-size: 17px;
+            .header-info {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              border-bottom: 2px solid #111827;
+              padding-bottom: 20px;
+              margin-bottom: 24px;
+            }
+            .title-area h1 {
+              font-size: 22px;
+              font-weight: 800;
+              color: #111827;
+              letter-spacing: -0.5px;
+              margin: 0;
+              text-transform: uppercase;
+            }
+            .title-area p {
+              color: #4b5563;
+              margin: 4px 0 0 0;
+              font-size: 12px;
+              font-weight: 500;
+            }
+            .logo-placeholder {
+              font-family: 'JetBrains Mono', monospace;
+              text-align: right;
+            }
+            .org-name {
+              font-size: 18px;
+              font-weight: 800;
+              color: #111827;
+            }
+            .org-sub {
+              font-size: 10px;
+              color: #6b7280;
+              letter-spacing: 1px;
+              text-transform: uppercase;
+            }
+            .meta-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 16px;
+              background-color: #f3f4f6;
+              padding: 14px;
+              border-radius: 6px;
+              margin-bottom: 24px;
+              font-family: 'JetBrains Mono', monospace;
+            }
+            .meta-item {
+              display: flex;
+              flex-direction: column;
+            }
+            .meta-label {
+              font-size: 9px;
+              color: #6b7280;
+              text-transform: uppercase;
+              font-weight: bold;
+              margin-bottom: 2px;
+            }
+            .meta-val {
+              font-size: 11px;
+              color: #111827;
+              font-weight: 700;
+            }
+            
+            /* Section layout */
+            h2.section-title {
+              font-size: 13px;
               font-weight: 800;
               text-transform: uppercase;
-              letter-spacing: 0.5px;
-            }
-            .meta-line {
+              letter-spacing: 1.5px;
+              color: #111827;
+              border-bottom: 1px solid #111827;
+              padding-bottom: 6px;
+              margin: 32px 0 14px 0;
               display: flex;
+              align-items: center;
               justify-content: space-between;
-              margin-bottom: 6px;
-              font-size: 12px;
             }
-            .bold {
-              font-weight: 700;
-            }
-            .divider {
-              border-top: 1px dashed #e4e4e7;
-              margin: 12px 0;
-            }
-            .double-divider {
-              border-top: 3px double #111827;
-              margin: 16px 0;
-            }
-            .metric-row {
-              display: flex;
-              justify-content: space-between;
-              padding: 3px 0;
-            }
-            .variance-box {
-              background-color: ${finalVariance === 0 ? '#f0fdf4' : finalVariance > 0 ? '#eff6ff' : '#fef2f2'};
-              border: 1px solid ${finalVariance === 0 ? '#bbf7d0' : finalVariance > 0 ? '#bfdbfe' : '#fecaca'};
-              padding: 8px;
-              text-align: center;
-              font-weight: 700;
-              margin-top: 12px;
-              border-radius: 4px;
-            }
-            .log-table {
+            
+            /* Metric grids */
+            .metric-table {
               width: 100%;
               border-collapse: collapse;
+              font-family: 'JetBrains Mono', monospace;
+              margin-bottom: 20px;
+            }
+            .metric-table td {
+              padding: 8px 10px;
+              border-bottom: 1px solid #f3f4f6;
+            }
+            .metric-table tr.highlight {
+              background-color: #f9fafb;
+              font-weight: bold;
+            }
+            .metric-table tr.total-row {
+              border-top: 1px solid #111827;
+              border-bottom: 2px solid #111827;
+              font-weight: bold;
+              font-size: 14px;
+            }
+            .text-right {
+              text-align: right;
+            }
+            
+            /* Discrepancy block */
+            .discrepancy-card {
+              border: 1px solid #111827;
+              border-radius: 6px;
+              padding: 16px;
+              margin-bottom: 24px;
+              background-color: ${finalVariance === 0 ? '#f0fdf4' : finalVariance > 0 ? '#eff6ff' : '#fef2f2'};
+              border-color: ${finalVariance === 0 ? '#86efac' : finalVariance > 0 ? '#93c5fd' : '#fca5a5'};
+              text-align: center;
+            }
+            .discrepancy-title {
+              font-family: 'JetBrains Mono', monospace;
+              font-size: 16px;
+              font-weight: bold;
+              color: #111827;
+            }
+            .discrepancy-caption {
               font-size: 11px;
-              margin-top: 10px;
+              color: #4b5563;
+              margin-top: 4px;
             }
-            .log-table th {
-              text-align: left;
-              border-bottom: 1px solid #111827;
-              padding-bottom: 4px;
+            
+            /* Report tables */
+            .report-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 24px;
+              font-size: 12px;
             }
-            .log-table td {
-              padding: 5px 0;
-              border-bottom: 1px solid #f4f4f5;
-            }
-            .sign-section {
-              margin-top: 40px;
-              font-size: 11px;
-            }
-            .sign-line {
-              border-bottom: 1px solid #71717a;
-              height: 35px;
-              width: 180px;
-              margin-bottom: 4px;
-            }
-            .button-print {
+            .report-table th {
               background-color: #111827;
+              color: white;
+              font-weight: 700;
+              text-align: left;
+              padding: 6px 10px;
+              font-size: 10px;
+              text-transform: uppercase;
+            }
+            .report-table td {
+              padding: 7px 10px;
+              border-bottom: 1px solid #e5e7eb;
+            }
+            .report-table tr.category-total {
+              background-color: #f9fafb;
+              font-weight: bold;
+              border-top: 1px solid #d1d5db;
+            }
+            .report-table tr.grand-total {
+              background-color: #f3f4f6;
+              font-weight: bold;
+              border-top: 2px solid #111827;
+              border-bottom: 2px solid #111827;
+              font-size: 13px;
+            }
+            .col-sku {
+              font-family: 'JetBrains Mono', monospace;
+              font-size: 11px;
+              color: #4b5563;
+            }
+            .text-muted {
+              color: #6b7280;
+            }
+            
+            /* Analysis & Advisory */
+            .adv-box {
+              background-color: #fafaf9;
+              border: 1px solid #e7e5e4;
+              border-radius: 6px;
+              padding: 20px;
+              margin-bottom: 24px;
+            }
+            .adv-box p {
+              margin: 0 0 12px 0;
+              font-size: 12.5px;
+              color: #44403c;
+              display: flex;
+              align-items: flex-start;
+              gap: 8px;
+            }
+            .adv-box p:last-child {
+              margin-bottom: 0;
+            }
+            
+            /* Print controls */
+            .no-print-bar {
+              position: sticky;
+              top: 0;
+              background-color: #111827;
+              color: white;
+              padding: 12px 20px;
+              border-radius: 4px;
+              margin-bottom: 24px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+            }
+            .btn-print {
+              background-color: #2563eb;
               color: white;
               border: none;
               padding: 8px 16px;
-              font-family: inherit;
               font-weight: bold;
-              cursor: pointer;
-              width: 100%;
-              margin-bottom: 20px;
               border-radius: 4px;
+              cursor: pointer;
             }
+            .btn-print:hover {
+              background-color: #1d4ed8;
+            }
+            
             @media print {
-              .button-print {
+              body {
+                background-color: white;
+                padding: 0;
+              }
+              .paper {
+                border: none;
+                box-shadow: none;
+                padding: 0;
+              }
+              .no-print-bar {
                 display: none !important;
               }
-              body {
-                padding: 10px;
+              .page-break {
+                page-break-before: always;
               }
             }
           </style>
         </head>
         <body>
-          <button class="button-print" onclick="window.print()">Print Report / Receipt</button>
-          
-          <div class="header">
-            <div class="title">TAREZA CO-OP</div>
-            <div style="font-size: 11px; color:#52525b; margin-top:4px;">Till Reconciliation Audit Sheet</div>
+          <div class="no-print-bar">
+            <span>🖥️ Tareza Reconciliation Ledger Document Compiled Successfully</span>
+            <button class="btn-print" onclick="window.print()">Print Compiled Document</button>
           </div>
 
-          <div class="meta-line">
-            <span>Shift Session ID:</span>
-            <span class="bold">#${session.id.substring(0, 8).toUpperCase()}</span>
-          </div>
-          <div class="meta-line">
-            <span>Till Operator:</span>
-            <span class="bold">${tellerName}</span>
-          </div>
-          <div class="meta-line">
-            <span>Shift Opened:</span>
-            <span>${new Date(session.opened_at).toLocaleString()}</span>
-          </div>
-          <div class="meta-line">
-            <span>Shift Closed:</span>
-            <span>${session.closed_at ? new Date(session.closed_at).toLocaleString() : 'ACTIVE (UNRECONCILED)'}</span>
-          </div>
-          <div class="meta-line">
-            <span>Shift Status:</span>
-            <span class="bold" style="text-transform: uppercase; color: ${session.status === 'OPEN' ? '#0284c7' : '#111827'}">${session.status}</span>
-          </div>
-
-          <div class="double-divider"></div>
-
-          <div class="metric-row">
-            <span>(+) STARTING FLOAT:</span>
-            <span class="bold">$${Number(session.opening_balance || 0).toFixed(2)}</span>
-          </div>
-          <div class="metric-row">
-            <span>(+) GROSS CASH SALES:</span>
-            <span class="bold" style="color: #0284c7;">$${Number(session.sales_total || 0).toFixed(2)}</span>
-          </div>
-          <div class="metric-row">
-            <span>(-) OUTFLOWS/DROPS:</span>
-            <span class="bold" style="color: #dc2626;">-$${Number(session.payouts_total || 0).toFixed(2)}</span>
-          </div>
-          
-          <div class="divider"></div>
-          
-          <div class="metric-row" style="font-size: 14px; font-weight:700;">
-            <span>(=) EXPECTED CASH:</span>
-            <span>$${Number(session.expected_balance || session.opening_balance).toFixed(2)}</span>
-          </div>
-
-          <div class="metric-row" style="font-size: 14px; font-weight:700; margin-top: 6px;">
-            <span>(★) COUNTED CASH:</span>
-            <span>$${Number(session.closing_balance || 0).toFixed(2)}</span>
-          </div>
-
-          <div class="double-divider"></div>
-
-          <div class="variance-box">
-            VARIANCE: $${finalVariance.toFixed(2)}
-            <div style="font-size: 10px; font-weight: normal; margin-top: 3px; color: #52525b;">
-              ${finalVariance === 0 ? 'TILL BALANCES PERFECTLY' : finalVariance > 0 ? 'CASH SURPLUS IN TILL' : 'CASH DEFICIT IN TILL'}
+          <div class="paper">
+            <div class="header-info">
+              <div class="title-area">
+                <h1>Shift Reconciliation & Valuation Report</h1>
+                <p>Digital shift register balances matched with item stock levels, category sales and real profitability.</p>
+              </div>
+              <div class="logo-placeholder">
+                <span class="org-name">TAREZA CO-OP</span><br/>
+                <span class="org-sub">Harare, Zimbabwe</span>
+              </div>
             </div>
-          </div>
 
-          ${customLogs.length > 0 ? `
-            <div class="divider"></div>
-            <div style="font-weight:bold; font-size:12px; margin-bottom: 6px;">SHIFT MOVEMENT LOGS:</div>
-            <table class="log-table">
+            <div class="meta-grid">
+              <div class="meta-item">
+                <span class="meta-label">SHIFT SESSION ID</span>
+                <span class="meta-val">#${session.id.substring(0, 8).toUpperCase()}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">TILL OPERATOR</span>
+                <span class="meta-val">${tellerName}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">SHIFT STATUS</span>
+                <span class="meta-val" style="color: ${session.status === 'OPEN' ? '#2563eb' : '#111827'};">${session.status}</span>
+              </div>
+              <div class="meta-item" style="grid-column: span 1;">
+                <span class="meta-label">OPENED AT</span>
+                <span class="meta-val">${new Date(session.opened_at).toLocaleString()}</span>
+              </div>
+              <div class="meta-item" style="grid-column: span 1;">
+                <span class="meta-label">CLOSED / COMPILED</span>
+                <span class="meta-val">${session.closed_at ? new Date(session.closed_at).toLocaleString() : new Date().toLocaleString()}</span>
+              </div>
+              <div class="meta-item" style="grid-column: span 1;">
+                <span class="meta-label">BUSINESS BRANCH</span>
+                <span class="meta-val">Default Primary Store</span>
+              </div>
+            </div>
+
+            <!-- Page 1: Cash Reconciliation -->
+            <h2 class="section-title"><span>1.0 CASH FLOAT & EXPECTED LIQUIDITY RECONCILIATION</span><span>USD</span></h2>
+            <table class="metric-table">
+              <tr>
+                <td>(+) Opening Drawer Float:</td>
+                <td class="text-right">$${Number(session.opening_balance || 0).toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>(+) Shift Gross Cash Sales Receipts:</td>
+                <td class="text-right" style="color: #2563eb;">$${Number(session.sales_total || 0).toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>(-) Cash Outflows / Expenditure Drops:</td>
+                <td class="text-right" style="color: #dc2626;">-$${Number(session.payouts_total || 0).toFixed(2)}</td>
+              </tr>
+              <tr class="highlight" style="font-size: 13px;">
+                <td>(=) Expected Till Drawer Cash Balances:</td>
+                <td class="text-right">$${Number(session.expected_balance || session.opening_balance).toFixed(2)}</td>
+              </tr>
+              <tr class="highlight" style="font-size: 13px; border-top: 1px dashed #d1d5db;">
+                <td>(★) Audited/Counted Drawer Cash:</td>
+                <td class="text-right">$${Number(session.closing_balance || 0).toFixed(2)}</td>
+              </tr>
+            </table>
+
+            <div class="discrepancy-card">
+              <div class="discrepancy-title">
+                Auditor-Reconciliation Cash Variance: $${finalVariance.toFixed(2)}
+              </div>
+              <div class="discrepancy-caption">
+                ${finalVariance === 0 ? 'STATUS: PERFECT BALANCE. Cash in drawer exactly matches shift operational activities.' : 
+                  finalVariance > 0 ? `STATUS: SURPLUS. Cash drawer has $${finalVariance.toFixed(2)} unaccounted for abundance.` : 
+                  `STATUS: DEFICIT SHORTAGE. Cash drawer has a shortage of -$${Math.abs(finalVariance).toFixed(2)}.`}
+              </div>
+            </div>
+
+            ${customLogs.length > 0 ? `
+              <div style="font-size:10px; font-weight:bold; color:#4b5563; margin-bottom:6px; font-family:'JetBrains Mono', monospace; text-transform:uppercase;">Shift Cash log transactions:</div>
+              <table class="report-table" style="font-size:11px; font-family:'JetBrains Mono', monospace; margin-bottom: 24px;">
+                <thead>
+                  <tr>
+                    <th>Log Time</th>
+                    <th>Log Trigger Type</th>
+                    <th>Notes & Ledger Context</th>
+                    <th class="text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${customLogs.map(l => `
+                    <tr>
+                      <td>${new Date(l.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
+                      <td><strong>${formatLogType(l.transaction_type)}</strong></td>
+                      <td>${l.notes || 'Internal drawer drop'}</td>
+                      <td class="text-right" style="font-weight:bold;">$${Number(l.amount).toFixed(2)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            ` : ''}
+
+            <!-- Session Profit Analysis -->
+            <h2 class="section-title"><span>2.0 SHIFT SALES PROFITABILITY & REAL VALUE ADHERENCE</span><span>USD</span></h2>
+            <table class="metric-table">
+              <tr>
+                <td>Shift Total Sales Realized (Receipted):</td>
+                <td class="text-right" style="font-weight:600;">$${totalCalculatedRevenue.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>Shift Cost of Goods Sold (COGS Basis):</td>
+                <td class="text-right" style="font-weight:600; color:#b45309;">-$${totalCalculatedCOGS.toFixed(2)}</td>
+              </tr>
+              <tr class="highlight" style="background-color:#fafaf9;">
+                <td>(=) Indicated Gross Shift Profit:</td>
+                <td class="text-right" style="color: #15803d; font-size:13px;">+$${grossProfitAnalysed.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>Assigned Cash Drawer Variance Correction:</td>
+                <td class="text-right" style="color: ${finalVariance < 0 ? '#b91c1c' : '#15803d'}; font-style: italic;">
+                  $${finalVariance >= 0 ? '+' : ''}${finalVariance.toFixed(2)}
+                </td>
+              </tr>
+              <tr class="total-row">
+                <td>(=) REALIZED SHIFT NET NET CARES PROFIT:</td>
+                <td class="text-right" style="color: ${netCashShiftRealized >= 0 ? '#15803d' : '#b91c1c'}; font-size:14px;">
+                  $${netCashShiftRealized.toFixed(2)}
+                </td>
+              </tr>
+              <tr>
+                <td>Operational Gross Margin Ratio:</td>
+                <td class="text-right font-bold">${grossMarginAnalysed.toFixed(2)}%</td>
+              </tr>
+            </table>
+
+            <!-- Page Break for Sold product Category details -->
+            <div class="page-break"></div>
+
+            <h2 class="section-title"><span>3.0 SHIFT DETAILED SOLD ITEMS ANALYSIS UNDER PATTERN CATEGORIES</span><span>ITEMIZED LEDGER</span></h2>
+            <table class="report-table">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Activity</th>
-                  <th style="text-align: right;">Amount</th>
+                  <th>Product Title & Spec Details</th>
+                  <th>SKU Code</th>
+                  <th class="text-right">Qty</th>
+                  <th class="text-right">Unit Price</th>
+                  <th class="text-right">Gross Sales</th>
+                  <th class="text-right">COGS Cost</th>
+                  <th class="text-right">Profit Contribution</th>
                 </tr>
               </thead>
               <tbody>
-                ${customLogs.map(l => `
+                ${Object.keys(categoryAggregate).length === 0 ? `
                   <tr>
-                    <td>${new Date(l.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
-                    <td>${formatLogType(l.transaction_type)}<br/><span style="color:#71717a; font-size:9px;">${l.notes || ''}</span></td>
-                    <td style="text-align: right; font-weight: bold;">$${Number(l.amount).toFixed(2)}</td>
+                    <td colspan="7" style="text-align:center; padding: 20px;" class="text-muted">No itemized product sales transaction data found inside this shift timeframe.</td>
+                  </tr>
+                ` : Object.values(categoryAggregate).map(cat => `
+                  <tr style="background-color:#f9fafb; font-weight:700;"><td colspan="7">${cat.categoryName.toUpperCase()} CATEGORY (Aggregate qty: ${cat.totalQty})</td></tr>
+                  ${Object.values(cat.items).map(item => {
+                    const itemMargin = item.revenue - item.cost;
+                    return `
+                      <tr>
+                        <td style="padding-left: 20px;">${item.name}</td>
+                        <td class="col-sku">${item.sku}</td>
+                        <td class="text-right">${item.qty}</td>
+                        <td class="text-right">$${item.unitPrice.toFixed(2)}</td>
+                        <td class="text-right font-bold">$${item.revenue.toFixed(2)}</td>
+                        <td class="text-right text-muted">$${item.cost.toFixed(2)}</td>
+                        <td class="text-right" style="color:#15803d; font-weight:600;">$${itemMargin.toFixed(2)}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                  <tr class="category-total">
+                    <td colspan="2">SUB-TOTALS [${cat.categoryName}]</td>
+                    <td class="text-right">${cat.totalQty}</td>
+                    <td class="text-right">-</td>
+                    <td class="text-right">$${cat.totalRevenue.toFixed(2)}</td>
+                    <td class="text-right text-muted">$${cat.totalCost.toFixed(2)}</td>
+                    <td class="text-right" style="color:#15803d;">$${(cat.totalRevenue - cat.totalCost).toFixed(2)}</td>
                   </tr>
                 `).join('')}
+                <tr class="grand-total">
+                  <td colspan="2">GRAND TOTAL SHIFT SALES SUMMARY</td>
+                  <td class="text-right">${Object.values(categoryAggregate).reduce((sum, c) => sum + c.totalQty, 0)}</td>
+                  <td class="text-right">-</td>
+                  <td class="text-right">$${totalCalculatedRevenue.toFixed(2)}</td>
+                  <td class="text-right text-muted">$${totalCalculatedCOGS.toFixed(2)}</td>
+                  <td class="text-right" style="color:#15803d;">$${grossProfitAnalysed.toFixed(2)}</td>
+                </tr>
               </tbody>
             </table>
-          ` : ''}
 
-          <div class="double-divider"></div>
+            <!-- Page Break for remaining inventory levels valuation -->
+            <div class="page-break"></div>
 
-          <div class="sign-section">
-            <div style="display: flex; justify-content: space-between; margin-top: 15px;">
-              <div>
-                <div class="sign-line"></div>
-                <div>Cashier Signature</div>
-              </div>
-              <div>
-                <div class="sign-line"></div>
-                <div>Manager Signature</div>
+            <h2 class="section-title"><span>4.0 PHYSICAL INVENTORY REMAINING STOCK VALUATION REPORT</span><span>CLOSING BALANCE</span></h2>
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>Product Spec Title</th>
+                  <th>SKU Code</th>
+                  <th class="text-right">O.H. Qty</th>
+                  <th class="text-right">Unit Cost</th>
+                  <th class="text-right">Asset Cost Value</th>
+                  <th class="text-right">Est. Unit Price</th>
+                  <th class="text-right">Est. Retail Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${Object.keys(inventoryValuationAggregate).length === 0 ? `
+                  <tr>
+                    <td colspan="7" style="text-align:center; padding: 20px;" class="text-muted">No product inventory stock levels matched on this branch database.</td>
+                  </tr>
+                ` : Object.values(inventoryValuationAggregate).map(cat => `
+                  <tr style="background-color:#f9fafb; font-weight:700;"><td colspan="7">${cat.categoryName.toUpperCase()} STOCK VALUATION</td></tr>
+                  ${cat.products.map(prod => `
+                    <tr>
+                      <td style="padding-left: 20px;">${prod.name}</td>
+                      <td class="col-sku">${prod.sku}</td>
+                      <td class="text-right" style="font-weight:${prod.qtyOnHand <= 5 ? 'bold' : 'normal'}; color: ${prod.qtyOnHand <= 3 ? '#b91c1c' : '#1f2937'};">
+                        ${prod.qtyOnHand} ${prod.qtyOnHand <= 3 ? '⚠️' : ''}
+                      </td>
+                      <td class="text-right">$${prod.unitCost.toFixed(2)}</td>
+                      <td class="text-right font-bold">$${prod.costValue.toFixed(2)}</td>
+                      <td class="text-right">$${prod.retailValue > 0 ? (prod.retailValue / (prod.qtyOnHand || 1)).toFixed(2) : '0.00'}</td>
+                      <td class="text-right" style="font-weight:600; color:#2563eb;">$${prod.retailValue.toFixed(2)}</td>
+                    </tr>
+                  `).join('')}
+                  <tr class="category-total">
+                    <td colspan="2">SUB-TOTALS VALUATION [${cat.categoryName}]</td>
+                    <td class="text-right">${cat.totalQtyOnHand}</td>
+                    <td class="text-right">-</td>
+                    <td class="text-right font-black">$${cat.totalCostValue.toFixed(2)}</td>
+                    <td class="text-right">-</td>
+                    <td class="text-right" style="color:#2563eb; font-weight:bold;">$${cat.totalRetailValue.toFixed(2)}</td>
+                  </tr>
+                `).join('')}
+                <tr class="grand-total">
+                  <td colspan="2">REAL-TIME CLOSING INVENTORY TOTAL VALUATION</td>
+                  <td class="text-right">${totalCatalogQtyOnHand}</td>
+                  <td class="text-right">-</td>
+                  <td class="text-right">$${totalCatalogCostValue.toFixed(2)}</td>
+                  <td class="text-right">-</td>
+                  <td class="text-right" style="color:#2563eb;">$${totalCatalogRetailValue.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style="font-size:10.5px; color:#4b5563; padding: 10px; background-color:#f9fafb; border: 1px solid #e5e7eb; border-radius:4px; margin-top: -12px; margin-bottom: 24px;">
+              *Estimated Potential Margin left inside catalog stocks: <strong>$${(totalCatalogRetailValue - totalCatalogCostValue).toFixed(2)}</strong> (Average Product Catalog Margin Level: <strong>${totalCatalogRetailValue > 0 ? (((totalCatalogRetailValue - totalCatalogCostValue) / totalCatalogRetailValue) * 100).toFixed(1) : '0'}%</strong>).
+            </div>
+
+            <!-- Management Advisory Session -->
+            <h2 class="section-title"><span>5.0 TAREZA FINANCIAL SECURITY & MANAGEMENT ADVISORY DIRECTIVE</span><span>EXECUTIVE ACTION PAPERS</span></h2>
+            <div class="adv-box">
+              ${advisoryBullets.map((bullet, i) => `
+                <p>
+                  <span><strong>[${i+1}]</strong></span>
+                  <span>${bullet}</span>
+                </p>
+              `).join('')}
+              <div style="font-style: italic; font-size:11.5px; margin-top:20px; color:#57534e; border-top:1px dashed #d6d3d1; padding-top:10px;">
+                *The physical audit team certifies that these actionable and security bullet points are dynamically output from Tareza ERP's analytical backend algorithms specifically referencing this shift's data lines. Please retain in safe storage for operational compliance logs.
               </div>
             </div>
-          </div>
 
-          <div style="text-align:center; font-size:9x; color:#71717a; margin-top:40px; border-top:1px dashed #e4e4e7; padding-top:10px;">
-            Tareza ERP POS Reconciliations. Page compiled at ${new Date().toLocaleString()}.
+            <div class="double-divider"></div>
+
+            <div class="sign-section">
+              <div style="display: flex; justify-content: space-between; margin-top: 30px;">
+                <div>
+                  <div style="border-bottom: 1px solid #111827; height: 40px; width: 220px; margin-bottom: 6px;"></div>
+                  <div style="font-weight:bold;">TILL OPERATOR / Teller</div>
+                  <div style="font-size: 11px; color:#6b7280;">Sign Date: _________________</div>
+                </div>
+                <div>
+                  <div style="border-bottom: 1px solid #111827; height: 40px; width: 220px; margin-bottom: 6px;"></div>
+                  <div style="font-weight:bold;">BUSINESS OWNER / Auditor</div>
+                  <div style="font-size: 11px; color:#6b7280;">Sign Date: _________________</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="text-align:center; font-size:10px; color:#6b7280; margin-top:80px; border-top:1px dashed #d1d5db; padding-top:12px;">
+              Tareza ERP Integrated Advanced Reconciliations. Document compiled under cryptographic signature session ref: ${session.id.substring(0, 16).toUpperCase()}. All Rights Reserved.
+            </div>
           </div>
 
           <script>
             window.addEventListener('load', () => {
-              setTimeout(() => { window.print(); }, 400);
+              setTimeout(() => { window.print(); }, 500);
             });
           </script>
         </body>
@@ -1078,6 +1686,7 @@ export default function CashManagement() {
     pWindow.document.write(html);
     pWindow.document.close();
   };
+
 
   const activeVariance = countedCash - expectedCash;
 

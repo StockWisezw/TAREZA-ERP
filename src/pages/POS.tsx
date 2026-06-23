@@ -1215,7 +1215,7 @@ export default function POS() {
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col md:flex-row h-full md:h-[calc(100vh-5.5rem)] max-h-[calc(100vh-5.5rem)] gap-4 pb-2 overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row h-full md:h-full md:max-h-full gap-4 pb-1 overflow-hidden">
         
         {/* LEFT COLUMN: Products & Search */}
         <div className={cn("flex-1 flex flex-col h-full overflow-hidden animate-fade-in", activeMobileTab !== 'catalog' && "hidden md:flex")}>
