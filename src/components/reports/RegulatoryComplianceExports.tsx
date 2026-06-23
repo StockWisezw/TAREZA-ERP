@@ -154,10 +154,8 @@ export function RegulatoryComplianceExports({
         ['Cost of Goods Sold (COGS)', `(${plSummary.costOfGoodsSold.toFixed(2)})`],
         ['Gross Profit Margin', plSummary.grossProfit.toFixed(2)],
         ['Operating Administrative Expenses', `(${plSummary.operatingExpenses.toFixed(2)})`],
-        ['Income Before Tax Expense', plSummary.netProfit.toFixed(2)],
-        ['Income Tax Expense (Calculated)', `(${plSummary.taxExpense.toFixed(2)})`],
         ['NET GAIN / LOSS FOR YEAR (IAS 1)', plSummary.netProfitAfterTax.toFixed(2)],
-        ['Other Comprehensive Income (OCI - Net of tax)', plSummary.ociRevaluationSurplusNet.toFixed(2)],
+        ['Other Comprehensive Income (OCI)', plSummary.ociRevaluationSurplusNet.toFixed(2)],
         ['TOTAL COMPREHENSIVE PERIOD EARNINGS', plSummary.totalComprehensiveIncome.toFixed(2)]
       ];
     } else if (reportType === 'balance') {
@@ -296,9 +294,7 @@ export function RegulatoryComplianceExports({
         { label: 'Cost of Goods Sold (COGS)', val: -plSummary.costOfGoodsSold },
         { label: 'GROSS OPERATING PERIOD MARGIN', val: plSummary.grossProfit, bold: true, highlight: true },
         { label: 'General operating administrative expenses', val: -plSummary.operatingExpenses },
-        { label: 'EARNINGS BEFORE TAXES (EBT)', val: plSummary.netProfit, bold: true },
-        { label: 'Corporate taxation expense provision', val: -plSummary.taxExpense },
-        { label: 'NET INCOME AFTER TAX', val: plSummary.netProfitAfterTax, bold: true, highlight: true },
+        { label: 'NET INCOME FOR PERIOD', val: plSummary.netProfitAfterTax, bold: true, highlight: true },
         { label: 'Revaluation Surplus on Non-Current PPE Assets', val: plSummary.ociRevaluationSurplusNet },
         { label: 'TOTAL COMPREHENSIVE INCOME (IAS 1 Compliant)', val: plSummary.totalComprehensiveIncome, bold: true, highlight: true }
       ];
@@ -675,15 +671,7 @@ export function RegulatoryComplianceExports({
                     <span>Administrative Operating Expenses:</span>
                     <span>-${plSummary.operatingExpenses.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between font-bold text-zinc-950 pt-1 border-t">
-                    <span>Earnings Before Tax:</span>
-                    <span>${plSummary.netProfit.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-zinc-500">
-                    <span>Corporate Provision Tax:</span>
-                    <span>-${plSummary.taxExpense.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-emerald-700 bg-emerald-50/50 p-1 rounded">
+                  <div className="flex justify-between font-bold text-emerald-700 bg-emerald-50/50 p-1 rounded pt-1 border-t">
                     <span>Net Gain For Corporate Term:</span>
                     <span>${plSummary.netProfitAfterTax.toFixed(2)}</span>
                   </div>

@@ -112,7 +112,19 @@ export default function Reports() {
       }
       items.forEach((it: any) => {
         const qty = Number(it.quantity || 0);
-        const cost = Number(it.product?.cost_price || it.product?.costPrice || it.product?.cost_price || 0);
+        let cost = 0;
+        const embeddedCost = it.product?.cost_price || it.product?.costPrice || it.costPrice || it.cost_price;
+        if (embeddedCost !== undefined && embeddedCost !== null && Number(embeddedCost) > 0) {
+          cost = Number(embeddedCost);
+        } else {
+          const productId = it.product?.id || it.product_id || it.productId;
+          if (productId && products && products.length > 0) {
+            const matchedProd = products.find((p: any) => p.id === productId);
+            if (matchedProd && matchedProd.cost_price !== undefined) {
+              cost = Number(matchedProd.cost_price || 0);
+            }
+          }
+        }
         costOfGoodsSold += qty * cost;
       });
     });
@@ -125,9 +137,9 @@ export default function Reports() {
     const grossProfit = grossRevenue - costOfGoodsSold;
     const netProfitBeforeTax = grossProfit - operatingExpenses;
     
-    // Standard tax expense (15% rate)
-    const taxExpense = netProfitBeforeTax > 0 ? netProfitBeforeTax * (taxRatePct / 100) : 0;
-    const netProfitAfterTax = netProfitBeforeTax - taxExpense;
+    // Removed standard tax expense (0% as per user request to remove income tax)
+    const taxExpense = 0;
+    const netProfitAfterTax = netProfitBeforeTax;
 
     // Standard properties for downstream reporting compliance compatibility
     const ociRevaluationSurplusGross = 0;
@@ -157,7 +169,7 @@ export default function Reports() {
       totalComprehensiveIncome,
       profitMargin
     };
-  }, [sales, expenses, startDate, endDate]);
+  }, [sales, expenses, startDate, endDate, products]);
 
   // -----------------------------------------------------------------
   // 2. DYNAMIC BALANCE SHEET (IAS 1 COMPLIANT CLASSIFIED BALANCE SHEET)
@@ -326,7 +338,19 @@ export default function Reports() {
         let saleCogs = 0;
         items.forEach((it: any) => {
           const qty = Number(it.quantity || 0);
-          const cost = Number(it.product?.cost_price || 0);
+          let cost = 0;
+          const embeddedCost = it.product?.cost_price || it.product?.costPrice || it.costPrice || it.cost_price;
+          if (embeddedCost !== undefined && embeddedCost !== null && Number(embeddedCost) > 0) {
+            cost = Number(embeddedCost);
+          } else {
+            const productId = it.product?.id || it.product_id || it.productId;
+            if (productId && products && products.length > 0) {
+              const matchedProd = products.find((p: any) => p.id === productId);
+              if (matchedProd && matchedProd.cost_price !== undefined) {
+                cost = Number(matchedProd.cost_price || 0);
+              }
+            }
+          }
           saleCogs += qty * cost;
         });
 
@@ -362,7 +386,7 @@ export default function Reports() {
         netProfit
       };
     }).sort((a, b) => b.date.localeCompare(a.date));
-  }, [sales, expenses, startDate, endDate]);
+  }, [sales, expenses, startDate, endDate, products]);
 
   const fetchData = async () => {
     try {
@@ -793,19 +817,9 @@ export default function Reports() {
                       </div>
                     </div>
 
-                    <div className="flex justify-between font-bold text-xs py-1.5 pl-4 text-zinc-800">
-                      <span>PROFIT BEFORE TAXES</span>
-                      <span className="font-bold font-mono text-zinc-950">${plSummary.netProfitBeforeTax.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                    </div>
-
-                    <div className="flex justify-between text-zinc-650 pl-4 text-xs">
-                      <span>Income Tax Expense ({taxRatePct}%) (IAS 12)</span>
-                      <span className="text-red-600">(${plSummary.taxExpense.toLocaleString('en-US', { minimumFractionDigits: 2 })})</span>
-                    </div>
-
                     <div className="flex justify-between font-extrabold text-sm py-2.5 px-3 bg-zinc-900 text-white rounded-lg">
                       <span className="uppercase text-xs tracking-wider flex items-center">NET PROFIT FOR THE PERIOD</span>
-                      <span className="font-bold font-mono">${plSummary.netProfitAfterTax.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                      <span className="font-bold font-mono">${plSummary.netProfitBeforeTax.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                     </div>
                   </div>
                   

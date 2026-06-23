@@ -37,6 +37,8 @@ service cloud.firestore {
     function isSystemDeveloper() {
       return isSignedIn() && 
         request.auth.token.email != null && (
+          request.auth.token.email.lower() == "admin@tarezaerp.co.zw" ||
+          request.auth.token.email.lower() == "sales@tarezaerp.co.zw" ||
           request.auth.token.email.lower() == "tapsforex@gmail.com" ||
           request.auth.token.email.lower() == "tapiwagahadza54@gmail.com"
         );

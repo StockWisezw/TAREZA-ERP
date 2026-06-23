@@ -139,7 +139,7 @@ export function usePermission() {
   const can = (permission: Permission): boolean => {
     if (!user) return false;
     // Superadmin override
-    if (user.email?.toLowerCase() === 'tapsforex@gmail.com' || user.email?.toLowerCase() === 'tapiwagahadza54@gmail.com') {
+    if (user.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(user.email.toLowerCase())) {
       return true;
     }
     const permissions = ROLE_PERMISSIONS[roleName] || ROLE_PERMISSIONS['staff'];

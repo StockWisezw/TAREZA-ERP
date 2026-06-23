@@ -299,16 +299,14 @@ export default function Login() {
         return;
       }
 
-      const isDeveloperEmail = email?.toLowerCase() === 'tapsforex@gmail.com' || 
-                               email?.toLowerCase() === 'tapiwagahadza54@gmail.com';
+      const isDeveloperEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(email?.toLowerCase() || '');
 
       try {
         const userCredential = await signInWithEmailAndPassword(fireAuth, email, password);
         const firebaseUser = userCredential.user;
 
         // Check if verified
-        const isBypass = firebaseUser.email?.toLowerCase() === 'tapsforex@gmail.com' || 
-                         firebaseUser.email?.toLowerCase() === 'tapiwagahadza54@gmail.com';
+        const isBypass = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(firebaseUser.email?.toLowerCase() || '');
 
         if (!firebaseUser.emailVerified && !isBypass) {
           // Block immediately, sign out, and advise
@@ -560,49 +558,6 @@ export default function Login() {
               </CardDescription>
             </div>
           </CardHeader>
-
-          {/* Quick Demo Portals Switcher */}
-          {!isForgotPassword && (
-            <div className="px-8 pt-6 pb-2">
-              <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">
-                    <Sparkles className="h-4 w-4 text-emerald-600 animate-pulse shrink-0" />
-                    <span>Quick Demo Login Portal</span>
-                  </div>
-                  <span className="text-[9px] bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                    Sandbox Mode
-                  </span>
-                </div>
-                <p className="text-[11px] text-zinc-500 leading-normal">
-                  Bypass standard manual registration. Instantly log in or auto-seed a fully configured sandbox workspace:
-                </p>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => handleDemoLogin('developer')}
-                    disabled={loading}
-                    className="h-10 text-[11px] font-bold flex items-center justify-center gap-2 border border-zinc-200 hover:border-zinc-350 dark:border-zinc-800 dark:hover:border-zinc-700 bg-white dark:bg-zinc-950 shadow-xs cursor-pointer select-none rounded-xl"
-                  >
-                    <Fingerprint className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                    <span>As Developer</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => handleDemoLogin('client')}
-                    disabled={loading}
-                    className="h-10 text-[11px] font-bold flex items-center justify-center gap-2 border border-zinc-200 hover:border-zinc-350 dark:border-zinc-800 dark:hover:border-zinc-700 bg-white dark:bg-zinc-950 shadow-xs cursor-pointer select-none rounded-xl"
-                  >
-                    <Store className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>As Business / Client</span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
           <form onSubmit={isForgotPassword ? handleForgotPassword : handleAuth}>
             <CardContent className="space-y-5 p-8">
               {isForgotPassword ? (
@@ -874,96 +829,7 @@ export default function Login() {
           </form>
         </Card>
       </div>
-
-      {/* Developer Passcode Modal */}
-      {showDevModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-250">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl animate-in zoom-in-95 duration-150">
-            <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-              <Fingerprint className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              Developer Verification
-            </h3>
-            <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
-              Quick bypass registration is restricted to authorized developer credentials. Make sure you use the master passcode <strong>tareza1302</strong>:
-            </p>
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Username / Email</label>
-                <div className="mt-1 p-2.5 bg-zinc-50 dark:bg-zinc-800 rounded-lg text-xs font-mono text-zinc-600 dark:text-zinc-300 border border-zinc-150 dark:border-zinc-700/50 flex flex-col gap-1">
-                  <span>dev@tarezaerp.co.zw</span>
-                  <span className="text-[10px] font-sans text-zinc-400 dark:text-zinc-500 border-t border-zinc-200/55 dark:border-zinc-700/55 pt-1.5 mt-1.5 leading-normal">
-                    💡 You can also type your custom developer email (e.g. <strong>tapsforex@gmail.com</strong>) with the password <strong>tareza1302</strong> in the main Login Sign In form to seed and login instantly!
-                  </span>
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Enter Developer Password</label>
-                <div className="relative mt-1">
-                  <input
-                    type={showDevPassword ? "text" : "password"}
-                    placeholder="Enter password..."
-                    value={devPassword}
-                    onChange={(e) => setDevPassword(e.target.value)}
-                    className="w-full p-2.5 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs focus:ring-2 focus:ring-primary focus:border-transparent outline-none text-zinc-900 dark:text-zinc-100 font-sans pr-10"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        if (!devPassword) {
-                          toast.error("Please enter a password");
-                        } else if (devPassword !== 'tareza1302') {
-                          toast.error("Invalid developer credentials");
-                        } else {
-                          setShowDevModal(false);
-                          handleDemoLogin('developer', devPassword);
-                        }
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowDevPassword(!showDevPassword)}
-                    className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                    aria-label={showDevPassword ? "Hide password" : "Show password"}
-                  >
-                    {showDevPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="mt-5 flex gap-2 justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-xl text-xs px-4"
-                onClick={() => {
-                  setShowDevModal(false);
-                  setDevPassword('');
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                className="rounded-xl text-xs px-4 bg-indigo-600 hover:bg-indigo-700 text-white"
-                onClick={() => {
-                  if (!devPassword) {
-                    toast.error("Please enter a password");
-                  } else if (devPassword !== 'tareza1302') {
-                    toast.error("Invalid developer credentials");
-                  } else {
-                    const pass = devPassword;
-                    setShowDevModal(false);
-                    setDevPassword('');
-                    handleDemoLogin('developer', pass);
-                  }
-                }}
-              >
-                Verify & Sign In
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
+

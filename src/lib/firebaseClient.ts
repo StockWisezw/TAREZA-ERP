@@ -682,6 +682,8 @@ class SupabaseQueryBuilder {
     try {
       const email = fireAuth.currentUser?.email?.toLowerCase();
       const isSystemDev = email && (
+        email === 'admin@tarezaerp.co.zw' ||
+        email === 'sales@tarezaerp.co.zw' ||
         email === 'tapsforex@gmail.com' ||
         email === 'tapiwagahadza54@gmail.com'
       );
@@ -819,6 +821,8 @@ class SupabaseQueryBuilder {
  
      const email = fireAuth.currentUser?.email?.toLowerCase();
      const isSystemDev = email && (
+       email === 'admin@tarezaerp.co.zw' ||
+       email === 'sales@tarezaerp.co.zw' ||
        email === 'tapsforex@gmail.com' ||
        email === 'tapiwagahadza54@gmail.com'
      );

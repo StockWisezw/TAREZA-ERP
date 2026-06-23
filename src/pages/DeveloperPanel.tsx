@@ -51,8 +51,7 @@ const supabaseConfig = { storageBucket: 'tareza-backups' };
 export default function DeveloperPanel() {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
-  const isDeveloper = user?.email?.toLowerCase() === 'tapsforex@gmail.com' || 
-                      user?.email?.toLowerCase() === 'tapiwagahadza54@gmail.com';
+  const isDeveloper = user?.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(user.email.toLowerCase());
 
   const [businesses, setBusinesses] = useState<any[]>([]);
   const [subscriptions, setSubscriptions] = useState<any[]>([]);

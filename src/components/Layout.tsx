@@ -81,8 +81,7 @@ export default function Layout() {
   const location = useLocation();
   const isPosPage = location.pathname === '/pos';
   const navigate = useNavigate();
-  const isDeveloper = user?.email?.toLowerCase() === 'tapsforex@gmail.com' || 
-                      user?.email?.toLowerCase() === 'tapiwagahadza54@gmail.com';
+  const isDeveloper = user?.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(user.email.toLowerCase());
   // Screen lock removed per user request
   const isLocked = false;
   const [businessName, setBusinessName] = React.useState<string>('');
@@ -296,13 +295,13 @@ export default function Layout() {
           <div className={`p-4 flex flex-col gap-1.5 border-t border-zinc-150 dark:border-zinc-850 bg-zinc-100/10 dark:bg-[#0c0c0d] ${
             sidebarExpanded ? 'items-stretch' : 'items-center px-1'
           }`}>
-            {(user?.email?.toLowerCase() === 'tapsforex@gmail.com' || user?.email?.toLowerCase() === 'tapiwagahadza54@gmail.com') && (
+            {(user?.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(user.email.toLowerCase())) && (
               sidebarExpanded ? (
-                <div className="px-3 py-1 bg-blue-500/10 rounded-full text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase text-center tracking-widest mx-2 mb-1.5 select-none">
-                  Superadmin
+                <div className="px-3 py-1 bg-indigo-500/10 rounded-full text-[9px] font-bold text-indigo-600 dark:text-indigo-400 uppercase text-center tracking-widest mx-2 mb-1.5 select-none">
+                  Super Admin
                 </div>
               ) : (
-                <div className="h-4 w-4 rounded-full bg-blue-500 flex items-center justify-center text-[7px] font-extrabold text-white select-none mb-1 shadow-sm" title="Superadmin font mode">
+                <div className="h-4 w-4 rounded-full bg-indigo-500 flex items-center justify-center text-[7px] font-extrabold text-white select-none mb-1 shadow-sm" title="Super Admin mode">
                   S
                 </div>
               )
