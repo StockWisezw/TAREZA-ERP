@@ -109,7 +109,6 @@ function createFirestoreInstance() {
     try {
       return initializeFirestore(app, {
         experimentalForceLongPolling: true,
-        experimentalAutoDetectLongPolling: true,
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager()
         })
@@ -123,14 +122,12 @@ function createFirestoreInstance() {
   try {
     return initializeFirestore(app, {
       experimentalForceLongPolling: true,
-      experimentalAutoDetectLongPolling: true,
       localCache: memoryLocalCache()
     }, resolvedConfig.firestoreDatabaseId);
   } catch (err: any) {
     console.warn('[Firebase] Fallback to standard initializeFirestore: ', err);
     return initializeFirestore(app, {
-      experimentalForceLongPolling: true,
-      experimentalAutoDetectLongPolling: true
+      experimentalForceLongPolling: true
     }, resolvedConfig.firestoreDatabaseId);
   }
 }
