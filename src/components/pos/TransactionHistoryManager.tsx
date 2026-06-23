@@ -134,41 +134,52 @@ export const TransactionHistoryManager: React.FC<TransactionHistoryManagerProps>
       if (saleUpdateErr) throw saleUpdateErr;
 
       // 2. Update active register session metrics in Firestore & Supabase
-      const sessRef = doc(db, 'register_sessions', activeSession.id);
-      const sessSnap = await getDoc(sessRef);
-      let updatedRefundsTotal = refundAmount;
-      let updatedExpectedBalance = 0;
+      let updatedRefundsTotal = Number(activeSession.refunds_total || 0) + refundAmount;
+      let updatedExpectedBalance = Number(activeSession.expected_balance || 0) - refundAmount;
 
-      if (sessSnap.exists()) {
-        const sessData = sessSnap.data();
-        updatedRefundsTotal = Number(sessData.refunds_total || 0) + refundAmount;
-        updatedExpectedBalance = Number(sessData.expected_balance || 0) - refundAmount;
+      if (activeSession && activeSession.id && !activeSession.id.startsWith('off-shift-')) {
+        try {
+          const sessRef = doc(db, 'register_sessions', activeSession.id);
+          const sessSnap = await getDoc(sessRef);
+          if (sessSnap.exists()) {
+            const sessData = sessSnap.data();
+            updatedRefundsTotal = Number(sessData.refunds_total || 0) + refundAmount;
+            updatedExpectedBalance = Number(sessData.expected_balance || 0) - refundAmount;
 
-        // Firestore Update
-        await updateDoc(sessRef, {
-          refunds_total: updatedRefundsTotal,
-          expected_balance: updatedExpectedBalance
-        });
-
-        // Local state update
-        setActiveSession({
-          ...activeSession,
-          refunds_total: updatedRefundsTotal,
-          expected_balance: updatedExpectedBalance
-        });
+            // Firestore Update
+            await updateDoc(sessRef, {
+              refunds_total: updatedRefundsTotal,
+              expected_balance: updatedExpectedBalance
+            });
+          }
+        } catch (sessErr) {
+          console.warn('[Refund] Failed to update Firestore session metrics:', sessErr);
+        }
       }
 
-      // Supabase session update for total sync
-      try {
-        await supabase
-          .from('register_sessions')
-          .update({
-            refunds_total: updatedRefundsTotal,
-            expected_balance: updatedExpectedBalance
-          })
-          .eq('id', activeSession.id);
-      } catch (errSup) {
-        console.warn('[Refund] Session update failed in Supabase:', errSup);
+      // Local state update (Always run for both online and offline sessions)
+      const updatedSess = {
+        ...activeSession,
+        refunds_total: updatedRefundsTotal,
+        expected_balance: updatedExpectedBalance
+      };
+      setActiveSession(updatedSess);
+      localStorage.setItem('tareza_active_offline_session', JSON.stringify(updatedSess));
+      localStorage.setItem('tareza_active_session_cache', JSON.stringify(updatedSess));
+
+      // Supabase session update for total sync (Only if not off-shift)
+      if (activeSession && activeSession.id && !activeSession.id.startsWith('off-shift-')) {
+        try {
+          await supabase
+            .from('register_sessions')
+            .update({
+              refunds_total: updatedRefundsTotal,
+              expected_balance: updatedExpectedBalance
+            })
+            .eq('id', activeSession.id);
+        } catch (errSup) {
+          console.warn('[Refund] Session update failed in Supabase:', errSup);
+        }
       }
 
       // 3. Reverse inventory count and log stock movements if requested

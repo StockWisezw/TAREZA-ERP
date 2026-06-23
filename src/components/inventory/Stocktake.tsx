@@ -1189,6 +1189,11 @@ export function Stocktake() {
                       return;
                     }
                     
+                    if (reviewItem.pos_session_id.startsWith('off-shift-')) {
+                      toast.error("Cannot charge stocktake adjustments to an offline or local POS session.");
+                      return;
+                    }
+                    
                     try {
                       const sessRef = doc(db, 'register_sessions', reviewItem.pos_session_id);
                       const sessSnap = await getDoc(sessRef);

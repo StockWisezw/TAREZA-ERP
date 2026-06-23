@@ -226,7 +226,8 @@ export async function openRegisterSession(
   businessId: string,
   branchId: string,
   userId: string,
-  openingFloat: number
+  openingFloat: number,
+  cashierId?: string
 ): Promise<{ success: boolean; session?: any; error?: string }> {
   try {
     const existing = await getOpenRegisterSession(businessId, userId);
@@ -240,6 +241,7 @@ export async function openRegisterSession(
       business_id: businessId,
       branch_id: branchId,
       user_id: userId,
+      cashier_id: cashierId || userId,
       opening_balance: openingFloat,
       closing_balance: 0,
       expected_balance: openingFloat,

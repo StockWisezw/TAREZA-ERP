@@ -222,7 +222,7 @@ export default function POS() {
           const { data: bData } = await supabase.from('business_users').select('business_id, branch_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
           if (bData) {
             userBusinessId = bData.business_id;
-            userBranchId = bData.branch_id;
+            userBranchId = activeSession?.branch_id && activeSession.branch_id !== 'offline_branch_id' ? activeSession.branch_id : bData.branch_id;
           }
         }
 
@@ -379,7 +379,7 @@ export default function POS() {
     return () => {
       if (unsubscribeProducts) unsubscribeProducts();
     };
-  }, []);
+  }, [activeSession?.id, activeSession?.branch_id]);
 
   // Update voice assistant capability
   useEffect(() => {
@@ -895,11 +895,18 @@ export default function POS() {
           let businessId = activeSession?.business_id || '';
           let branchId = activeSession?.branch_id || '';
 
-          if (userData?.user && (!businessId || businessId === 'default_business' || !branchId || branchId === 'default_branch')) {
+          if (businessId === 'offline_business_id' || businessId === 'default_business') {
+            businessId = '';
+          }
+          if (branchId === 'offline_branch_id' || branchId === 'default_branch') {
+            branchId = '';
+          }
+
+          if (userData?.user && (!businessId || !branchId)) {
             const { data: businessData } = await supabase.from('business_users').select('business_id, branch_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
             if (businessData) {
-              if (!businessId || businessId === 'default_business') businessId = businessData.business_id || '';
-              if (!branchId || branchId === 'default_branch') branchId = businessData.branch_id || '';
+              if (!businessId) businessId = businessData.business_id || '';
+              if (!branchId) branchId = businessData.branch_id || '';
             }
           }
 
@@ -1030,25 +1037,34 @@ export default function POS() {
             );
 
             // 3. Update active session metrics
-            const sessRef = doc(db, 'register_sessions', activeSession.id);
-            const sessSnap = await getDoc(sessRef);
-            if (sessSnap.exists()) {
-              const sessData = sessSnap.data();
-              const currentTotalSales = Number(sessData.sales_total || 0) + sale.total;
-              const currentCountSales = Number(sessData.sales_count || 0) + 1;
-              const currentExpectedObj = Number(sessData.expected_balance || 0) + sale.total;
-              await updateDoc(sessRef, {
-                sales_total: currentTotalSales,
-                sales_count: currentCountSales,
-                expected_balance: currentExpectedObj
-              });
-              // Update activeSession state
-              setActiveSession({
-                ...activeSession,
-                sales_total: currentTotalSales,
-                sales_count: currentCountSales,
-                expected_balance: currentExpectedObj
-              } as any);
+            if (activeSession && activeSession.id && !activeSession.id.startsWith('off-shift-')) {
+              try {
+                const sessRef = doc(db, 'register_sessions', activeSession.id);
+                const sessSnap = await getDoc(sessRef);
+                if (sessSnap.exists()) {
+                  const sessData = sessSnap.data();
+                  const currentTotalSales = Number(sessData.sales_total || 0) + sale.total;
+                  const currentCountSales = Number(sessData.sales_count || 0) + 1;
+                  const currentExpectedObj = Number(sessData.expected_balance || 0) + sale.total;
+                  await updateDoc(sessRef, {
+                    sales_total: currentTotalSales,
+                    sales_count: currentCountSales,
+                    expected_balance: currentExpectedObj
+                  });
+                  // Update activeSession state
+                  setActiveSession({
+                    ...activeSession,
+                    sales_total: currentTotalSales,
+                    sales_count: currentCountSales,
+                    expected_balance: currentExpectedObj
+                  } as any);
+                }
+              } catch (sessErr) {
+                console.warn('[POS] Failed to update Firestore session metrics:', sessErr);
+                updateLocalSessionWithOfflineSale(sale.total);
+              }
+            } else {
+              updateLocalSessionWithOfflineSale(sale.total);
             }
 
             // 4. Update Customer credit balance if credit purchase

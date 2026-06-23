@@ -205,7 +205,7 @@ service cloud.firestore {
     }
     
     match /register_sessions/{id} {
-      allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
+      allow read: if isSystemDeveloper() || resource == null || belongsToUserBusiness(existing().business_id);
       allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
                     (resource == null || businessIdUnchanged()));
     }

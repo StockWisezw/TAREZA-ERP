@@ -13,6 +13,7 @@ export interface RegisterSession {
   business_id: string;
   branch_id: string;
   cashier_id: string;
+  user_id?: string;
   opened_at: string;
   opening_balance: number;
   expected_balance: number;
@@ -254,7 +255,7 @@ export function usePOSSession() {
     }
   }, []);
 
-  const handleStartShift = async () => {
+  const handleStartShift = async (customBranchId?: string, customCashierId?: string, customUserId?: string) => {
     try {
       const floatVal = parseFloat(openingFloat) || 0;
       if (requireFloat && (!openingFloat || floatVal <= 0)) {
@@ -275,8 +276,9 @@ export function usePOSSession() {
         const offlineShiftObj: RegisterSession & { is_offline: boolean; synced: boolean } = {
           id: offSessionId,
           business_id: 'offline_business_id',
-          branch_id: 'offline_branch_id',
-          cashier_id: userData?.user?.id || 'offline_cashier_id',
+          branch_id: customBranchId || 'offline_branch_id',
+          cashier_id: customCashierId || userData?.user?.id || 'offline_cashier_id',
+          user_id: customUserId || userData?.user?.id || 'offline_user_id',
           opened_at: new Date().toISOString(),
           opening_balance: floatVal,
           expected_balance: floatVal,
@@ -315,7 +317,7 @@ export function usePOSSession() {
         .maybeSingle();
 
       let bid = businessData?.business_id;
-      let brid = businessData?.branch_id;
+      let brid = customBranchId || businessData?.branch_id;
 
       if (!bid || bid === 'default_business') {
         const { data: fallbackB } = await supabase.from('businesses').select('id').limit(1).maybeSingle();
@@ -341,7 +343,13 @@ export function usePOSSession() {
         }
       }
 
-      const res = await openRegisterSession(bid || '00000000-0000-0000-0000-000000000000', brid || '00000000-0000-0000-0000-000000000000', userData.user.id, floatVal);
+      const res = await openRegisterSession(
+        bid || '00000000-0000-0000-0000-000000000000', 
+        brid || '00000000-0000-0000-0000-000000000000', 
+        customUserId || userData.user.id, 
+        floatVal,
+        customCashierId || customUserId || userData.user.id
+      );
       if (res.success) {
         setActiveSession(res.session);
         toast.success(`Active register session successfully started with float $${floatVal.toFixed(2)}.`);
