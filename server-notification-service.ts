@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 
 // Configuration defaults with fallback systems
 const TARGET_WHATSAPP_PHONE = process.env.NOTIFICATION_WHATSAPP_PHONE || "263784553570"; // Country code 263 for Zimbabwe as default for 0784553570
-const TARGET_EMAIL = process.env.NOTIFICATION_RECEIVER_EMAIL || "tapsforex@gmail.com";
+const TARGET_EMAIL = process.env.NOTIFICATION_RECEIVER_EMAIL || "admin@tarezaerp.co.zw, sales@tarezaerp.co.zw";
 
 export interface LoggedNotification {
   timestamp: string;

@@ -54,11 +54,16 @@ service cloud.firestore {
         (resource != null && resource.data.user_id == request.auth.uid) ||
         belongsToUserBusiness(existing().business_id)
       ));
-      allow write: if isSystemDeveloper() || (isSignedIn() && (
-        request.auth.uid == userId || 
-        (incoming() != null && incoming().user_id == request.auth.uid)
-      ) && (
-        resource == null ||
+      allow create: if isSystemDeveloper() || (isSignedIn() && (
+        request.auth.uid == userId ||
+        belongsToUserBusiness(incoming().business_id)
+      ));
+      allow update: if isSystemDeveloper() || (isSignedIn() && (
+        (request.auth.uid == userId && (resource == null || belongsToUserBusiness(existing().business_id)) && businessIdUnchanged()) ||
+        belongsToUserBusiness(existing().business_id)
+      ));
+      allow delete: if isSystemDeveloper() || (isSignedIn() && (
+        request.auth.uid == userId ||
         belongsToUserBusiness(existing().business_id)
       ));
     }
@@ -75,14 +80,16 @@ service cloud.firestore {
     
     match /branches/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /roles/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
 
     match /role_permissions/{id} {
@@ -91,130 +98,152 @@ service cloud.firestore {
     
     match /categories/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /products/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /inventory/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /customers/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /suppliers/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /sales/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
 
     match /sale_items/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /expense_categories/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /cash_drawer_logs/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /tax_rates/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /purchase_orders/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /stocktakes_advanced/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /inventory_transfers/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
 
     match /stock_movements/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
 
     match /inventory_batches/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /subscriptions/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || 
-                   (belongsToUserBusiness(incoming().business_id) && (resource == null || businessIdUnchanged())) ||
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || 
+                   (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged()) ||
                    (request.resource.data.system_admin_key == "paynow_secure_bypass_3892");
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /accounts/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /journal_entries/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
 
     match /journal_lines/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /register_sessions/{id} {
       allow read: if isSystemDeveloper() || resource == null || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     // System audit logger (Trace compliance)
     match /audit_logs/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
     
     match /support_tickets/{id} {
@@ -222,10 +251,17 @@ service cloud.firestore {
         request.auth.uid == existing().user_id ||
         belongsToUserBusiness(existing().business_id)
       ));
-      allow write: if isSystemDeveloper() || (isSignedIn() && (
+      allow create: if isSystemDeveloper() || (isSignedIn() && (
         request.auth.uid == incoming().user_id ||
         belongsToUserBusiness(incoming().business_id)
-      ) && (resource == null || businessIdUnchanged()));
+      ));
+      allow update: if isSystemDeveloper() || (isSignedIn() && (
+        (request.auth.uid == incoming().user_id || belongsToUserBusiness(existing().business_id)) && businessIdUnchanged()
+      ));
+      allow delete: if isSystemDeveloper() || (isSignedIn() && (
+        request.auth.uid == existing().user_id ||
+        belongsToUserBusiness(existing().business_id)
+      ));
     }
 
     // 5. New custom collections for specialized user channels
@@ -233,9 +269,14 @@ service cloud.firestore {
       allow read: if isSystemDeveloper() || (isSignedIn() && (
         resource == null || request.auth.uid == resource.data.userId
       ));
-      allow write: if isSystemDeveloper() || (isSignedIn() && (
-        request.resource.data.userId == request.auth.uid &&
-        (resource == null || resource.data.userId == request.auth.uid)
+      allow create: if isSystemDeveloper() || (isSignedIn() && (
+        request.resource.data.userId == request.auth.uid
+      ));
+      allow update: if isSystemDeveloper() || (isSignedIn() && (
+        request.resource.data.userId == request.auth.uid && resource.data.userId == request.auth.uid
+      ));
+      allow delete: if isSystemDeveloper() || (isSignedIn() && (
+        resource.data.userId == request.auth.uid
       ));
     }
 
@@ -244,21 +285,24 @@ service cloud.firestore {
         request.auth.uid == resource.data.sender_id ||
         request.auth.uid == resource.data.receiver_id
       ));
-      allow write: if isSystemDeveloper() || (isSignedIn() && (
+      allow create: if isSystemDeveloper() || (isSignedIn() && (
         request.auth.uid == request.resource.data.sender_id
       ));
+      allow update, delete: if isSystemDeveloper();
     }
 
     match /trial_bookkeepings/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
 
     match /currencies/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
-      allow write: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && 
-                    (resource == null || businessIdUnchanged()));
+      allow create: if isSystemDeveloper() || belongsToUserBusiness(incoming().business_id);
+      allow update: if isSystemDeveloper() || (belongsToUserBusiness(incoming().business_id) && businessIdUnchanged());
+      allow delete: if isSystemDeveloper() || belongsToUserBusiness(existing().business_id);
     }
 
     match /exchange_rate_history/{id} {
