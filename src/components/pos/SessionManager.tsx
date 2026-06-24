@@ -69,11 +69,11 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [loadingForm, setLoadingForm] = useState(false);
 
-  // Load and cache active database entities for shift management mapping (like Odoo POS)
+  // Load and cache active database entities for shift management mapping (like Tareza POS)
   useEffect(() => {
     if (activeSession) return;
 
-    const fetchOdooShiftOptions = async () => {
+    const fetchTarezaShiftOptions = async () => {
       try {
         setLoadingForm(true);
         const { data: userData } = await supabase.auth.getUser();
@@ -121,7 +121,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           setSelectedUserId(fallbackUser.id);
         }
       } catch (err) {
-        console.warn('[OdooShift] Options query failed, loaded offline parameters:', err);
+        console.warn('[TarezaShift] Options query failed, loaded offline parameters:', err);
         setBranches([{ id: 'default_branch', name: 'Local Store Warehouse', type: 'retail' }]);
         setSelectedBranchId('default_branch');
       } finally {
@@ -129,7 +129,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
       }
     };
 
-    fetchOdooShiftOptions();
+    fetchTarezaShiftOptions();
   }, [activeSession]);
 
   // Load options for viewing active details as well
@@ -179,11 +179,11 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           
           <CardHeader className="pt-6 pb-4">
             <div className="flex items-center gap-2 mb-2">
-              <span className="p-1 px-2.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/55 text-indigo-700 dark:text-indigo-400 text-[10px] font-bold font-mono tracking-wider uppercase">ODOO SHIFT WORKFLOW</span>
+              <span className="p-1 px-2.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/55 text-indigo-700 dark:text-indigo-400 text-[10px] font-bold font-mono tracking-wider uppercase">TAREZA SHIFT WORKFLOW</span>
             </div>
             <CardTitle className="text-2xl font-black text-zinc-900 dark:text-white font-sans tracking-tight">Initialize POS Terminal Shift</CardTitle>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed mt-1">
-              Set up your Odoo-style point of sale sessions. Assign a certified cashier, select the origin inventory warehouse/branch, and allocate responsibility for physical cash drawer balance accountability.
+              Set up your Tareza-style point of sale sessions. Assign a certified cashier, select the origin inventory warehouse/branch, and allocate responsibility for physical cash drawer balance accountability.
             </p>
           </CardHeader>
 
@@ -331,7 +331,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
               className="w-full bg-zinc-900 hover:bg-zinc-800 dark:bg-indigo-600 dark:hover:bg-indigo-705 text-white py-5 font-black text-sm select-none cursor-pointer rounded-xl flex items-center justify-center gap-2"
             >
               <Play className="w-4 h-4 fill-current shrink-0" />
-              <span>Initialize & Start Odoo Session</span>
+              <span>Initialize & Start Tareza Session</span>
             </Button>
           </DialogFooter>
         </Card>
@@ -364,7 +364,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
 
             <div className="space-y-4 pt-3">
               
-              {/* Odoo Assignment Context Grid */}
+              {/* Tareza Assignment Context Grid */}
               <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl p-3 border border-zinc-150 dark:border-zinc-800 space-y-2 text-xs">
                 <div className="flex justify-between items-center py-1">
                   <span className="text-zinc-500 font-semibold flex items-center gap-1"><Warehouse className="w-3.5 h-3.5" /> Warehouse:</span>
