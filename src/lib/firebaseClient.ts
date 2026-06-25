@@ -116,10 +116,11 @@ function createFirestoreInstance() {
     try {
       return initializeFirestore(app, {
         experimentalForceLongPolling: true,
+        useFetchStreams: false,
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager()
         })
-      }, resolvedConfig.firestoreDatabaseId);
+      } as any, resolvedConfig.firestoreDatabaseId);
     } catch (err: any) {
       console.warn('[Firebase] Fallback to memoryLocalCache due to IndexedDb or container restriction: ', err);
     }
@@ -129,13 +130,15 @@ function createFirestoreInstance() {
   try {
     return initializeFirestore(app, {
       experimentalForceLongPolling: true,
+      useFetchStreams: false,
       localCache: memoryLocalCache()
-    }, resolvedConfig.firestoreDatabaseId);
+    } as any, resolvedConfig.firestoreDatabaseId);
   } catch (err: any) {
     console.warn('[Firebase] Fallback to standard initializeFirestore: ', err);
     return initializeFirestore(app, {
-      experimentalForceLongPolling: true
-    }, resolvedConfig.firestoreDatabaseId);
+      experimentalForceLongPolling: true,
+      useFetchStreams: false
+    } as any, resolvedConfig.firestoreDatabaseId);
   }
 }
 
@@ -148,14 +151,8 @@ async function testConnection() {
     console.warn('[Firebase] Device reports offline. Caching engines active. App remains completely operational.');
     return;
   }
-  try {
-    const connectionPromise = getDocFromServer(fireDoc(db, 'test_connection', 'ping'));
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
-    await Promise.race([connectionPromise, timeoutPromise]);
-    console.log('[Firebase] Connection validated successfully.');
-  } catch (error) {
-    console.warn('[Firebase] Connection validation completed (offline-ready caching is active). App remains completely operational.');
-  }
+  // Let Firestore connect naturally in the background without forcing a blocking network request on startup
+  console.log('[Firebase] Connection initialization completed (offline-ready caching is active).');
 }
 setTimeout(() => {
   testConnection();
