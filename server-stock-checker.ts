@@ -9,52 +9,41 @@ interface InventoryItem {
   reorder_level: number;
 }
 
-interface ProductItem {
-  id: string;
-  name: string;
-  sku: string;
-}
-
-interface BranchItem {
-  id: string;
-  name: string;
-}
-
 /**
  * Checks all inventory stock levels against their reorder thresholds and dispatches a prioritized WhatsApp alert.
  */
-export async function checkLowStockAndNotify(db: any): Promise<{ success: boolean; count: number; message: string; notes?: string }> {
+export async function checkLowStockAndNotify(supabaseClient: any): Promise<{ success: boolean; count: number; message: string; notes?: string }> {
   try {
-    console.log("[StockChecker] Querying Firestore for inventory, products and branches...");
+    console.log("[StockChecker] Querying Supabase for inventory, products and branches...");
     
     // 1. Fetch branches for branch-name resolution
-    const branchesSnap = await db.collection("branches").get();
+    const { data: branches, error: bErr } = await supabaseClient.from("branches").select("id, name");
+    if (bErr) throw bErr;
     const branchesMap = new Map<string, string>();
-    branchesSnap.forEach((doc: any) => {
-      const data = doc.data();
-      branchesMap.set(doc.id, data.name || "Default Branch");
+    branches?.forEach((b: any) => {
+      branchesMap.set(b.id, b.name || "Default Branch");
     });
 
     // 2. Fetch products for readable product names & SKU values
-    const productsSnap = await db.collection("products").get();
+    const { data: products, error: pErr } = await supabaseClient.from("products").select("id, name, sku");
+    if (pErr) throw pErr;
     const productsMap = new Map<string, { name: string; sku: string }>();
-    productsSnap.forEach((doc: any) => {
-      const data = doc.data();
-      productsMap.set(doc.id, {
-        name: data.name || "Unnamed Product",
-        sku: data.sku || "N/A"
+    products?.forEach((p: any) => {
+      productsMap.set(p.id, {
+        name: p.name || "Unnamed Product",
+        sku: p.sku || "N/A"
       });
     });
 
     // 3. Fetch current inventory stock quantities
-    const inventorySnap = await db.collection("inventory").get();
+    const { data: inventory, error: iErr } = await supabaseClient.from("inventory").select("*");
+    if (iErr) throw iErr;
     
     // 4. Identify low stock items
     const lowStockItemsByBranch = new Map<string, Array<{ product: string; sku: string; qty: number; limit: number }>>();
     let lowStockTotalCount = 0;
 
-    inventorySnap.forEach((doc: any) => {
-      const item = doc.data() as InventoryItem;
+    inventory?.forEach((item: any) => {
       const quantity = Number(item.quantity ?? 0);
       const reorderLevel = Number(item.reorder_level ?? 5);
 
@@ -142,13 +131,13 @@ export async function checkLowStockAndNotify(db: any): Promise<{ success: boolea
  * Initializes the background scheduled cron-interval running every 12 hours.
  * Also initiates a lightweight startup test 30 seconds after launch for quick verify.
  */
-export function initBackgroundStockTracker(db: any) {
+export function initBackgroundStockTracker(supabaseClient: any) {
   console.log("[StockChecker] Initializing low-stock background checker job...");
 
   // Startup timer check (triggers after 30 seconds for verification ease, without locking startup process)
   setTimeout(() => {
     console.log("[StockChecker] Executing automated startup inventory analysis...");
-    checkLowStockAndNotify(db).catch((err) => {
+    checkLowStockAndNotify(supabaseClient).catch((err) => {
       console.error("[StockChecker] Startup stock analysis check failed:", err);
     });
   }, 30000);
@@ -157,7 +146,7 @@ export function initBackgroundStockTracker(db: any) {
   const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
   setInterval(() => {
     console.log("[StockChecker] Starting scheduled 12-hour background stock check cycle...");
-    checkLowStockAndNotify(db).catch((err) => {
+    checkLowStockAndNotify(supabaseClient).catch((err) => {
       console.error("[StockChecker] Background scheduled stock check failed:", err);
     });
   }, TWELVE_HOURS_MS);

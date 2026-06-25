@@ -3,10 +3,9 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { Paynow } from "paynow";
-import { initializeApp as initAdminApp } from "firebase-admin/app";
-import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { GoogleGenAI, Type } from "@google/genai";
 import nodemailer from "nodemailer";
+import { createClient } from "@supabase/supabase-js";
 import { dispatchAlert, notificationAuditLogs } from "./server-notification-service.js";
 import { initBackgroundStockTracker, checkLowStockAndNotify } from "./server-stock-checker.js";
 
@@ -55,38 +54,35 @@ async function startServer() {
   // Apply API rate-limiting to all secure endpoints
   app.use("/api", rateLimiter);
 
-  // Load applet's Firebase configuration to connect securely on the backend
-  let firebaseConfig = {};
-  try {
-    const fileContent = fs.readFileSync(path.join(process.cwd(), "firebase-applet-config.json"), "utf8");
-    firebaseConfig = JSON.parse(fileContent);
-  } catch (err) {
-    firebaseConfig = {
-      apiKey: process.env.VITE_FIREBASE_API_KEY,
-      authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId: process.env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId: process.env.VITE_FIREBASE_APP_ID,
-    };
+  // Load Supabase configuration to connect securely on the backend
+  let rawSupabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+  if (rawSupabaseUrl.startsWith('https://https://')) {
+    rawSupabaseUrl = rawSupabaseUrl.replace('https://https://', 'https://');
   }
+  const supabaseUrl = rawSupabaseUrl;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 
-  const adminApp = initAdminApp({
-    projectId: (firebaseConfig as any).projectId,
+  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
   });
-  const firestoreDb = getAdminFirestore(adminApp, (firebaseConfig as any).firestoreDatabaseId);
 
   // Initialize automated background stock replenishment tracker
-  initBackgroundStockTracker(firestoreDb);
+  initBackgroundStockTracker(supabaseAdmin);
 
   async function getBusinessSmtp(businessId: string | undefined): Promise<{ host: string; port: number; user: string; pass: string } | undefined> {
     if (!businessId) return undefined;
     try {
-      const businessRef = firestoreDb.doc(`businesses/${businessId}`);
-      const businessDoc = await businessRef.get();
-      if (businessDoc.exists) {
-        const data = businessDoc.data();
-        if (data?.smtp_host && data?.smtp_user && data?.smtp_pass) {
+      const { data, error } = await supabaseAdmin
+        .from("businesses")
+        .select("smtp_host, smtp_port, smtp_user, smtp_pass")
+        .eq("id", businessId)
+        .maybeSingle();
+
+      if (!error && data) {
+        if (data.smtp_host && data.smtp_user && data.smtp_pass) {
           return {
             host: data.smtp_host,
             port: data.smtp_port ? parseInt(data.smtp_port) : 587,
@@ -100,6 +96,53 @@ async function startServer() {
     }
     return undefined;
   }
+
+  // Unified Staff Registration Endpoint
+  app.post("/api/auth/register-user", async (req, res) => {
+    const { email, password, firstName, lastName } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: "Missing email or password parameters" });
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ error: "Supabase service role keys are not configured on the backend" });
+    }
+
+    try {
+      const { createClient } = await import("@supabase/supabase-js");
+      let cleanedUrl = supabaseUrl.trim();
+      if (cleanedUrl.startsWith('https://https://')) {
+        cleanedUrl = cleanedUrl.replace('https://https://', 'https://');
+      }
+      const adminSupabase = createClient(cleanedUrl, supabaseServiceKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      });
+
+      const { data, error } = await adminSupabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          name: `${firstName || ''} ${lastName || ''}`.trim()
+        }
+      });
+
+      if (error) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      return res.json({ success: true, user: data.user });
+    } catch (err: any) {
+      console.error("Failed to register staff user via admin API:", err);
+      return res.status(500).json({ error: err.message || "Internal server error during staff creation" });
+    }
+  });
 
   // 0. Notifications Integration Endpoint
   app.post("/api/notifications/notify", async (req, res) => {
@@ -126,17 +169,20 @@ async function startServer() {
     }
 
     try {
-      const businessRef = firestoreDb.doc(`businesses/${business_id}`);
-      const businessDoc = await businessRef.get();
-      if (!businessDoc.exists) {
+      const { data: bizData, error } = await supabaseAdmin
+        .from("businesses")
+        .select("*")
+        .eq("id", business_id)
+        .maybeSingle();
+
+      if (error || !bizData) {
         return res.status(404).json({ error: "Business workspace not found" });
       }
 
-      const bizData = businessDoc.data();
-      const smtpHost = bizData?.smtp_host;
-      const smtpPort = bizData?.smtp_port ? parseInt(bizData.smtp_port) : 587;
-      const smtpUser = bizData?.smtp_user;
-      const smtpPass = bizData?.smtp_pass;
+      const smtpHost = bizData.smtp_host;
+      const smtpPort = bizData.smtp_port ? parseInt(bizData.smtp_port) : 587;
+      const smtpUser = bizData.smtp_user;
+      const smtpPass = bizData.smtp_pass;
 
       if (!smtpHost || !smtpUser || !smtpPass) {
         return res.status(400).json({ 
@@ -222,7 +268,7 @@ async function startServer() {
   // Manual low-stock reorder limits alert checker
   app.post("/api/inventory/check-low-stock", async (req, res) => {
     try {
-      const result = await checkLowStockAndNotify(firestoreDb);
+      const result = await checkLowStockAndNotify(supabaseAdmin);
       return res.json(result);
     } catch (err: any) {
       console.error("Manual stock checker endpoint failed:", err);
@@ -304,30 +350,39 @@ async function startServer() {
         const expiryDate = new Date();
         expiryDate.setDate(expiryDate.getDate() + 30);
 
-        // Update businesses table in Firestore
-        const businessRef = firestoreDb.doc(`businesses/${business_id}`);
-        await businessRef.update({
-          subscription_status: "ACTIVE",
-          subscription_end_date: expiryDate.toISOString(),
-          system_admin_key: "paynow_secure_bypass_3892"
-        });
+        // Update businesses table in Supabase
+        await supabaseAdmin
+          .from("businesses")
+          .update({
+            subscription_status: "ACTIVE",
+            subscription_end_date: expiryDate.toISOString()
+          })
+          .eq("id", business_id);
 
         // Add to subscriptions collection if not already there
-        const subscriptionsCol = firestoreDb.collection("subscriptions");
-        await subscriptionsCol.add({
-          business_id: business_id,
-          plan_name: "pro",
-          status: "active",
-          created_at: new Date().toISOString(),
-          system_admin_key: "paynow_secure_bypass_3892"
-        });
+        try {
+          await supabaseAdmin
+            .from("subscriptions")
+            .insert({
+              business_id: business_id,
+              plan_name: "pro",
+              status: "active",
+              created_at: new Date().toISOString()
+            });
+        } catch (subErr) {
+          console.error("Failed to insert subscription record in Supabase:", subErr);
+        }
 
         // Fetch business metadata for rich notification formatting
         let bName = "Pro Business Workspace";
         try {
-          const bSnap = await businessRef.get();
-          if (bSnap.exists) {
-            bName = bSnap.data()?.name || "Pro Business Workspace";
+          const { data: bSnap } = await supabaseAdmin
+            .from("businesses")
+            .select("name")
+            .eq("id", business_id)
+            .maybeSingle();
+          if (bSnap?.name) {
+            bName = bSnap.name;
           }
         } catch (bErr) {
           console.error("Failed to fetch business name for notification", bErr);
@@ -376,30 +431,41 @@ async function startServer() {
           const expiryDate = new Date();
           expiryDate.setDate(expiryDate.getDate() + 30);
 
-          const businessRef = firestoreDb.doc(`businesses/${businessId}`);
-          await businessRef.update({
-            subscription_status: "ACTIVE",
-            subscription_end_date: expiryDate.toISOString(),
-            system_admin_key: "paynow_secure_bypass_3892"
-          });
+          // Update businesses table in Supabase
+          await supabaseAdmin
+            .from("businesses")
+            .update({
+              subscription_status: "ACTIVE",
+              subscription_end_date: expiryDate.toISOString()
+            })
+            .eq("id", businessId);
 
-          const subscriptionsCol = firestoreDb.collection("subscriptions");
-          await subscriptionsCol.add({
-            business_id: businessId,
-            plan_name: "pro",
-            status: "active",
-            created_at: new Date().toISOString(),
-            system_admin_key: "paynow_secure_bypass_3892"
-          });
+          // Add to subscriptions collection if not already there
+          try {
+            await supabaseAdmin
+              .from("subscriptions")
+              .insert({
+                business_id: businessId,
+                plan_name: "pro",
+                status: "active",
+                created_at: new Date().toISOString()
+              });
+          } catch (subErr) {
+            console.error("Failed to insert subscription record in Supabase:", subErr);
+          }
 
           console.log(`Successfully updated subscription for tenant business: ${businessId}`);
 
           // Fetch business metadata for rich callback alerts
           let bName = "Pro Business Workspace";
           try {
-            const bSnap = await businessRef.get();
-            if (bSnap.exists) {
-              bName = bSnap.data()?.name || "Pro Business Workspace";
+            const { data: bSnap } = await supabaseAdmin
+              .from("businesses")
+              .select("name")
+              .eq("id", businessId)
+              .maybeSingle();
+            if (bSnap?.name) {
+              bName = bSnap.name;
             }
           } catch (bErr) {
             console.error("Failed to fetch business name for callback notification", bErr);

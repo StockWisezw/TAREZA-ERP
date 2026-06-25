@@ -6,8 +6,7 @@ import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
 import { Shield, Key, History, Save, Smartphone, Eye, EyeOff, Lock, Database, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { updatePassword } from 'firebase/auth';
-import { fireAuth, rawSupabase } from '../../lib/firebaseClient';
+import { fireAuth, rawSupabase, secureUpdatePassword, isRealSupabaseEnabled } from '../../lib/firebaseClient';
 
 export function SecuritySettings() {
   const [isSaving, setIsSaving] = useState(false);
@@ -79,14 +78,14 @@ export function SecuritySettings() {
     }
 
     const user = fireAuth.currentUser;
-    if (!user) {
+    if (!user && !isRealSupabaseEnabled) {
       toast.error('You must be logged in to change your password');
       return;
     }
 
     setIsUpdatingPassword(true);
     try {
-      await updatePassword(user, newPassword);
+      await secureUpdatePassword(newPassword);
       toast.success('Password updated successfully!');
       setNewPassword('');
       setConfirmPassword('');

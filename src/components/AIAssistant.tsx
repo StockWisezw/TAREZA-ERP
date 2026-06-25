@@ -5,9 +5,7 @@ import { MessageSquare, Send, X, Phone, Terminal, Loader2, Users, Bot, Sparkles 
 import { rawSupabase } from '../lib/firebaseClient';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../lib/firebaseClient';
 import { usePOSStore } from '../store/posStore';
-import { collection, addDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 
 interface ChatMessage {
   id: string;

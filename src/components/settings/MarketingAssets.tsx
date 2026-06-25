@@ -53,8 +53,7 @@ import {
   WifiOff
 } from 'lucide-react';
 import { TarezaLogo } from '../ui/Logo';
-import { db } from '../../lib/firebaseClient';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { db, collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, where } from '../../lib/firebaseClient';
 import { useAuth } from '../../hooks/useAuth';
 
 interface AssetVersion {

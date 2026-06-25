@@ -5,7 +5,11 @@ import { v4 as uuidv4 } from 'uuid';
 // SUPABASE CONFIGURATION & INITIALIZATION
 // ============================================================================
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+let rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+if (rawSupabaseUrl.startsWith('https://https://')) {
+  rawSupabaseUrl = rawSupabaseUrl.replace('https://https://', 'https://');
+}
+const supabaseUrl = rawSupabaseUrl;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 if (!supabaseUrl || !supabaseAnonKey) {
