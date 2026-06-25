@@ -6,6 +6,7 @@ import { Paynow } from "paynow";
 import { initializeApp as initAdminApp } from "firebase-admin/app";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { GoogleGenAI, Type } from "@google/genai";
+import nodemailer from "nodemailer";
 import { dispatchAlert, notificationAuditLogs } from "./server-notification-service.js";
 import { initBackgroundStockTracker, checkLowStockAndNotify } from "./server-stock-checker.js";
 
@@ -78,6 +79,28 @@ async function startServer() {
   // Initialize automated background stock replenishment tracker
   initBackgroundStockTracker(firestoreDb);
 
+  async function getBusinessSmtp(businessId: string | undefined): Promise<{ host: string; port: number; user: string; pass: string } | undefined> {
+    if (!businessId) return undefined;
+    try {
+      const businessRef = firestoreDb.doc(`businesses/${businessId}`);
+      const businessDoc = await businessRef.get();
+      if (businessDoc.exists) {
+        const data = businessDoc.data();
+        if (data?.smtp_host && data?.smtp_user && data?.smtp_pass) {
+          return {
+            host: data.smtp_host,
+            port: data.smtp_port ? parseInt(data.smtp_port) : 587,
+            user: data.smtp_user,
+            pass: data.smtp_pass
+          };
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to load custom SMTP for business ${businessId}:`, err);
+    }
+    return undefined;
+  }
+
   // 0. Notifications Integration Endpoint
   app.post("/api/notifications/notify", async (req, res) => {
     const { type, payload } = req.body;
@@ -86,11 +109,108 @@ async function startServer() {
     }
 
     try {
-      const result = await dispatchAlert(type, payload);
+      const customSmtp = await getBusinessSmtp(payload?.business_id);
+      const result = await dispatchAlert(type, payload, customSmtp);
       return res.json({ success: true, result });
     } catch (err: any) {
       console.error("Error processing notification route:", err);
       return res.status(500).json({ error: err.message || "Failed to dispatch alert" });
+    }
+  });
+
+  // Email Custom SMTP Connection Test Endpoint
+  app.post("/api/email/test-connection", async (req, res) => {
+    const { business_id, recipient_email } = req.body;
+    if (!business_id) {
+      return res.status(400).json({ error: "Missing business_id parameter" });
+    }
+
+    try {
+      const businessRef = firestoreDb.doc(`businesses/${business_id}`);
+      const businessDoc = await businessRef.get();
+      if (!businessDoc.exists) {
+        return res.status(404).json({ error: "Business workspace not found" });
+      }
+
+      const bizData = businessDoc.data();
+      const smtpHost = bizData?.smtp_host;
+      const smtpPort = bizData?.smtp_port ? parseInt(bizData.smtp_port) : 587;
+      const smtpUser = bizData?.smtp_user;
+      const smtpPass = bizData?.smtp_pass;
+
+      if (!smtpHost || !smtpUser || !smtpPass) {
+        return res.status(400).json({ 
+          error: "SMTP configuration is incomplete. Please ensure SMTP Host, User, and Password are saved in Firestore." 
+        });
+      }
+
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass
+        }
+      });
+
+      // Verify connection config
+      await transporter.verify();
+
+      // Send a test email to the recipient or default back to smtpUser
+      const targetRecipient = recipient_email || smtpUser;
+      
+      const info = await transporter.sendMail({
+        from: `"Tareza SMTP Test" <${smtpUser}>`,
+        to: targetRecipient,
+        subject: "📧 Tareza ERP SMTP Connection Test - SUCCESS!",
+        text: `Congratulations! Your SMTP connection has been verified successfully.\n\nThis test email was sent using the custom SMTP configuration saved for your business workspace in Firestore.\n\nSMTP Details:\n- Host: ${smtpHost}\n- Port: ${smtpPort}\n- User: ${smtpUser}\n\nBest Regards,\nTareza Automated ERP Services`,
+        html: `
+          <div style="font-family: sans-serif; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; max-width: 550px; margin: 0 auto; color: #1e293b; background-color: #f8fafc;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <span style="font-size: 40px;">🎉</span>
+              <h2 style="color: #10b981; margin: 10px 0 0 0; font-weight: 800;">SMTP Verification Success!</h2>
+            </div>
+            <p style="font-size: 14px; line-height: 1.6; color: #334155;">Hello,</p>
+            <p style="font-size: 14px; line-height: 1.6; color: #334155;">Congratulations! Your custom SMTP configuration has been successfully verified on <strong>Tareza ERP</strong>.</p>
+            
+            <div style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="margin-top: 0; color: #475569; font-size: 13px; text-transform: uppercase; tracking: 0.05em;">Connection Details</h3>
+              <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 4px 0; color: #64748b; font-weight: 500;">SMTP Host</td>
+                  <td style="padding: 4px 0; text-align: right; font-family: monospace; font-weight: 600;">${smtpHost}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; color: #64748b; font-weight: 500;">SMTP Port</td>
+                  <td style="padding: 4px 0; text-align: right; font-family: monospace; font-weight: 600;">${smtpPort}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; color: #64748b; font-weight: 500;">Username</td>
+                  <td style="padding: 4px 0; text-align: right; font-family: monospace; font-weight: 600;">${smtpUser}</td>
+                </tr>
+              </table>
+            </div>
+
+            <p style="font-size: 13px; line-height: 1.5; color: #64748b; margin-bottom: 0;">This test email was dispatched automatically from your custom SMTP server. You can now use your custom SMTP settings for all system receipts, notifications, and customer communications.</p>
+            <div style="border-top: 1px solid #e2e8f0; margin-top: 25px; padding-top: 15px; text-align: center; font-size: 11px; color: #94a3b8;">
+              Dispatched securely by Tareza ERP for your business.
+            </div>
+          </div>
+        `
+      });
+
+      return res.json({ 
+        success: true, 
+        message: `SMTP connection verified. Test email successfully sent to ${targetRecipient}!`,
+        messageId: info.messageId 
+      });
+
+    } catch (err: any) {
+      console.error("SMTP Test Connection Error:", err);
+      return res.status(500).json({ 
+        error: `SMTP connection test failed: ${err.message || String(err)}` 
+      });
     }
   });
 
@@ -214,14 +334,16 @@ async function startServer() {
         }
 
         // Send Email and WhatsApp Alert
-        dispatchAlert("subscription", {
-          business_id: business_id,
-          business_name: bName,
-          plan_name: "pro",
-          status: "active",
-          amount: 30,
-          paynow_reference: `POLL-${business_id}-${Date.now()}`
-        }).catch(err => console.error("Billing notification failed", err));
+        getBusinessSmtp(business_id).then(customSmtp => {
+          dispatchAlert("subscription", {
+            business_id: business_id,
+            business_name: bName,
+            plan_name: "pro",
+            status: "active",
+            amount: 30,
+            paynow_reference: `POLL-${business_id}-${Date.now()}`
+          }, customSmtp).catch(err => console.error("Billing notification failed", err));
+        });
 
         return res.json({ success: true, status: "Paid", message: "Subscription activated successfully!" });
       }
@@ -284,14 +406,16 @@ async function startServer() {
           }
 
           // Trigger email + WhatsApp notifications
-          dispatchAlert("subscription", {
-            business_id: businessId,
-            business_name: bName,
-            plan_name: "pro",
-            status: "active",
-            amount: 30,
-            paynow_reference: reference || `CB-${businessId}`
-          }).catch(err => console.error("Billing callback notification failed", err));
+          getBusinessSmtp(businessId).then(customSmtp => {
+            dispatchAlert("subscription", {
+              business_id: businessId,
+              business_name: bName,
+              plan_name: "pro",
+              status: "active",
+              amount: 30,
+              paynow_reference: reference || `CB-${businessId}`
+            }, customSmtp).catch(err => console.error("Billing callback notification failed", err));
+          });
         }
       }
 

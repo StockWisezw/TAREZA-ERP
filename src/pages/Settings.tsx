@@ -16,6 +16,7 @@ import { SecuritySettings } from '../components/settings/SecuritySettings';
 import { IntegrationSettings } from '../components/settings/IntegrationSettings';
 import { SupportSettings } from '../components/settings/SupportSettings';
 import { TutorialsSettings } from '../components/settings/TutorialsSettings';
+import { EmailSettings } from '../components/settings/EmailSettings';
 import { Separator } from '../components/ui/separator';
 
 export default function Settings() {
@@ -45,6 +46,7 @@ export default function Settings() {
       case 'notifications': return <NotificationSettings />;
       case 'security': return <SecuritySettings />;
       case 'integrations': return <IntegrationSettings />;
+      case 'email': return <EmailSettings />;
       case 'support': return <SupportSettings />;
       case 'tutorials': return <TutorialsSettings />;
       default: return <BusinessProfile />;

@@ -305,18 +305,6 @@ export default function Login() {
         const userCredential = await signInWithEmailAndPassword(fireAuth, email, password);
         const firebaseUser = userCredential.user;
 
-        // Check if verified
-        const isBypass = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(firebaseUser.email?.toLowerCase() || '');
-
-        if (!firebaseUser.emailVerified && !isBypass) {
-          // Block immediately, sign out, and advise
-          await sendEmailVerification(firebaseUser).catch(err => console.error("Could not send verification email on demand", err));
-          await fireSignOut(fireAuth);
-          toast.error("Email verification is required. We have sent a confirmation email to " + email + ". Please verify your email before logging in.");
-          setLoading(false);
-          return;
-        }
-
         toast.success('Welcome back to Tareza ERP');
         navigate('/dashboard');
       } catch (error: any) {
