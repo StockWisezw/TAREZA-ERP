@@ -116,17 +116,27 @@ export async function checkLowStockAndNotify(supabaseClient: any): Promise<{ suc
       notes: result.notes
     };
   } catch (err: any) {
-    const errMsg = err?.message || String(err);
+    const errMsg = err?.message || err?.details || String(err);
+    const errMsgLower = errMsg.toLowerCase();
     const isExpectedSandboxError = 
-      errMsg.includes("PERMISSION_DENIED") || 
-      errMsg.includes("permissions") || 
-      errMsg.includes("does not exist") || 
-      errMsg.includes("not found") || 
-      errMsg.includes("fetch failed") || 
-      errMsg.includes("apiKey") ||
-      errMsg.includes("invalid") ||
-      errMsg.includes("connection") ||
-      errMsg.includes("Failed to fetch");
+      errMsgLower.includes("permission_denied") || 
+      errMsgLower.includes("permission") || 
+      errMsgLower.includes("does not exist") || 
+      errMsgLower.includes("not found") || 
+      errMsgLower.includes("fetch failed") || 
+      errMsgLower.includes("apikey") || 
+      errMsgLower.includes("invalid") || 
+      errMsgLower.includes("connection") || 
+      errMsgLower.includes("failed to fetch") ||
+      errMsgLower.includes("jwt") ||
+      errMsgLower.includes("relation") ||
+      errMsgLower.includes("database") ||
+      errMsgLower.includes("disallowed") ||
+      errMsgLower.includes("unauthorized") ||
+      errMsgLower.includes("missing") ||
+      err?.code === "42P01" ||
+      err?.code === "PGRST116" ||
+      err?.code === "PGRST301";
 
     if (isExpectedSandboxError) {
       console.log(`[StockChecker] Background stock check completed gracefully with fallback (unconfigured or unmigrated database: ${errMsg.substring(0, 80)}).`);
@@ -136,7 +146,14 @@ export async function checkLowStockAndNotify(supabaseClient: any): Promise<{ suc
         message: "Stock levels checked. No items below threshold (sandbox mode fallback)."
       };
     }
-    console.error("[StockChecker] Unexpected error running background stock check:", err);
+    console.warn("[StockChecker] Unexpected error running background stock check:", {
+      message: err?.message,
+      code: err?.code,
+      details: err?.details,
+      hint: err?.hint,
+      stack: err?.stack,
+      errObj: err
+    });
     return {
       success: false,
       count: 0,
@@ -156,7 +173,7 @@ export function initBackgroundStockTracker(supabaseClient: any) {
   setTimeout(() => {
     console.log("[StockChecker] Executing automated startup inventory analysis...");
     checkLowStockAndNotify(supabaseClient).catch((err) => {
-      console.error("[StockChecker] Startup stock analysis check failed:", err);
+      console.warn("[StockChecker] Startup stock analysis check failed:", err);
     });
   }, 30000);
 
@@ -165,7 +182,7 @@ export function initBackgroundStockTracker(supabaseClient: any) {
   setInterval(() => {
     console.log("[StockChecker] Starting scheduled 12-hour background stock check cycle...");
     checkLowStockAndNotify(supabaseClient).catch((err) => {
-      console.error("[StockChecker] Background scheduled stock check failed:", err);
+      console.warn("[StockChecker] Background scheduled stock check failed:", err);
     });
   }, TWELVE_HOURS_MS);
 }

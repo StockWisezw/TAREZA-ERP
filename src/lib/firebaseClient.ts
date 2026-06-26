@@ -27,21 +27,6 @@ const supabaseAuthProxy = new Proxy(realSupabase.auth, {
 
 export const supabase = new Proxy(realSupabase, {
   get(target, prop, receiver) {
-    if (prop === 'from') {
-      return (table: string) => new SupabaseQueryBuilder(table);
-    }
-    if (prop === 'insert') {
-      return (table: string, values: any) => realSupabase.from(table).insert(values);
-    }
-    if (prop === 'update') {
-      return (table: string, values: any) => realSupabase.from(table).update(values);
-    }
-    if (prop === 'delete') {
-      return (table: string) => realSupabase.from(table).delete();
-    }
-    if (prop === 'rpc') {
-      return (fn: string, args?: any) => realSupabase.rpc(fn, args);
-    }
     if (prop === 'auth') {
       return supabaseAuthProxy;
     }
