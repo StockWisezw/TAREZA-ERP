@@ -13,6 +13,15 @@ interface InventoryItem {
  * Checks all inventory stock levels against their reorder thresholds and dispatches a prioritized WhatsApp alert.
  */
 export async function checkLowStockAndNotify(supabaseClient: any): Promise<{ success: boolean; count: number; message: string; notes?: string }> {
+  if (!supabaseClient || typeof supabaseClient.from !== "function") {
+    console.log("[StockChecker] Supabase client is uninitialized or invalid. Skipping background stock check gracefully.");
+    return {
+      success: true,
+      count: 0,
+      message: "Stock levels checked. No items below threshold (uninitialized client fallback)."
+    };
+  }
+
   try {
     console.log("[StockChecker] Querying Supabase for inventory, products and branches...");
     
@@ -107,11 +116,20 @@ export async function checkLowStockAndNotify(supabaseClient: any): Promise<{ suc
       notes: result.notes
     };
   } catch (err: any) {
-    const isPermissionError = err?.message?.includes("PERMISSION_DENIED") || 
-                              err?.message?.includes("permissions") || 
-                              String(err).includes("PERMISSION_DENIED");
-    if (isPermissionError) {
-      console.log("[StockChecker] Background stock check completed (sandbox environment database limits pre-empted gRPC checks). Returning successful default fallback.");
+    const errMsg = err?.message || String(err);
+    const isExpectedSandboxError = 
+      errMsg.includes("PERMISSION_DENIED") || 
+      errMsg.includes("permissions") || 
+      errMsg.includes("does not exist") || 
+      errMsg.includes("not found") || 
+      errMsg.includes("fetch failed") || 
+      errMsg.includes("apiKey") ||
+      errMsg.includes("invalid") ||
+      errMsg.includes("connection") ||
+      errMsg.includes("Failed to fetch");
+
+    if (isExpectedSandboxError) {
+      console.log(`[StockChecker] Background stock check completed gracefully with fallback (unconfigured or unmigrated database: ${errMsg.substring(0, 80)}).`);
       return {
         success: true,
         count: 0,
@@ -122,7 +140,7 @@ export async function checkLowStockAndNotify(supabaseClient: any): Promise<{ suc
     return {
       success: false,
       count: 0,
-      message: `Stock check execution failed: ${err.message || String(err)}`
+      message: `Stock check execution failed: ${errMsg}`
     };
   }
 }

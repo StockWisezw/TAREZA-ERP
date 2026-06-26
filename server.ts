@@ -62,18 +62,27 @@ async function startServer() {
   const supabaseUrl = rawSupabaseUrl;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 
-  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
+  let supabaseAdmin: any = null;
+  if (supabaseUrl && supabaseServiceKey) {
+    try {
+      supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      });
+    } catch (err) {
+      console.warn("[Server] Failed to create Supabase admin client:", err);
     }
-  });
+  } else {
+    console.warn("[Server] VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY / VITE_SUPABASE_ANON_KEY is missing. Admin background integrations will run in gracefully limited sandbox fallback mode.");
+  }
 
   // Initialize automated background stock replenishment tracker
   initBackgroundStockTracker(supabaseAdmin);
 
   async function getBusinessSmtp(businessId: string | undefined): Promise<{ host: string; port: number; user: string; pass: string } | undefined> {
-    if (!businessId) return undefined;
+    if (!businessId || !supabaseAdmin) return undefined;
     try {
       const { data, error } = await supabaseAdmin
         .from("businesses")
