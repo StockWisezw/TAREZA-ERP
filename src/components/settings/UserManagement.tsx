@@ -210,6 +210,7 @@ export function UserManagement() {
       // 5. Create business-branch link relation record
       toast.loading("Mapping permissions & assigned branch...", { id: "user-op" });
       const { error: buError } = await supabase.from('business_users').insert({
+        id: newUserUid,
         business_id: businessId,
         user_id: newUserUid,
         branch_id: selectedBranchId || null,

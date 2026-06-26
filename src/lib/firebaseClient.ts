@@ -559,7 +559,7 @@ export class SupabaseQueryBuilder {
         const writtenItems: any[] = [];
 
         for (const item of payloadArray) {
-          const docId = item.id || uuidv4();
+          const docId = item.id || (this.table === 'business_users' ? item.user_id : null) || uuidv4();
           const itemWithId = { ...item, id: docId };
           const docRef = fireDoc(db, this.table, docId);
           await fireSetDoc(docRef, itemWithId);
@@ -616,7 +616,7 @@ export class SupabaseQueryBuilder {
         const writtenItems: any[] = [];
 
         for (const item of payloadArray) {
-          const docId = item.id || uuidv4();
+          const docId = item.id || (this.table === 'business_users' ? item.user_id : null) || uuidv4();
           const itemWithId = { ...item, id: docId };
           const docRef = fireDoc(db, this.table, docId);
           await fireSetDoc(docRef, itemWithId, { merge: true });
