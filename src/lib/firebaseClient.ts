@@ -7,23 +7,51 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const rawSupabase = realSupabase;
 
-export const supabase = {
-  ...realSupabase,
-  from: (table: string) => new SupabaseQueryBuilder(table),
-  insert: (table: string, values: any) => realSupabase.from(table).insert(values),
-  update: (table: string, values: any) => realSupabase.from(table).update(values),
-  delete: (table: string) => realSupabase.from(table).delete(),
-  rpc: (fn: string, args?: any) => realSupabase.rpc(fn, args),
-  auth: {
-    ...realSupabase.auth,
-    sendPasswordReset: async (email: string) => {
-      const { data, error } = await realSupabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/login`
-      });
-      return { data, error };
+const supabaseAuthProxy = new Proxy(realSupabase.auth, {
+  get(target, prop, receiver) {
+    if (prop === 'sendPasswordReset') {
+      return async (email: string) => {
+        const { data, error } = await realSupabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/login`
+        });
+        return { data, error };
+      };
     }
+    const val = Reflect.get(target, prop, receiver);
+    if (typeof val === 'function') {
+      return val.bind(target);
+    }
+    return val;
   }
-} as any;
+});
+
+export const supabase = new Proxy(realSupabase, {
+  get(target, prop, receiver) {
+    if (prop === 'from') {
+      return (table: string) => new SupabaseQueryBuilder(table);
+    }
+    if (prop === 'insert') {
+      return (table: string, values: any) => realSupabase.from(table).insert(values);
+    }
+    if (prop === 'update') {
+      return (table: string, values: any) => realSupabase.from(table).update(values);
+    }
+    if (prop === 'delete') {
+      return (table: string) => realSupabase.from(table).delete();
+    }
+    if (prop === 'rpc') {
+      return (fn: string, args?: any) => realSupabase.rpc(fn, args);
+    }
+    if (prop === 'auth') {
+      return supabaseAuthProxy;
+    }
+    const val = Reflect.get(target, prop, receiver);
+    if (typeof val === 'function') {
+      return val.bind(target);
+    }
+    return val;
+  }
+}) as any;
 
 export const auth = realAuth;
 export const fireAuth = realAuth;
