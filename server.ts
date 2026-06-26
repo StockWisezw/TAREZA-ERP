@@ -55,12 +55,12 @@ async function startServer() {
   app.use("/api", rateLimiter);
 
   // Load Supabase configuration to connect securely on the backend
-  let rawSupabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+  let rawSupabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "https://sxplkoukvuunxksfisbo.supabase.co";
   if (rawSupabaseUrl.startsWith('https://https://')) {
     rawSupabaseUrl = rawSupabaseUrl.replace('https://https://', 'https://');
   }
   const supabaseUrl = rawSupabaseUrl;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4cGxrb3VrdnV1bnhrc2Zpc2JvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MjM4MjM0MSwiZXhwIjoyMDk3OTU4MzQxfQ.tpCimG7ud3kYnZp-qbxan6y4PUiErbrJmtMP9NNR92A";
 
   let supabaseAdmin: any = null;
   if (supabaseUrl && supabaseServiceKey) {
@@ -113,8 +113,8 @@ async function startServer() {
       return res.status(400).json({ error: "Missing email or password parameters" });
     }
 
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "https://sxplkoukvuunxksfisbo.supabase.co";
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4cGxrb3VrdnV1bnhrc2Zpc2JvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MjM4MjM0MSwiZXhwIjoyMDk3OTU4MzQxfQ.tpCimG7ud3kYnZp-qbxan6y4PUiErbrJmtMP9NNR92A";
 
     if (!supabaseUrl || !supabaseServiceKey) {
       return res.status(500).json({ error: "Supabase service role keys are not configured on the backend" });
