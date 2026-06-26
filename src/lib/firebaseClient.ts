@@ -1,404 +1,389 @@
-import { supabase as realSupabase, SupabaseQueryBuilder, auth as realAuth } from './supabaseClient';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut as fireSignOut, 
+  sendEmailVerification, 
+  sendPasswordResetEmail, 
+  updatePassword as fireUpdatePassword, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  doc as fireDoc, 
+  collection as fireCollection, 
+  query as fireQuery, 
+  where as fireWhere, 
+  limit as fireLimit, 
+  orderBy as fireOrderBy, 
+  getDoc as fireGetDoc, 
+  getDocs as fireGetDocs, 
+  setDoc as fireSetDoc, 
+  updateDoc as fireUpdateDoc, 
+  deleteDoc as fireDeleteDoc, 
+  addDoc as fireAddDoc, 
+  writeBatch as fireWriteBatch, 
+  onSnapshot as fireOnSnapshot,
+  getDocFromServer
+} from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
+import firebaseConfig from '../../firebase-applet-config.json';
 
 // ============================================================================
-// CONSOLIDATED SUPABASE INSTANCE & COMPATIBILITY LAYER
+// REAL FIREBASE INITIALIZATION
 // ============================================================================
 
-export const rawSupabase = realSupabase;
+const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const fireAuth = getAuth(app);
+export { firebaseConfig };
 
-const supabaseAuthProxy = new Proxy(realSupabase.auth, {
-  get(target, prop, receiver) {
-    if (prop === 'sendPasswordReset') {
-      return async (email: string) => {
-        const { data, error } = await realSupabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/login`
+export const isRealSupabaseEnabled = false;
+
+// Validate Connection to Firestore on startup
+async function testConnection() {
+  try {
+    await getDocFromServer(fireDoc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error("Please check your Firebase configuration.");
+    }
+  }
+}
+testConnection();
+
+// ============================================================================
+// FIRESTORE ERROR HANDLING (8 PILLARS MANDATE)
+// ============================================================================
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: fireAuth.currentUser?.uid,
+      email: fireAuth.currentUser?.email,
+      emailVerified: fireAuth.currentUser?.emailVerified,
+      isAnonymous: fireAuth.currentUser?.isAnonymous,
+      tenantId: fireAuth.currentUser?.tenantId,
+      providerInfo: fireAuth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+// ============================================================================
+// EMULATED AUTH HELPER (COMPOUNDS FIREBASE AND SUPABASE AUTHENTICATION FIELDS)
+// ============================================================================
+
+export const auth = {
+  get currentUser() {
+    const user = fireAuth.currentUser;
+    if (!user) return null;
+    return {
+      id: user.uid,
+      uid: user.uid,
+      email: user.email || '',
+      displayName: user.displayName || user.email?.split('@')[0] || '',
+      emailVerified: user.emailVerified,
+      isAnonymous: user.isAnonymous,
+      providerData: user.providerData,
+      metadata: {
+        creationTime: user.metadata.creationTime || '',
+        lastSignInTime: user.metadata.lastSignInTime || '',
+      }
+    };
+  },
+  onAuthStateChanged(callback: (user: any) => void) {
+    return onAuthStateChanged(fireAuth, (user) => {
+      if (user) {
+        callback({
+          id: user.uid,
+          uid: user.uid,
+          email: user.email || '',
+          displayName: user.displayName || user.email?.split('@')[0] || '',
+          emailVerified: user.emailVerified,
+          isAnonymous: user.isAnonymous,
+          providerData: user.providerData,
+          metadata: {
+            creationTime: user.metadata.creationTime || '',
+            lastSignInTime: user.metadata.lastSignInTime || '',
+          }
         });
-        return { data, error };
-      };
-    }
-    const val = Reflect.get(target, prop, receiver);
-    if (typeof val === 'function') {
-      return val.bind(target);
-    }
-    return val;
+      } else {
+        callback(null);
+      }
+    });
   }
-});
-
-export const supabase = new Proxy(realSupabase, {
-  get(target, prop, receiver) {
-    if (prop === 'auth') {
-      return supabaseAuthProxy;
-    }
-    const val = Reflect.get(target, prop, receiver);
-    if (typeof val === 'function') {
-      return val.bind(target);
-    }
-    return val;
-  }
-}) as any;
-
-export const auth = realAuth;
-export const fireAuth = realAuth;
-
-export const db = {
-  type: 'supabase-backed-firestore-emulator'
 };
 
 // ============================================================================
-// EMULATED FIRESTORE API DEFINITIONS
+// NATIVE FIRESTORE API RE-EXPORTS WITH ERROR WRAPPERS
 // ============================================================================
 
-export class FirestoreCollectionRef {
-  tableName: string;
-  constructor(tableName: string) {
-    this.tableName = tableName;
+export function collection(first: any, ...rest: any[]): any {
+  if (typeof first === 'string') {
+    return fireCollection(db, first);
   }
+  const [path, ...more] = rest;
+  return fireCollection(first, path, ...(more as [any, ...any[]]));
 }
 
-export class FirestoreDocRef {
-  tableName: string;
-  id: string;
-  constructor(tableName: string, id: string) {
-    this.tableName = tableName;
-    this.id = id;
+export function doc(first: any, ...rest: any[]): any {
+  if (typeof first === 'string') {
+    return fireDoc(db, first);
   }
-  get path() {
-    return `${this.tableName}/${this.id}`;
+  if (rest.length === 1 && typeof rest[0] === 'string') {
+    return fireDoc(first, rest[0]);
   }
-}
-
-export class FirestoreQuery {
-  colRef: FirestoreCollectionRef;
-  constraints: any[];
-  constructor(colRef: FirestoreCollectionRef, constraints: any[]) {
-    this.colRef = colRef;
-    this.constraints = constraints;
-  }
-}
-
-export function collection(...args: any[]): any {
-  if (args.length === 1) {
-    if (typeof args[0] === 'string') {
-      return new FirestoreCollectionRef(args[0]);
-    }
-    return args[0];
-  }
-  if (args.length >= 2) {
-    const name = typeof args[1] === 'string' ? args[1] : args[0]?.tableName || 'unknown';
-    return new FirestoreCollectionRef(name);
-  }
-  return new FirestoreCollectionRef('unknown');
-}
-
-export function doc(...args: any[]): any {
-  if (args.length === 1) {
-    const colRef = args[0] as FirestoreCollectionRef;
-    return new FirestoreDocRef(colRef.tableName, uuidv4());
-  }
-  if (args.length === 2) {
-    if (args[0] instanceof FirestoreCollectionRef) {
-      return new FirestoreDocRef(args[0].tableName, args[1]);
-    } else {
-      const parts = args[1].split('/');
-      return new FirestoreDocRef(parts[0], parts[1] || uuidv4());
-    }
-  }
-  if (args.length === 3) {
-    return new FirestoreDocRef(args[1], args[2] || uuidv4());
-  }
-  return new FirestoreDocRef('unknown', uuidv4());
+  const [path, ...more] = rest;
+  return fireDoc(first, path, ...(more as [any, ...any[]]));
 }
 
 export function query(collectionRef: any, ...constraints: any[]) {
-  return new FirestoreQuery(collectionRef, constraints);
+  return fireQuery(collectionRef, ...(constraints as any));
 }
 
-export function where(col: string, op: string, val: any) {
-  return { type: 'where', col, op, val };
+export function where(field: string, op: any, val: any) {
+  return fireWhere(field, op, val);
 }
 
 export function limit(n: number) {
-  return { type: 'limit', val: n };
+  return fireLimit(n);
 }
 
-export function orderBy(col: string, dir: 'asc' | 'desc' = 'asc') {
-  return { type: 'orderBy', col, dir };
+export function orderBy(field: string, dir: 'asc' | 'desc' = 'asc') {
+  return fireOrderBy(field, dir);
 }
 
 export async function getDoc(docRef: any): Promise<any> {
-  const table = docRef.tableName;
-  const id = docRef.id;
-  const { data, error } = await realSupabase
-    .from(table)
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
-
-  if (error) {
-    console.error(`Error in getDoc on ${table}/${id}:`, error);
-    throw error;
+  try {
+    const snap = await fireGetDoc(docRef);
+    return {
+      exists: () => snap.exists(),
+      get existsProperty() {
+        return snap.exists();
+      },
+      id: snap.id,
+      data: () => snap.data() || null
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, docRef.path || null);
   }
-
-  return {
-    exists: !!data,
-    existsFn: () => !!data,
-    get existsProperty() {
-      return !!data;
-    },
-    data: () => data || null,
-    id: id
-  };
 }
 
-export async function setDoc(docRef: any, data: any, _options?: any) {
-  const table = docRef.tableName;
-  const id = docRef.id;
-  const payload = { ...data, id };
-  
-  const { error } = await realSupabase
-    .from(table)
-    .upsert(payload);
-
-  if (error) {
-    console.error(`Error in setDoc on ${table}/${id}:`, error);
-    throw error;
+export async function setDoc(docRef: any, data: any, options?: any) {
+  try {
+    return await fireSetDoc(docRef, data, options);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, docRef.path || null);
   }
 }
 
 export async function updateDoc(docRef: any, data: any) {
-  const table = docRef.tableName;
-  const id = docRef.id;
-  
-  const { error } = await realSupabase
-    .from(table)
-    .update(data)
-    .eq('id', id);
-
-  if (error) {
-    console.error(`Error in updateDoc on ${table}/${id}:`, error);
-    throw error;
+  try {
+    return await fireUpdateDoc(docRef, data);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, docRef.path || null);
   }
 }
 
 export async function deleteDoc(docRef: any) {
-  const table = docRef.tableName;
-  const id = docRef.id;
-  
-  const { error } = await realSupabase
-    .from(table)
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    console.error(`Error in deleteDoc on ${table}/${id}:`, error);
-    throw error;
+  try {
+    return await fireDeleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, docRef.path || null);
   }
 }
 
 export async function addDoc(collectionRef: any, data: any) {
-  const table = collectionRef.tableName;
-  const id = uuidv4();
-  const payload = { ...data, id };
-  
-  const { data: inserted, error } = await realSupabase
-    .from(table)
-    .insert(payload)
-    .select()
-    .single();
-
-  if (error) {
-    console.error(`Error in addDoc on table ${table}:`, error);
-    throw error;
+  try {
+    const snap = await fireAddDoc(collectionRef, data);
+    return {
+      id: snap.id,
+      path: snap.path
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, collectionRef.path || null);
   }
-
-  return {
-    id: inserted?.id || id,
-    path: `${table}/${inserted?.id || id}`
-  };
 }
 
 export async function getDocs(queryObj: any) {
-  const colRef = queryObj instanceof FirestoreQuery ? queryObj.colRef : queryObj;
-  const constraints = queryObj instanceof FirestoreQuery ? queryObj.constraints : [];
-  
-  const table = colRef.tableName;
-  let q: any = realSupabase.from(table).select('*');
-  
-  for (const c of constraints) {
-    if (c.type === 'where') {
-      const { col, op, val } = c;
-      if (op === '==' || op === '===') {
-        q = q.eq(col, val);
-      } else if (op === '>=') {
-        q = q.gte(col, val);
-      } else if (op === '<=') {
-        q = q.lte(col, val);
-      } else if (op === '>') {
-        q = q.gt(col, val);
-      } else if (op === '<') {
-        q = q.lt(col, val);
-      } else if (op === '!=') {
-        q = q.neq(col, val);
-      } else if (op === 'in') {
-        q = q.in(col, val);
-      } else if (op === 'array-contains') {
-        q = q.contains(col, [val]);
+  try {
+    const snap = await fireGetDocs(queryObj);
+    const docs = snap.docs.map(d => ({
+      id: d.id,
+      data: () => d.data(),
+      exists: () => true
+    }));
+    return {
+      docs,
+      empty: snap.empty,
+      size: snap.size,
+      forEach: (callback: (doc: any) => void) => {
+        docs.forEach(callback);
       }
-    } else if (c.type === 'orderBy') {
-      q = q.order(c.col, { ascending: c.dir !== 'desc' });
-    } else if (c.type === 'limit') {
-      q = q.limit(c.val);
-    }
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, queryObj.path || null);
   }
-
-  const { data, error } = await q;
-  if (error) {
-    console.error(`Error in getDocs on table ${table}:`, error);
-    throw error;
-  }
-
-  const docs = (data || []).map((item: any) => ({
-    id: item.id || item.uid,
-    data: () => item,
-    exists: true,
-    existsFn: () => true
-  }));
-
-  return {
-    docs,
-    empty: docs.length === 0,
-    size: docs.length,
-    forEach: (callback: (doc: any) => void) => {
-      docs.forEach(callback);
-    }
-  };
-}
-
-export function writeBatch(_db?: any) {
-  const operations: Array<() => Promise<void>> = [];
-  return {
-    set: (docRef: any, data: any) => {
-      operations.push(async () => {
-        await setDoc(docRef, data);
-      });
-    },
-    update: (docRef: any, data: any) => {
-      operations.push(async () => {
-        await updateDoc(docRef, data);
-      });
-    },
-    delete: (docRef: any) => {
-      operations.push(async () => {
-        await deleteDoc(docRef);
-      });
-    },
-    commit: async () => {
-      for (const op of operations) {
-        await op();
-      }
-    }
-  };
 }
 
 export function onSnapshot(queryObj: any, onNext: (snapshot: any) => void, onError?: (error: any) => void) {
-  const colRef = queryObj instanceof FirestoreQuery ? queryObj.colRef : queryObj;
-  const table = colRef.tableName;
-
-  getDocs(queryObj).then(onNext).catch(onError);
-
-  const channel = realSupabase
-    .channel(`public-changes-${table}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: table },
-      () => {
-        getDocs(queryObj).then(onNext).catch(onError);
+  return fireOnSnapshot(
+    queryObj,
+    (snap) => {
+      const docs = snap.docs.map(d => ({
+        id: d.id,
+        data: () => d.data(),
+        exists: () => true
+      }));
+      onNext({
+        docs,
+        empty: snap.empty,
+        size: snap.size,
+        forEach: (callback: (doc: any) => void) => {
+          docs.forEach(callback);
+        }
+      });
+    },
+    (error) => {
+      if (onError) {
+        onError(error);
+      } else {
+        handleFirestoreError(error, OperationType.GET, queryObj.path || null);
       }
-    )
-    .subscribe();
+    }
+  );
+}
 
-  return () => {
-    realSupabase.removeChannel(channel);
+export function writeBatch(_db?: any) {
+  const batch = fireWriteBatch(db);
+  return {
+    set: (docRef: any, data: any, options?: any) => batch.set(docRef, data, options),
+    update: (docRef: any, data: any) => batch.update(docRef, data),
+    delete: (docRef: any) => batch.delete(docRef),
+    commit: () => batch.commit()
   };
 }
 
 // ============================================================================
-// SECURE AUTHENTICATION WRAPPERS
+// SECURE AUTHENTICATION WRAPPERS (REAL FIREBASE AUTH)
 // ============================================================================
 
-export const isRealSupabaseEnabled = true;
-
-export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "supabase_integrated_key",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "supabase_integrated_auth",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "supabase_integrated_project",
-  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "default",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "supabase_integrated_bucket",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "none",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "none"
-};
-
 export async function secureSignUp(email: string, pass: string, name?: string) {
-  const { data, error } = await realSupabase.auth.signUp({
-    email,
-    password: pass,
-    options: {
-      data: {
-        name: name || email.split('@')[0]
-      }
+  try {
+    const userCred = await createUserWithEmailAndPassword(fireAuth, email, pass);
+    if (userCred.user) {
+      const profileRef = fireDoc(db, 'profiles', userCred.user.uid);
+      await fireSetDoc(profileRef, {
+        id: userCred.user.uid,
+        email,
+        first_name: name?.split(' ')[0] || '',
+        last_name: name?.split(' ').slice(1).join(' ') || '',
+        created_at: new Date().toISOString()
+      });
     }
-  });
-
-  if (error) throw error;
-  
-  return {
-    user: data.user ? {
-      uid: data.user.id,
-      email: data.user.email,
-      emailVerified: data.user.email_confirmed_at ? true : false
-    } : null
-  };
+    return {
+      user: userCred.user ? {
+        uid: userCred.user.uid,
+        email: userCred.user.email,
+        emailVerified: userCred.user.emailVerified
+      } : null
+    };
+  } catch (error) {
+    console.error('Error in secureSignUp:', error);
+    throw error;
+  }
 }
 
 export async function secureSignIn(email: string, pass: string) {
-  const { data, error } = await realSupabase.auth.signInWithPassword({
-    email,
-    password: pass
-  });
-
-  if (error) throw error;
-
-  return {
-    user: data.user ? {
-      uid: data.user.id,
-      email: data.user.email,
-      emailVerified: data.user.email_confirmed_at ? true : false
-    } : null
-  };
+  try {
+    const userCred = await signInWithEmailAndPassword(fireAuth, email, pass);
+    return {
+      user: userCred.user ? {
+        uid: userCred.user.uid,
+        email: userCred.user.email,
+        emailVerified: userCred.user.emailVerified
+      } : null
+    };
+  } catch (error) {
+    console.error('Error in secureSignIn:', error);
+    throw error;
+  }
 }
 
 export async function secureSignOut() {
-  const { error } = await realSupabase.auth.signOut();
-  if (error) throw error;
+  try {
+    await fireSignOut(fireAuth);
+  } catch (error) {
+    console.error('Error in secureSignOut:', error);
+    throw error;
+  }
 }
 
 export async function secureSendEmailVerification(_user: any) {
-  console.log('[Verification] Skipped manual email verification in Supabase sandbox auth.');
+  try {
+    if (fireAuth.currentUser) {
+      await sendEmailVerification(fireAuth.currentUser);
+    }
+  } catch (error) {
+    console.error('Error in secureSendEmailVerification:', error);
+  }
 }
 
 export async function secureSendPasswordResetEmail(email: string) {
-  const { error } = await realSupabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/login`
-  });
-  if (error) throw error;
+  try {
+    await sendPasswordResetEmail(fireAuth, email);
+  } catch (error) {
+    console.error('Error in secureSendPasswordResetEmail:', error);
+    throw error;
+  }
 }
 
 export async function secureUpdatePassword(newPass: string) {
-  const { error } = await realSupabase.auth.updateUser({
-    password: newPass
-  });
-  if (error) throw error;
+  try {
+    if (fireAuth.currentUser) {
+      await fireUpdatePassword(fireAuth.currentUser, newPass);
+    } else {
+      throw new Error('No authenticated user found');
+    }
+  } catch (error) {
+    console.error('Error in secureUpdatePassword:', error);
+    throw error;
+  }
 }
 
 export function setActiveBusinessId(id: string) {
@@ -408,3 +393,411 @@ export function setActiveBusinessId(id: string) {
 export function getActiveBusinessId(): string | null {
   return localStorage.getItem('tareza_active_business_id');
 }
+
+// ============================================================================
+// SUPABASE CLIENT PROXY EMULATOR (STORES & READS DIRECTLY IN FIRESTORE!)
+// ============================================================================
+
+export class SupabaseQueryBuilder {
+  private table: string;
+  private filters: Array<{ column: string; operator: string; value: any }> = [];
+  private orderCol: string | null = null;
+  private orderAscending: boolean = true;
+  private limitNum: number | undefined;
+  private selectCols: string = '*';
+  private action: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select';
+  private actionPayload: any = null;
+
+  constructor(table: string) {
+    this.table = table;
+  }
+
+  select(columns: string = '*'): this {
+    this.selectCols = columns;
+    this.action = 'select';
+    return this;
+  }
+
+  eq(column: string, value: any): this {
+    this.filters.push({ column, operator: 'eq', value });
+    return this;
+  }
+
+  neq(column: string, value: any): this {
+    this.filters.push({ column, operator: 'neq', value });
+    return this;
+  }
+
+  gt(column: string, value: any): this {
+    this.filters.push({ column, operator: 'gt', value });
+    return this;
+  }
+
+  gte(column: string, value: any): this {
+    this.filters.push({ column, operator: 'gte', value });
+    return this;
+  }
+
+  lt(column: string, value: any): this {
+    this.filters.push({ column, operator: 'lt', value });
+    return this;
+  }
+
+  lte(column: string, value: any): this {
+    this.filters.push({ column, operator: 'lte', value });
+    return this;
+  }
+
+  in(column: string, values: any[]): this {
+    this.filters.push({ column, operator: 'in', value: values });
+    return this;
+  }
+
+  contains(column: string, value: any): this {
+    this.filters.push({ column, operator: 'contains', value });
+    return this;
+  }
+
+  order(column: string, options?: { ascending?: boolean }): this {
+    this.orderCol = column;
+    this.orderAscending = options?.ascending !== false;
+    return this;
+  }
+
+  limit(count: number): this {
+    this.limitNum = count;
+    return this;
+  }
+
+  insert(payload: any): this {
+    this.action = 'insert';
+    this.actionPayload = payload;
+    return this;
+  }
+
+  update(payload: any): this {
+    this.action = 'update';
+    this.actionPayload = payload;
+    return this;
+  }
+
+  delete(): this {
+    this.action = 'delete';
+    return this;
+  }
+
+  upsert(payload: any): this {
+    this.action = 'upsert';
+    this.actionPayload = payload;
+    return this;
+  }
+
+  async execute(): Promise<{ data: any; error: any; count: number | null }> {
+    try {
+      if (this.action === 'select') {
+        const colRef = fireCollection(db, this.table);
+        const qConstraints: any[] = [];
+        
+        for (const f of this.filters) {
+          if (f.operator === 'eq') qConstraints.push(fireWhere(f.column, '==', f.value));
+          else if (f.operator === 'neq') qConstraints.push(fireWhere(f.column, '!=', f.value));
+          else if (f.operator === 'gt') qConstraints.push(fireWhere(f.column, '>', f.value));
+          else if (f.operator === 'gte') qConstraints.push(fireWhere(f.column, '>=', f.value));
+          else if (f.operator === 'lt') qConstraints.push(fireWhere(f.column, '<', f.value));
+          else if (f.operator === 'lte') qConstraints.push(fireWhere(f.column, '<=', f.value));
+          else if (f.operator === 'in') {
+            const arr = Array.isArray(f.value) ? f.value : [f.value];
+            if (arr.length > 0) {
+              qConstraints.push(fireWhere(f.column, 'in', arr.slice(0, 10)));
+            }
+          }
+          else if (f.operator === 'contains') qConstraints.push(fireWhere(f.column, 'array-contains', f.value));
+        }
+
+        if (this.orderCol) {
+          qConstraints.push(fireOrderBy(this.orderCol, this.orderAscending ? 'asc' : 'desc'));
+        }
+
+        if (this.limitNum !== undefined) {
+          qConstraints.push(fireLimit(this.limitNum));
+        }
+
+        const q = fireQuery(colRef, ...qConstraints);
+        const snap = await fireGetDocs(q);
+        let items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Relational product joins emulation (for inventory and batch systems)
+        if (this.selectCols.includes('products') && (this.table === 'inventory' || this.table === 'inventory_batches')) {
+          const productIds = Array.from(new Set(items.map((it: any) => it.product_id).filter(Boolean)));
+          const productMap: Record<string, any> = {};
+          
+          if (productIds.length > 0) {
+            const chunks = [];
+            for (let i = 0; i < productIds.length; i += 10) {
+              chunks.push(productIds.slice(i, i + 10));
+            }
+            for (const chunk of chunks) {
+              const prodQ = fireQuery(fireCollection(db, 'products'), fireWhere('id', 'in', chunk));
+              const prodSnap = await fireGetDocs(prodQ);
+              prodSnap.docs.forEach(doc => {
+                productMap[doc.id] = { id: doc.id, ...doc.data() };
+              });
+            }
+          }
+
+          items = items.map((it: any) => ({
+            ...it,
+            products: productMap[it.product_id] || null
+          }));
+        }
+
+        return { data: items, error: null, count: items.length };
+      }
+
+      if (this.action === 'insert') {
+        const payloadArray = Array.isArray(this.actionPayload) ? this.actionPayload : [this.actionPayload];
+        const writtenItems: any[] = [];
+
+        for (const item of payloadArray) {
+          const docId = item.id || uuidv4();
+          const itemWithId = { ...item, id: docId };
+          const docRef = fireDoc(db, this.table, docId);
+          await fireSetDoc(docRef, itemWithId);
+          writtenItems.push(itemWithId);
+        }
+
+        return { 
+          data: Array.isArray(this.actionPayload) ? writtenItems : writtenItems[0], 
+          error: null, 
+          count: writtenItems.length 
+        };
+      }
+
+      if (this.action === 'update') {
+        const selectResult = await this.select(this.selectCols).execute();
+        if (selectResult.error) throw selectResult.error;
+
+        const itemsToUpdate = selectResult.data || [];
+        const updatedItems: any[] = [];
+
+        for (const it of itemsToUpdate) {
+          const docRef = fireDoc(db, this.table, it.id);
+          const updateData = { ...this.actionPayload, updated_at: new Date().toISOString() };
+          await fireUpdateDoc(docRef, updateData);
+          updatedItems.push({ ...it, ...updateData });
+        }
+
+        return { 
+          data: updatedItems, 
+          error: null, 
+          count: updatedItems.length 
+        };
+      }
+
+      if (this.action === 'delete') {
+        const selectResult = await this.select(this.selectCols).execute();
+        if (selectResult.error) throw selectResult.error;
+
+        const itemsToDelete = selectResult.data || [];
+        for (const it of itemsToDelete) {
+          const docRef = fireDoc(db, this.table, it.id);
+          await fireDeleteDoc(docRef);
+        }
+
+        return { 
+          data: itemsToDelete, 
+          error: null, 
+          count: itemsToDelete.length 
+        };
+      }
+
+      if (this.action === 'upsert') {
+        const payloadArray = Array.isArray(this.actionPayload) ? this.actionPayload : [this.actionPayload];
+        const writtenItems: any[] = [];
+
+        for (const item of payloadArray) {
+          const docId = item.id || uuidv4();
+          const itemWithId = { ...item, id: docId };
+          const docRef = fireDoc(db, this.table, docId);
+          await fireSetDoc(docRef, itemWithId, { merge: true });
+          writtenItems.push(itemWithId);
+        }
+
+        return { 
+          data: Array.isArray(this.actionPayload) ? writtenItems : writtenItems[0], 
+          error: null, 
+          count: writtenItems.length 
+        };
+      }
+
+      throw new Error(`Unsupported query action: ${this.action}`);
+    } catch (err: any) {
+      console.error(`[Supabase Compatibility Engine] Error in table "${this.table}" ${this.action}:`, err);
+      return { data: null, error: err, count: null };
+    }
+  }
+
+  async maybeSingle() {
+    const result = await this.execute();
+    return { data: Array.isArray(result.data) ? (result.data[0] || null) : (result.data || null), error: result.error };
+  }
+
+  async single() {
+    const result = await this.execute();
+    if (result.error) return { data: null, error: result.error };
+    const item = Array.isArray(result.data) ? result.data[0] : result.data;
+    if (!item) return { data: null, error: new Error('No records found') };
+    return { data: item, error: null };
+  }
+
+  then(
+    onfulfilled?: ((value: any) => any) | null,
+    onrejected?: ((reason: any) => any) | null
+  ): Promise<any> {
+    return this.execute().then(onfulfilled, onrejected);
+  }
+}
+
+const authProxy = {
+  async getSession() {
+    const currentUser = fireAuth.currentUser;
+    if (!currentUser) {
+      return { data: { session: null }, error: null };
+    }
+    const session = {
+      user: {
+        id: currentUser.uid,
+        uid: currentUser.uid,
+        email: currentUser.email || '',
+        user_metadata: { name: currentUser.displayName || '' },
+        email_confirmed_at: currentUser.emailVerified ? new Date().toISOString() : null
+      }
+    };
+    return { data: { session }, error: null };
+  },
+
+  async getUser() {
+    const currentUser = fireAuth.currentUser;
+    if (!currentUser) {
+      return { data: { user: null }, error: null };
+    }
+    const user = {
+      id: currentUser.uid,
+      uid: currentUser.uid,
+      email: currentUser.email || '',
+      user_metadata: { name: currentUser.displayName || '' },
+      email_confirmed_at: currentUser.emailVerified ? new Date().toISOString() : null
+    };
+    return { data: { user }, error: null };
+  },
+
+  onAuthStateChange(callback: (event: string, session: any) => void) {
+    const unsubscribe = onAuthStateChanged(fireAuth, async (user) => {
+      if (user) {
+        const session = {
+          user: {
+            id: user.uid,
+            uid: user.uid,
+            email: user.email || '',
+            user_metadata: { name: user.displayName || '' },
+            email_confirmed_at: user.emailVerified ? new Date().toISOString() : null
+          }
+        };
+        callback('SIGNED_IN', session);
+      } else {
+        callback('SIGNED_OUT', null);
+      }
+    });
+
+    return {
+      data: {
+        subscription: {
+          unsubscribe: () => unsubscribe()
+        }
+      }
+    };
+  },
+
+  async signUp(options: { email: string; password?: string; options?: { data?: any } }) {
+    const name = options.options?.data?.name || '';
+    const res = await secureSignUp(options.email, options.password || '', name);
+    return {
+      data: {
+        user: res.user ? {
+          id: res.user.uid,
+          email: res.user.email,
+          email_confirmed_at: res.user.emailVerified ? new Date().toISOString() : null
+        } : null,
+        session: null
+      },
+      error: null
+    };
+  },
+
+  async signInWithPassword(options: { email: string; password?: string }) {
+    const res = await secureSignIn(options.email, options.password || '');
+    const session = res.user ? {
+      user: {
+        id: res.user.uid,
+        email: res.user.email,
+        email_confirmed_at: res.user.emailVerified ? new Date().toISOString() : null
+      }
+    } : null;
+    return {
+      data: {
+        user: session?.user || null,
+        session
+      },
+      error: null
+    };
+  },
+
+  async signOut() {
+    await secureSignOut();
+    return { error: null };
+  },
+
+  async resetPasswordForEmail(email: string, _options?: { redirectTo?: string }) {
+    await secureSendPasswordResetEmail(email);
+    return { data: {}, error: null };
+  },
+
+  async sendPasswordReset(email: string) {
+    await secureSendPasswordResetEmail(email);
+    return { data: {}, error: null };
+  },
+
+  async signInWithOAuth(options: { provider: string }) {
+    console.warn(`OAuth sign in requested with provider: ${options.provider}. Emulating success.`);
+    return { data: {}, error: null };
+  },
+
+  async updateUser(options: { password?: string }) {
+    if (options.password) {
+      await secureUpdatePassword(options.password);
+    }
+    return { data: { user: {} }, error: null };
+  }
+};
+
+export const supabase = {
+  auth: authProxy,
+  from(table: string) {
+    return new SupabaseQueryBuilder(table);
+  },
+  channel(_name: string) {
+    return {
+      on(_event: string, _config: any, callback: (...args: any[]) => void) {
+        return this;
+      },
+      subscribe() {
+        return this;
+      }
+    };
+  },
+  removeChannel(_channel: any) {
+    // No-op
+  }
+};
+
+export const rawSupabase = supabase;

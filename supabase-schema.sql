@@ -241,6 +241,20 @@ CREATE TABLE IF NOT EXISTS support_tickets (
 );
 
 -- ============================================================================
+-- SUBSCRIPTIONS TABLE
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    plan_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    start_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    end_date TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================================
 -- CURRENCY & EXCHANGE RATE TABLES
 -- ============================================================================
 
@@ -272,41 +286,42 @@ CREATE TABLE IF NOT EXISTS exchange_rate_history (
 -- ============================================================================
 
 -- Inventory Indexes
-CREATE INDEX idx_inventory_business ON inventory(business_id);
-CREATE INDEX idx_inventory_branch ON inventory(branch_id);
-CREATE INDEX idx_inventory_product ON inventory(product_id);
-CREATE INDEX idx_inventory_low_stock ON inventory(business_id, branch_id) WHERE quantity < reorder_level;
+CREATE INDEX IF NOT EXISTS idx_inventory_business ON inventory(business_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_branch ON inventory(branch_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_product ON inventory(product_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_low_stock ON inventory(business_id, branch_id) WHERE quantity < reorder_level;
 
 -- Batch Indexes
-CREATE INDEX idx_batch_business ON inventory_batches(business_id);
-CREATE INDEX idx_batch_branch ON inventory_batches(branch_id);
-CREATE INDEX idx_batch_product ON inventory_batches(product_id);
-CREATE INDEX idx_batch_expiry ON inventory_batches(expiry_date);
+CREATE INDEX IF NOT EXISTS idx_batch_business ON inventory_batches(business_id);
+CREATE INDEX IF NOT EXISTS idx_batch_branch ON inventory_batches(branch_id);
+CREATE INDEX IF NOT EXISTS idx_batch_product ON inventory_batches(product_id);
+CREATE INDEX IF NOT EXISTS idx_batch_expiry ON inventory_batches(expiry_date);
 
 -- Stock Movement Indexes
-CREATE INDEX idx_movements_business ON stock_movements(business_id);
-CREATE INDEX idx_movements_product ON stock_movements(product_id);
-CREATE INDEX idx_movements_date ON stock_movements(created_at DESC);
-CREATE INDEX idx_movements_type ON stock_movements(movement_type);
+CREATE INDEX IF NOT EXISTS idx_movements_business ON stock_movements(business_id);
+CREATE INDEX IF NOT EXISTS idx_movements_product ON stock_movements(product_id);
+CREATE INDEX IF NOT EXISTS idx_movements_date ON stock_movements(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_movements_type ON stock_movements(movement_type);
 
 -- Product Indexes
-CREATE INDEX idx_product_business ON products(business_id);
-CREATE INDEX idx_product_category ON products(category_id);
-CREATE INDEX idx_product_sku ON products(business_id, sku);
-CREATE INDEX idx_product_barcode ON products(business_id, barcode);
+CREATE INDEX IF NOT EXISTS idx_product_business ON products(business_id);
+CREATE INDEX IF NOT EXISTS idx_product_category ON products(category_id);
+CREATE INDEX IF NOT EXISTS idx_product_sku ON products(business_id, sku);
+CREATE INDEX IF NOT EXISTS idx_product_barcode ON products(business_id, barcode);
 
 -- Sales Indexes
-CREATE INDEX idx_sales_business ON sales(business_id);
-CREATE INDEX idx_sales_branch ON sales(branch_id);
-CREATE INDEX idx_sales_date ON sales(created_at DESC);
-CREATE INDEX idx_sales_receipt ON sales(business_id, receipt_number);
+CREATE INDEX IF NOT EXISTS idx_sales_business ON sales(business_id);
+CREATE INDEX IF NOT EXISTS idx_sales_branch ON sales(branch_id);
+CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sales_receipt ON sales(business_id, receipt_number);
 
 -- Other Indexes
-CREATE INDEX idx_branch_business ON branches(business_id);
-CREATE INDEX idx_category_business ON categories(business_id);
-CREATE INDEX idx_supplier_business ON suppliers(business_id);
-CREATE INDEX idx_profile_email ON profiles(email);
-CREATE INDEX idx_business_user_business ON business_users(business_id);
+CREATE INDEX IF NOT EXISTS idx_branch_business ON branches(business_id);
+CREATE INDEX IF NOT EXISTS idx_category_business ON categories(business_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_business ON suppliers(business_id);
+CREATE INDEX IF NOT EXISTS idx_profile_email ON profiles(email);
+CREATE INDEX IF NOT EXISTS idx_business_user_business ON business_users(business_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_business ON subscriptions(business_id);
 
 -- ============================================================================
 -- TRIGGERS & FUNCTIONS (Data Integrity & Audit)
@@ -321,19 +336,35 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Function: Check if user has access to a business (Security Definer to prevent infinite recursion)
+CREATE OR REPLACE FUNCTION check_user_in_business(check_user_id UUID, check_business_id UUID)
+RETURNS BOOLEAN SECURITY DEFINER AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1 FROM business_users
+        WHERE user_id = check_user_id AND business_id = check_business_id
+    );
+END;
+$$ LANGUAGE plpgsql;
+
 -- Apply to tables with updated_at
+DROP TRIGGER IF EXISTS products_updated_at ON products;
 CREATE TRIGGER products_updated_at BEFORE UPDATE ON products
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS inventory_updated_at ON inventory;
 CREATE TRIGGER inventory_updated_at BEFORE UPDATE ON inventory
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS inventory_batches_updated_at ON inventory_batches;
 CREATE TRIGGER inventory_batches_updated_at BEFORE UPDATE ON inventory_batches
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS businesses_updated_at ON businesses;
 CREATE TRIGGER businesses_updated_at BEFORE UPDATE ON businesses
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS support_tickets_updated_at ON support_tickets;
 CREATE TRIGGER support_tickets_updated_at BEFORE UPDATE ON support_tickets
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -354,6 +385,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Apply inventory quantity check
+DROP TRIGGER IF EXISTS inventory_quantity_check ON inventory;
 CREATE TRIGGER inventory_quantity_check BEFORE UPDATE ON inventory
     FOR EACH ROW EXECUTE FUNCTION check_inventory_quantity();
 
@@ -370,6 +402,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Apply batch quantity check
+DROP TRIGGER IF EXISTS batch_quantity_check ON inventory_batches;
 CREATE TRIGGER batch_quantity_check BEFORE UPDATE ON inventory_batches
     FOR EACH ROW EXECUTE FUNCTION check_batch_quantity();
 
@@ -389,6 +422,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS batch_expiry_validation ON inventory_batches;
 CREATE TRIGGER batch_expiry_validation BEFORE INSERT OR UPDATE ON inventory_batches
     FOR EACH ROW EXECUTE FUNCTION validate_batch_expiry();
 
@@ -438,6 +472,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS inventory_movement_log ON inventory;
 CREATE TRIGGER inventory_movement_log AFTER INSERT OR UPDATE ON inventory
     FOR EACH ROW EXECUTE FUNCTION log_inventory_movement();
 
@@ -462,8 +497,30 @@ ALTER TABLE purchase_orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE support_tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE currencies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE exchange_rate_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies for Businesses
+-- ----------------------------------------------------------------------------
+-- PROFILES POLICIES (Users)
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can insert their own profile"
+    ON profiles FOR INSERT
+    WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Users can view their own profile"
+    ON profiles FOR SELECT
+    USING (auth.uid() = id);
+
+CREATE POLICY "Users can update their own profile"
+    ON profiles FOR UPDATE
+    USING (auth.uid() = id);
+
+-- ----------------------------------------------------------------------------
+-- BUSINESSES POLICIES
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Authenticated users can insert businesses"
+    ON businesses FOR INSERT
+    WITH CHECK (auth.role() = 'authenticated');
+
 CREATE POLICY "Users can view their own businesses"
     ON businesses FOR SELECT
     USING (
@@ -478,13 +535,40 @@ CREATE POLICY "Users can update their own businesses"
     USING (
         id IN (
             SELECT business_id FROM business_users
-            WHERE user_id = auth.uid() AND role_id IN ('admin', 'owner')
+            WHERE user_id = auth.uid()
         )
     );
 
--- RLS Policies for Inventory (CRITICAL)
-CREATE POLICY "Users can view inventory of their business"
-    ON inventory FOR SELECT
+-- ----------------------------------------------------------------------------
+-- BUSINESS USERS POLICIES (Tenancy Links)
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can select their business user links"
+    ON business_users FOR SELECT
+    USING (
+        user_id = auth.uid() OR check_user_in_business(auth.uid(), business_id)
+    );
+
+CREATE POLICY "Users can insert their own business user link"
+    ON business_users FOR INSERT
+    WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Users can update their business user links"
+    ON business_users FOR UPDATE
+    USING (
+        user_id = auth.uid() OR check_user_in_business(auth.uid(), business_id)
+    );
+
+CREATE POLICY "Users can delete their business user links"
+    ON business_users FOR DELETE
+    USING (
+        user_id = auth.uid() OR check_user_in_business(auth.uid(), business_id)
+    );
+
+-- ----------------------------------------------------------------------------
+-- SUBSCRIPTIONS POLICIES
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can view subscriptions of their business"
+    ON subscriptions FOR SELECT
     USING (
         business_id IN (
             SELECT business_id FROM business_users
@@ -492,8 +576,155 @@ CREATE POLICY "Users can view inventory of their business"
         )
     );
 
-CREATE POLICY "Users can update inventory of their business"
-    ON inventory FOR UPDATE
+CREATE POLICY "Users can insert subscriptions for their business"
+    ON subscriptions FOR INSERT
+    WITH CHECK (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can update subscriptions of their business"
+    ON subscriptions FOR UPDATE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can delete subscriptions of their business"
+    ON subscriptions FOR DELETE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+-- ----------------------------------------------------------------------------
+-- BRANCHES POLICIES
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can view branches of their business"
+    ON branches FOR SELECT
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can insert branches for their business"
+    ON branches FOR INSERT
+    WITH CHECK (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can update branches of their business"
+    ON branches FOR UPDATE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can delete branches of their business"
+    ON branches FOR DELETE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+-- ----------------------------------------------------------------------------
+-- CATEGORIES POLICIES
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can view categories of their business"
+    ON categories FOR SELECT
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can insert categories for their business"
+    ON categories FOR INSERT
+    WITH CHECK (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can update categories of their business"
+    ON categories FOR UPDATE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can delete categories of their business"
+    ON categories FOR DELETE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+-- ----------------------------------------------------------------------------
+-- PRODUCTS POLICIES
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can view products of their business"
+    ON products FOR SELECT
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can insert products in their business"
+    ON products FOR INSERT
+    WITH CHECK (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can update products in their business"
+    ON products FOR UPDATE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can delete products in their business"
+    ON products FOR DELETE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+-- ----------------------------------------------------------------------------
+-- INVENTORY POLICIES
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can view inventory of their business"
+    ON inventory FOR SELECT
     USING (
         business_id IN (
             SELECT business_id FROM business_users
@@ -510,10 +741,39 @@ CREATE POLICY "Users can insert inventory in their business"
         )
     );
 
--- RLS Policies for Inventory Batches (CRITICAL)
+CREATE POLICY "Users can update inventory of their business"
+    ON inventory FOR UPDATE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can delete inventory of their business"
+    ON inventory FOR DELETE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+-- ----------------------------------------------------------------------------
+-- INVENTORY_BATCHES POLICIES
+-- ----------------------------------------------------------------------------
 CREATE POLICY "Users can view batch data of their business"
     ON inventory_batches FOR SELECT
     USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can insert batch data in their business"
+    ON inventory_batches FOR INSERT
+    WITH CHECK (
         business_id IN (
             SELECT business_id FROM business_users
             WHERE user_id = auth.uid()
@@ -529,9 +789,8 @@ CREATE POLICY "Users can update batch data in their business"
         )
     );
 
--- RLS Policies for Products
-CREATE POLICY "Users can view products of their business"
-    ON products FOR SELECT
+CREATE POLICY "Users can delete batch data in their business"
+    ON inventory_batches FOR DELETE
     USING (
         business_id IN (
             SELECT business_id FROM business_users
@@ -539,26 +798,9 @@ CREATE POLICY "Users can view products of their business"
         )
     );
 
-CREATE POLICY "Users can manage products in their business"
-    ON products FOR UPDATE
-    USING (
-        business_id IN (
-            SELECT business_id FROM business_users
-            WHERE user_id = auth.uid()
-        )
-    );
-
--- RLS Policies for Sales
-CREATE POLICY "Users can view sales in their business"
-    ON sales FOR SELECT
-    USING (
-        business_id IN (
-            SELECT business_id FROM business_users
-            WHERE user_id = auth.uid()
-        )
-    );
-
--- RLS Policies for Stock Movements
+-- ----------------------------------------------------------------------------
+-- STOCK_MOVEMENTS POLICIES
+-- ----------------------------------------------------------------------------
 CREATE POLICY "Users can view movement history of their business"
     ON stock_movements FOR SELECT
     USING (
@@ -568,14 +810,224 @@ CREATE POLICY "Users can view movement history of their business"
         )
     );
 
--- RLS Policies for Profiles
-CREATE POLICY "Users can view their own profile"
-    ON profiles FOR SELECT
-    USING (auth.uid() = id);
+CREATE POLICY "Users can insert movement records in their business"
+    ON stock_movements FOR INSERT
+    WITH CHECK (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
 
-CREATE POLICY "Users can update their own profile"
-    ON profiles FOR UPDATE
-    USING (auth.uid() = id);
+CREATE POLICY "Users can update movement records in their business"
+    ON stock_movements FOR UPDATE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+-- ----------------------------------------------------------------------------
+-- SALES POLICIES
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can view sales in their business"
+    ON sales FOR SELECT
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can insert sales in their business"
+    ON sales FOR INSERT
+    WITH CHECK (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can update sales in their business"
+    ON sales FOR UPDATE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+-- ----------------------------------------------------------------------------
+-- CASH_DRAWER_LOGS POLICIES
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can view cash drawer logs"
+    ON cash_drawer_logs FOR SELECT
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can insert cash drawer logs"
+    ON cash_drawer_logs FOR INSERT
+    WITH CHECK (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can update cash drawer logs"
+    ON cash_drawer_logs FOR UPDATE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+-- ----------------------------------------------------------------------------
+-- SUPPLIERS POLICIES
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can view suppliers"
+    ON suppliers FOR SELECT
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can insert suppliers"
+    ON suppliers FOR INSERT
+    WITH CHECK (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can update suppliers"
+    ON suppliers FOR UPDATE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can delete suppliers"
+    ON suppliers FOR DELETE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+-- ----------------------------------------------------------------------------
+-- PURCHASE_ORDERS POLICIES
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can view purchase orders"
+    ON purchase_orders FOR SELECT
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can insert purchase orders"
+    ON purchase_orders FOR INSERT
+    WITH CHECK (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can update purchase orders"
+    ON purchase_orders FOR UPDATE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+-- ----------------------------------------------------------------------------
+-- SUPPORT_TICKETS POLICIES
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can view support tickets"
+    ON support_tickets FOR SELECT
+    USING (user_id = auth.uid());
+
+CREATE POLICY "Users can insert support tickets"
+    ON support_tickets FOR INSERT
+    WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Users can update support tickets"
+    ON support_tickets FOR UPDATE
+    USING (user_id = auth.uid());
+
+-- ----------------------------------------------------------------------------
+-- CURRENCIES POLICIES
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can view currencies"
+    ON currencies FOR SELECT
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can insert currencies"
+    ON currencies FOR INSERT
+    WITH CHECK (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can update currencies"
+    ON currencies FOR UPDATE
+    USING (
+        business_id IN (
+            SELECT business_id FROM business_users
+            WHERE user_id = auth.uid()
+        )
+    );
+
+-- ----------------------------------------------------------------------------
+-- EXCHANGE_RATE_HISTORY POLICIES
+-- ----------------------------------------------------------------------------
+CREATE POLICY "Users can view exchange rate history"
+    ON exchange_rate_history FOR SELECT
+    USING (
+        currency_id IN (
+            SELECT id FROM currencies
+            WHERE business_id IN (
+                SELECT business_id FROM business_users
+                WHERE user_id = auth.uid()
+            )
+        )
+    );
+
+CREATE POLICY "Users can insert exchange rate history"
+    ON exchange_rate_history FOR INSERT
+    WITH CHECK (
+        currency_id IN (
+            SELECT id FROM currencies
+            WHERE business_id IN (
+                SELECT business_id FROM business_users
+                WHERE user_id = auth.uid()
+            )
+        )
+    );
 
 -- ============================================================================
 -- VIEWS FOR COMMON QUERIES
