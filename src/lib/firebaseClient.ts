@@ -317,13 +317,13 @@ export function onSnapshot(queryObj: any, onNext: (snapshot: any) => void, onErr
 export const isRealSupabaseEnabled = true;
 
 export const firebaseConfig = {
-  apiKey: "supabase_integrated_key",
-  authDomain: "supabase_integrated_auth",
-  projectId: "supabase_integrated_project",
-  firestoreDatabaseId: "default",
-  storageBucket: "supabase_integrated_bucket",
-  messagingSenderId: "none",
-  appId: "none"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "supabase_integrated_key",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "supabase_integrated_auth",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "supabase_integrated_project",
+  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "default",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "supabase_integrated_bucket",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "none",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "none"
 };
 
 export async function secureSignUp(email: string, pass: string, name?: string) {
