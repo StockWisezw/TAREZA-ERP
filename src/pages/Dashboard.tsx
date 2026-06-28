@@ -1099,7 +1099,9 @@ export default function Dashboard() {
       </Card>
 
       {/* 📊 Dynamic Branch-wise Revenue vs Stock Valuation Overview */}
-      <DynamicBranchOverview />
+      {businessContext?.business_id && (
+        <DynamicBranchOverview businessId={businessContext.business_id} />
+      )}
 
       {/* 🚀 Daily Operations Performance Summary Cards & Daily Revenue Trend Section */}
       <div className="space-y-6 my-6">

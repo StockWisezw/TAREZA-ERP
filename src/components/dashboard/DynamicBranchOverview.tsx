@@ -69,7 +69,11 @@ interface ChartMonthPoint {
   stockUnits: number;
 }
 
-export function DynamicBranchOverview() {
+export interface DynamicBranchOverviewProps {
+  businessId?: string;
+}
+
+export function DynamicBranchOverview({ businessId }: DynamicBranchOverviewProps) {
   const [loading, setLoading] = useState<boolean>(true);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
@@ -103,22 +107,26 @@ export function DynamicBranchOverview() {
     async function loadSaaSMetrics() {
       setLoading(true);
       try {
-        const { data: userData } = await supabase.auth.getUser();
-        if (!userData || !userData.user) return;
+        let bizId = businessId;
 
-        // Fetch User Business Association
-        const { data: bizUserData, error: bizUserErr } = await supabase
-          .from('business_users')
-          .select('business_id')
-          .eq('user_id', userData.user.id)
-          .limit(1)
-          .maybeSingle();
+        if (!bizId) {
+          const { data: userData } = await supabase.auth.getUser();
+          if (!userData || !userData.user) return;
 
-        if (bizUserErr || !bizUserData) {
-          throw new Error("Could not construct operating business context.");
+          // Fetch User Business Association
+          const { data: bizUserData, error: bizUserErr } = await supabase
+            .from('business_users')
+            .select('business_id')
+            .eq('user_id', userData.user.id)
+            .limit(1)
+            .maybeSingle();
+
+          if (bizUserErr || !bizUserData) {
+            throw new Error("Could not construct operating business context.");
+          }
+
+          bizId = bizUserData.business_id;
         }
-
-        const bizId = bizUserData.business_id;
 
         // Parallel Query Pipeline (Optimized SaaS standard)
         const [branchesRes, productsRes, inventoryRes, salesRes, movementsRes] = await Promise.all([
@@ -144,7 +152,7 @@ export function DynamicBranchOverview() {
     }
 
     loadSaaSMetrics();
-  }, []);
+  }, [businessId]);
 
   // Compute stats based on selected branch
   const computedTrends = useMemo(() => {
