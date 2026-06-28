@@ -337,7 +337,7 @@ export function TutorialsSettings() {
                   <CardDescription className="text-xs text-zinc-550 dark:text-zinc-400 mt-1 leading-relaxed">
                     {selectedTopic.shortDesc}
                   </CardDescription>
-                  {(selectedTopic.module === 'pos' || selectedTopic.module === 'inventory') && (
+                  {selectedTopic.module && (
                     <div className="mt-4 pt-1 flex justify-start">
                       <Button
                         onClick={() => {

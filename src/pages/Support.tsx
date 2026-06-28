@@ -80,20 +80,19 @@ export default function Support() {
                 Launch automated walkthroughs that physically point out the primary components of each module screen to ensure your cashier staff can sell with ease.
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button 
+                onClick={triggerInteractiveToursMenu}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-750 text-white rounded-xl text-xs font-bold cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Compass className="w-4 h-4" /> Browse All Tours (12 Modules)
+              </Button>
               <Button 
                 onClick={() => triggerGuidedTour('pos')}
                 variant="outline"
-                className="flex-1 rounded-xl text-xs font-bold border-zinc-200 text-zinc-700 hover:text-zinc-950 hover:bg-zinc-50 cursor-pointer"
+                className="rounded-xl text-xs font-bold border-zinc-200 text-zinc-700 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-zinc-50 hover:bg-zinc-50 cursor-pointer"
               >
-                Tour POS
-              </Button>
-              <Button 
-                onClick={() => triggerGuidedTour('inventory')}
-                variant="outline"
-                className="flex-1 rounded-xl text-xs font-bold border-zinc-200 text-zinc-700 hover:text-zinc-950 hover:bg-zinc-50 cursor-pointer"
-              >
-                Tour Inventory
+                Quick POS Tour
               </Button>
             </div>
           </CardContent>
