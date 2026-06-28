@@ -566,10 +566,10 @@ export default function Dashboard() {
             setProfileName('Default');
           } catch(e) {}
           
-          const newBusinessId = crypto.randomUUID();
+          const regNo = `TZ-${Math.floor(100000 + Math.random() * 900000)}/${new Date().getFullYear()}`;
+          const newBusinessId = regNo.replace(/\//g, '-');
           const newRoleId = crypto.randomUUID();
           const newBranchId = crypto.randomUUID();
-          const regNo = `TZ-${Math.floor(100000 + Math.random() * 900000)}/${new Date().getFullYear()}`;
 
           // Step 1: Establish tenancy link in business_users FIRST to satisfy belongsToUserBusiness rule
           const { error: buErr } = await supabase.from('business_users').insert({
@@ -589,7 +589,7 @@ export default function Dashboard() {
           // Step 3: Create business
           const { error: bErr } = await supabase.from('businesses').insert({
             id: newBusinessId,
-            name: regNo,
+            name: `My Business (${regNo})`,
             tax_number: regNo,
             created_at: new Date().toISOString()
           });

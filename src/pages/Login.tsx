@@ -70,7 +70,8 @@ export default function Login() {
           ]);
 
           // Pre-generate IDs to avoid race conditions and secure sequence
-          const newBusinessId = crypto.randomUUID();
+          const regNo = role === 'developer' ? 'TZ-999999/DEV' : 'TZ-888888/CLIENT';
+          const newBusinessId = regNo.replace(/\//g, '-');
           const newRoleId = crypto.randomUUID();
           const newBranchId = crypto.randomUUID();
 
@@ -84,7 +85,6 @@ export default function Login() {
           setActiveBusinessId(newBusinessId);
 
           // Step 3: Build Business
-          const regNo = role === 'developer' ? 'TZ-999999/DEV' : 'TZ-888888/CLIENT';
           await supabase.from('businesses').insert([
             { 
               id: newBusinessId,
@@ -219,7 +219,8 @@ export default function Login() {
         }
 
         // Pre-generate IDs to avoid race conditions and secure sequence
-        const newBusinessId = crypto.randomUUID();
+        const sanitizedRegNo = registrationNumber.trim().toUpperCase().replace(/\//g, '-');
+        const newBusinessId = sanitizedRegNo;
         const newRoleId = crypto.randomUUID();
         const newBranchId = crypto.randomUUID();
 
@@ -236,7 +237,7 @@ export default function Login() {
         await supabase.from('businesses').insert([
           { 
             id: newBusinessId,
-            name: registrationNumber, // Each workspace is represented by a business registration number not business name initially
+            name: businessName, // The business name is mutable
             tax_number: registrationNumber,
             created_at: new Date().toISOString() 
           }
@@ -336,7 +337,8 @@ export default function Login() {
             ]);
 
             // Pre-generate IDs to avoid race conditions and secure sequence
-            const newBusinessId = crypto.randomUUID();
+            const regNo = 'TZ-999999/DEV';
+            const newBusinessId = regNo.replace(/\//g, '-');
             const newRoleId = crypto.randomUUID();
             const newBranchId = crypto.randomUUID();
 
@@ -354,7 +356,7 @@ export default function Login() {
               { 
                 id: newBusinessId,
                 name: 'Developer Labs', 
-                tax_number: 'TZ-999999/DEV',
+                tax_number: regNo,
                 created_at: new Date().toISOString() 
               }
             ]);
