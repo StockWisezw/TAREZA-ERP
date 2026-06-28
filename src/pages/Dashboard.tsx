@@ -36,7 +36,7 @@ export default function Dashboard() {
     peakSalesHour: '12:00 - 13:00',
     weeklyRunrate: 0
   });
-  const [stats, setStats] = useState({ totalSales: 0, transactions: 0, lowStock: 0, activeBranches: 0 });
+  const [stats, setStats] = useState({ totalSales: 0, transactions: 0, lowStock: 0, activeBranches: 0, salesTrend: 'Real-time sales' });
   const [branchSalesData, setBranchSalesData] = useState<{ name: string; sales: number; transactions: number }[]>([]);
   const [branchStockData, setBranchStockData] = useState<{ name: string; stock: number }[]>([]);
   const [branchesList, setBranchesList] = useState<{ id: string; name: string }[]>([]);
@@ -361,11 +361,43 @@ export default function Dashboard() {
           weeklyRunrate
         });
 
+        // Dynamic month-over-month sales trend calculation
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+
+        const thisMonthSales = (salesInfo || []).filter((sale: any) => {
+          if (!sale.created_at) return false;
+          const d = new Date(sale.created_at);
+          return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+        }).reduce((acc: number, sale: any) => acc + Number(sale.total || 0), 0);
+
+        const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+        const lastMonthIndex = currentMonth === 0 ? 11 : currentMonth - 1;
+        const lastMonthSales = (salesInfo || []).filter((sale: any) => {
+          if (!sale.created_at) return false;
+          const d = new Date(sale.created_at);
+          return d.getFullYear() === lastMonthYear && d.getMonth() === lastMonthIndex;
+        }).reduce((acc: number, sale: any) => acc + Number(sale.total || 0), 0);
+
+        let calculatedTrend = "All-time cumulative sales";
+        if (lastMonthSales > 0) {
+          const change = ((thisMonthSales - lastMonthSales) / lastMonthSales) * 100;
+          calculatedTrend = `${change >= 0 ? '+' : ''}${change.toFixed(1)}% compared to last month`;
+        } else if (thisMonthSales > 0) {
+          calculatedTrend = "Initial month of sales records";
+        } else if (realSales > 0) {
+          calculatedTrend = "All-time cumulative total";
+        } else {
+          calculatedTrend = "No sales records captured yet";
+        }
+
         setStats({
           totalSales: realSales,
           transactions: salesInfo?.length || 0,
           lowStock: lowStockCount || 0,
-          activeBranches: branchesCount
+          activeBranches: branchesCount,
+          salesTrend: calculatedTrend
         });
 
         // Compute Branch Sales Performance Data
@@ -506,9 +538,13 @@ export default function Dashboard() {
           .limit(1)
           .maybeSingle();
 
+        let bizExists = false;
         if (businessData) {
           finalBusId = businessData.business_id;
           finalBrId = businessData.branch_id;
+          
+          const { data: bizDoc } = await supabase.from('businesses').select('id').eq('id', finalBusId).limit(1).maybeSingle();
+          if (bizDoc) bizExists = true;
         }
 
         const { data: profile } = await supabase.from('profiles').select('first_name').eq('id', userData.user.id).limit(1).maybeSingle();
@@ -516,7 +552,7 @@ export default function Dashboard() {
           setProfileName(profile.first_name);
         }
 
-        if (businessError || !businessData) {
+        if (businessError || !businessData || !bizExists) {
           console.warn('No business profile found. Setting up defaults...');
           
           // Check if profile exists
@@ -530,34 +566,60 @@ export default function Dashboard() {
             setProfileName('Default');
           } catch(e) {}
           
-          // Create business
-          const { data: bData, error: bErr } = await supabase.from('businesses').insert({ name: 'My Business' }).select().single();
-          if (bErr || !bData) throw bErr || new Error("Failed to create business");
-          finalBusId = bData.id;
-          
-          // Create role
-          const { data: rData, error: rErr } = await supabase.from('roles').insert({ business_id: bData.id, name: 'Admin', description: 'System Administrator' }).select().single();
-          if (rErr || !rData) throw rErr || new Error("Failed to create role");
+          const newBusinessId = crypto.randomUUID();
+          const newRoleId = crypto.randomUUID();
+          const newBranchId = crypto.randomUUID();
+          const regNo = `TZ-${Math.floor(100000 + Math.random() * 900000)}/${new Date().getFullYear()}`;
 
-          // Create branch
-          const { data: brData, error: brErr } = await supabase.from('branches').insert({ business_id: bData.id, name: 'Main Branch', type: 'retail' }).select().single();
-          if (brErr || !brData) throw brErr || new Error("Failed to create branch");
-          finalBrId = brData.id;
-
-          // Link user
+          // Step 1: Establish tenancy link in business_users FIRST to satisfy belongsToUserBusiness rule
           const { error: buErr } = await supabase.from('business_users').insert({
-            business_id: bData.id,
+            id: userData.user.id,
+            business_id: newBusinessId,
             user_id: userData.user.id,
-            branch_id: brData.id,
-            role_id: rData.id
+            branch_id: newBranchId,
+            role_id: newRoleId,
+            is_active: true
           });
           if (buErr) throw buErr;
 
+          // Step 2: Set target active business ID cache
+          const { setActiveBusinessId } = await import('../lib/firebaseClient');
+          setActiveBusinessId(newBusinessId);
+
+          // Step 3: Create business
+          const { error: bErr } = await supabase.from('businesses').insert({
+            id: newBusinessId,
+            name: regNo,
+            tax_number: regNo,
+            created_at: new Date().toISOString()
+          });
+          if (bErr) throw bErr || new Error("Failed to create business");
+          finalBusId = newBusinessId;
+          
+          // Step 4: Create role
+          const { error: rErr } = await supabase.from('roles').insert({
+            id: newRoleId,
+            business_id: newBusinessId,
+            name: 'Admin',
+            description: 'System Administrator'
+          });
+          if (rErr) throw rErr || new Error("Failed to create role");
+
+          // Step 5: Create branch
+          const { error: brErr } = await supabase.from('branches').insert({
+            id: newBranchId,
+            business_id: newBusinessId,
+            name: 'Main Branch',
+            type: 'retail'
+          });
+          if (brErr) throw brErr || new Error("Failed to create branch");
+          finalBrId = newBranchId;
+
           // Default category
-          await supabase.from('categories').insert({ business_id: bData.id, name: 'General' });
+          await supabase.from('categories').insert({ business_id: newBusinessId, name: 'General' });
 
           // Free trial sub
-          await supabase.from('subscriptions').insert({ business_id: bData.id, plan_name: 'free_trial', status: 'active' });
+          await supabase.from('subscriptions').insert({ business_id: newBusinessId, plan_name: 'free_trial', status: 'active' });
           
           toast.success('Your business profile has been initialized.');
         }
@@ -1004,7 +1066,7 @@ export default function Dashboard() {
                {stats.totalSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <p className="text-sm text-zinc-400 dark:text-zinc-500 mt-2 flex items-center font-medium">
-               +14.5% from last month
+               {stats.salesTrend}
             </p>
           </CardContent>
         </Card>

@@ -85,6 +85,7 @@ export default function Layout() {
   // Screen lock removed per user request
   const isLocked = false;
   const [businessName, setBusinessName] = React.useState<string>('');
+  const [businessLogo, setBusinessLogo] = React.useState<string>('');
   const [subStatus, setSubStatus] = React.useState<string>('ACTIVE');
   const [subEndDate, setSubEndDate] = React.useState<string | null>(null);
   const [sidebarExpanded, setSidebarExpanded] = React.useState<boolean>(false);
@@ -106,7 +107,7 @@ export default function Layout() {
         if (businessData?.business_id) {
           const { data: bData } = await supabase
             .from('businesses')
-            .select('name, subscription_status, subscription_end_date')
+            .select('name, subscription_status, subscription_end_date, logo_url')
             .eq('id', businessData.business_id)
             .limit(1)
             .maybeSingle();
@@ -119,6 +120,9 @@ export default function Layout() {
             }
             if (bData.subscription_end_date) {
               setSubEndDate(bData.subscription_end_date);
+            }
+            if (bData.logo_url) {
+              setBusinessLogo(bData.logo_url);
             }
           }
         }
@@ -271,7 +275,11 @@ export default function Layout() {
               <>
                 {businessName ? (
                   <div className="flex items-center gap-2 overflow-hidden pr-2">
-                    <Store className="h-4.5 w-4.5 text-zinc-700 dark:text-zinc-300 shrink-0" />
+                    {businessLogo ? (
+                      <img src={businessLogo} alt="Logo" className="h-5 w-5 rounded-full object-cover shrink-0 border border-zinc-250 dark:border-zinc-700 bg-white" referrerPolicy="no-referrer" />
+                    ) : (
+                      <Store className="h-4.5 w-4.5 text-zinc-700 dark:text-zinc-300 shrink-0" />
+                    )}
                     <span className="font-extrabold text-[13px] tracking-tight bg-gradient-to-r from-zinc-800 to-zinc-650 dark:from-white dark:to-zinc-300 bg-clip-text text-transparent truncate">
                       {businessName}
                     </span>
@@ -347,7 +355,11 @@ export default function Layout() {
                   <div className="h-16 px-5 flex items-center border-b border-zinc-200 dark:border-zinc-800/80">
                     {businessName ? (
                       <div className="flex items-center gap-2 select-none overflow-hidden pr-2">
-                        <Store className="h-4.5 w-4.5 text-zinc-700 dark:text-zinc-300 shrink-0" />
+                        {businessLogo ? (
+                          <img src={businessLogo} alt="Logo" className="h-5 w-5 rounded-full object-cover shrink-0 border border-zinc-250 dark:border-zinc-700 bg-white" referrerPolicy="no-referrer" />
+                        ) : (
+                          <Store className="h-4.5 w-4.5 text-zinc-700 dark:text-zinc-300 shrink-0" />
+                        )}
                         <span className="font-extrabold text-[15px] tracking-tight bg-gradient-to-r from-zinc-800 to-zinc-600 dark:from-white dark:to-zinc-300 bg-clip-text text-transparent truncate">
                           {businessName}
                         </span>

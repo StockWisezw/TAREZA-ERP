@@ -236,7 +236,7 @@ export default function Login() {
         await supabase.from('businesses').insert([
           { 
             id: newBusinessId,
-            name: businessName, 
+            name: registrationNumber, // Each workspace is represented by a business registration number not business name initially
             tax_number: registrationNumber,
             created_at: new Date().toISOString() 
           }
@@ -617,30 +617,16 @@ export default function Login() {
                       </div>
                       <div className="space-y-4">
                         <div className="space-y-2">
-                          <Label htmlFor="businessName" className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Business Name</Label>
-                          <Input 
-                            id="businessName" 
-                            placeholder="Acme Trading Corp" 
-                            value={businessName}
-                            onChange={(e) => setBusinessName(e.target.value)}
-                            required={isSignUp}
-                            className="h-11 bg-zinc-50 focus-visible:ring-primary focus-visible:bg-white border-zinc-200"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="registrationNumber" className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Registration Number</Label>
-                            <span className="text-[10px] text-primary bg-primary/10 px-2 py-0.5 rounded-full font-bold">System Generated</span>
-                          </div>
+                          <Label htmlFor="registrationNumber" className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Business Registration / Tax Number</Label>
                           <Input 
                             id="registrationNumber" 
-                            placeholder="e.g. 12345/2026" 
+                            placeholder="e.g. TZ-123456/2026" 
                             value={registrationNumber}
-                            readOnly
+                            onChange={(e) => setRegistrationNumber(e.target.value)}
                             required={isSignUp}
-                            className={`h-11 bg-zinc-100 cursor-not-allowed border-zinc-200 select-all font-mono font-medium`}
+                            className="h-11 bg-zinc-50 focus-visible:ring-primary focus-visible:bg-white border-zinc-200 font-mono font-medium"
                           />
-                          <p className="text-[10px] text-zinc-400">An automatic local registration ID has been generated for your business workspace.</p>
+                          <p className="text-[10px] text-zinc-400">Please enter your company registration or tax identification number. This represents your unique workspace.</p>
                           {regError && (
                             <p className="text-xs text-red-500 mt-1 font-medium">{regError}</p>
                           )}

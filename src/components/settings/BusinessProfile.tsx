@@ -26,6 +26,31 @@ export function BusinessProfile() {
   const [regNumber, setRegNumber] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleChoosePicture = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image file size must be less than 2MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      setLogoUrl(base64String);
+      toast.success("Logo prepared! Click 'Save Profile' to save changes.");
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     async function loadBusiness() {
@@ -54,6 +79,7 @@ export function BusinessProfile() {
           setRegNumber(data.tax_number || "");
           setEmail(data.email || "");
           setPhone(data.phone || "");
+          setLogoUrl(data.logo_url || "");
         }
       } catch (err) {
         console.error("Failed to load business profile", err);
@@ -76,6 +102,7 @@ export function BusinessProfile() {
             tax_number: regNumber,
             email: email,
             phone: phone,
+            logo_url: logoUrl,
           })
           .select()
           .single();
@@ -92,11 +119,17 @@ export function BusinessProfile() {
             tax_number: regNumber,
             email: email,
             phone: phone,
+            logo_url: logoUrl,
           })
           .eq("id", businessData.id);
 
         if (error) throw error;
         toast.success("Business profile updated successfully");
+        
+        // Refresh page so custom logo immediately updates in layout header
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
       }
     } catch (err: any) {
       toast.error(`Error saving profile: ${err.message || "Unknown error"}`);
@@ -150,15 +183,27 @@ export function BusinessProfile() {
             </CardHeader>
             <CardContent className="flex flex-col items-center justify-center space-y-4 pt-4">
               <Avatar className="h-32 w-32 border-4 border-white shadow-sm ring-1 ring-zinc-200">
-                <AvatarImage src="https://ui-avatars.com/api/?name=Tareza&background=0D8ABC&color=fff&size=128" />
+                <AvatarImage src={logoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Tareza')}&background=0D8ABC&color=fff&size=128`} />
                 <AvatarFallback className="bg-zinc-100 text-zinc-400">
                   <Camera className="h-10 w-10" />
                 </AvatarFallback>
               </Avatar>
-              <div className="flex flex-col items-center space-y-2 text-center">
-                <Button variant="outline" size="sm" className="w-full">
+              <div className="flex flex-col items-center space-y-2 text-center w-full">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <Button variant="outline" size="sm" className="w-full" onClick={handleChoosePicture}>
                   Choose new picture
                 </Button>
+                {logoUrl && (
+                  <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-650 hover:bg-red-50/50 w-full" onClick={() => setLogoUrl("")}>
+                    Remove custom picture
+                  </Button>
+                )}
                 <p className="text-xs text-zinc-500">
                   JPG, GIF or PNG. Max size of 2MB.
                 </p>
