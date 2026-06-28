@@ -44,7 +44,7 @@ export const isRealSupabaseEnabled = false;
 // Validate Connection to Firestore on startup
 async function testConnection() {
   try {
-    await getDocFromServer(fireDoc(db, 'test', 'connection'));
+    await getDocFromServer(fireDoc(db, 'test_connection', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.error("Please check your Firebase configuration.");

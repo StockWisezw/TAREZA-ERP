@@ -283,14 +283,9 @@ export default function Login() {
           })
         }).catch(err => console.error("Signup notification dispatch failed", err));
 
-        // Send Email Verification
-        await secureSendEmailVerification(firebaseUser);
-        
-        // Log out immediately so status remains unverified until link is confirmed
-        await secureSignOut();
-
-        toast.success('Signup successful! A verification link has been sent to ' + email + '. Please verify your email before logging in.');
-        setIsSignUp(false);
+        // Email verification bypassed for onboarding speed
+        toast.success('Signup successful! Your business workspace is fully initialized and email confirmation is bypassed.');
+        navigate('/dashboard');
       } catch (error: any) {
         authError = error;
       }
