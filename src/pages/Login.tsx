@@ -279,12 +279,12 @@ export default function Login() {
         }).catch(err => console.error("Signup notification dispatch failed", err));
 
         // Send Email Verification
-        await sendEmailVerification(firebaseUser);
+        // await sendEmailVerification(firebaseUser);
         
-        // Log out immediately so status remains unverified until link is confirmed
-        await fireSignOut(fireAuth);
+        // Sign-out bypassed to keep user logged in upon successful signup
 
-        toast.success('Signup successful! A verification link has been sent to ' + email + '. Please verify your email before logging in.');
+        toast.success('Signup successful! Welcome to Tareza ERP!');
+        navigate('/dashboard');
         setIsSignUp(false);
       } catch (error: any) {
         authError = error;
@@ -308,7 +308,7 @@ export default function Login() {
         // Check if verified
         const isBypass = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(firebaseUser.email?.toLowerCase() || '');
 
-        if (!firebaseUser.emailVerified && !isBypass) {
+        if (false && !firebaseUser.emailVerified && !isBypass) {
           // Block immediately, sign out, and advise
           await sendEmailVerification(firebaseUser).catch(err => console.error("Could not send verification email on demand", err));
           await fireSignOut(fireAuth);
