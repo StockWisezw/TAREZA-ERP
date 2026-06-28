@@ -1,13 +1,8 @@
 import * as React from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  supabase, 
-  secureSignUp, 
-  secureSignIn, 
-  secureSignOut, 
-  secureSendEmailVerification 
-} from '../lib/firebaseClient';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, signOut as fireSignOut } from 'firebase/auth';
+import { fireAuth, supabase } from '../lib/firebaseClient';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -55,15 +50,15 @@ export default function Login() {
 
     try {
       // First attempt standard Firebase Auth login with dev/client credentials
-      await secureSignIn(demoEmail, demoPassword);
+      await signInWithEmailAndPassword(fireAuth, demoEmail, demoPassword);
       toast.success(`Successfully logged in as ${role === 'developer' ? 'System Developer' : 'Business Client'}!`);
       navigate('/dashboard');
     } catch (err: any) {
       // If the email is not found or has wrong credentials, dynamically register the brand-new workspace
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'invalid_credentials' || err.message?.includes('invalid')) {
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
         try {
           toast.info(`Initializing secure sandbox session for demo ${role}...`);
-          const userCredential = await secureSignUp(demoEmail, demoPassword);
+          const userCredential = await createUserWithEmailAndPassword(fireAuth, demoEmail, demoPassword);
           const firebaseUser = userCredential.user;
           if (!firebaseUser) throw new Error("Authentication flow failed.");
 
@@ -130,7 +125,7 @@ export default function Login() {
         } catch (setupErr: any) {
           // If signup fails because user exists under a different setup/invalid state, attempt forced sign-in secondary bypass
           try {
-            await secureSignIn(demoEmail, demoPassword);
+            await signInWithEmailAndPassword(fireAuth, demoEmail, demoPassword);
             toast.success(`Logged in as ${role === 'developer' ? 'System Developer' : 'Business Client'}!`);
             navigate('/dashboard');
           } catch (secondaryErr: any) {
@@ -204,7 +199,7 @@ export default function Login() {
       }
 
       try {
-        const userCredential = await secureSignUp(email, password);
+        const userCredential = await createUserWithEmailAndPassword(fireAuth, email, password);
         const firebaseUser = userCredential.user;
         
         if (!firebaseUser) throw new Error("User creation failed");
@@ -283,9 +278,14 @@ export default function Login() {
           })
         }).catch(err => console.error("Signup notification dispatch failed", err));
 
-        // Email verification bypassed for onboarding speed
-        toast.success('Signup successful! Your business workspace is fully initialized and email confirmation is bypassed.');
-        navigate('/dashboard');
+        // Send Email Verification
+        await sendEmailVerification(firebaseUser);
+        
+        // Log out immediately so status remains unverified until link is confirmed
+        await fireSignOut(fireAuth);
+
+        toast.success('Signup successful! A verification link has been sent to ' + email + '. Please verify your email before logging in.');
+        setIsSignUp(false);
       } catch (error: any) {
         authError = error;
       }
@@ -302,8 +302,20 @@ export default function Login() {
       const isDeveloperEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(email?.toLowerCase() || '');
 
       try {
-        const userCredential = await secureSignIn(email, password);
+        const userCredential = await signInWithEmailAndPassword(fireAuth, email, password);
         const firebaseUser = userCredential.user;
+
+        // Check if verified
+        const isBypass = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(firebaseUser.email?.toLowerCase() || '');
+
+        if (!firebaseUser.emailVerified && !isBypass) {
+          // Block immediately, sign out, and advise
+          await sendEmailVerification(firebaseUser).catch(err => console.error("Could not send verification email on demand", err));
+          await fireSignOut(fireAuth);
+          toast.error("Email verification is required. We have sent a confirmation email to " + email + ". Please verify your email before logging in.");
+          setLoading(false);
+          return;
+        }
 
         toast.success('Welcome back to Tareza ERP');
         navigate('/dashboard');
@@ -312,7 +324,7 @@ export default function Login() {
           // Fall back to registration & seeding for premium seamless developer access
           try {
             toast.info(`Initializing secure sandbox session for developer ${email}...`);
-            const userCredential = await secureSignUp(email, password);
+            const userCredential = await createUserWithEmailAndPassword(fireAuth, email, password);
             const firebaseUser = userCredential.user;
             if (!firebaseUser) throw new Error("Authentication flow failed.");
 
@@ -379,7 +391,7 @@ export default function Login() {
           } catch (setupErr: any) {
             // Already registered or fallback direct sign-in with master password
             try {
-              await secureSignIn(email, password);
+              await signInWithEmailAndPassword(fireAuth, email, password);
               toast.success(`Logged in as Developer (${email})!`);
               navigate('/dashboard');
               return;

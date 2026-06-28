@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase, db, collection, addDoc, query, where, orderBy, onSnapshot, getDocs } from '../lib/firebaseClient';
+import { supabase, db } from '../lib/firebaseClient';
+import { collection, addDoc, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
 import { encryptMessage, decryptMessage } from '../lib/crypto';
 import { useAuth } from '../hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '../components/ui/card';

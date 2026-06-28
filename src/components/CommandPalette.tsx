@@ -19,8 +19,7 @@ import {
   Compass,
   Coins,
   Store,
-  Palette,
-  Mail
+  Palette
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { supabase } from '../lib/firebaseClient';
@@ -145,7 +144,6 @@ export function CommandPalette() {
     { name: 'Themes, dark-mode & branding logos', category: 'Settings Info', icon: Palette, action: () => navigate('/settings?tab=themes') },
     { name: 'Security parameters & database backups', category: 'Settings Info', icon: Lock, action: () => navigate('/settings?tab=security') },
     { name: 'Zapier, WooCommerce & payment API connections', category: 'Settings Info', icon: Compass, action: () => navigate('/settings?tab=integrations') },
-    { name: 'SMTP Email server configurations & credentials', category: 'Settings Info', icon: Mail, action: () => navigate('/settings?tab=email') },
     { name: 'Customer support, email & developer contacts', category: 'Settings Info', icon: Settings, action: () => navigate('/settings?tab=support') },
     
     // Developer Shortcut

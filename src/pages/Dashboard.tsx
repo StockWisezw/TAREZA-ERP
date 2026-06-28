@@ -496,33 +496,6 @@ export default function Dashboard() {
           return;
         }
 
-        // Self-healing check for misplaced business_users records (doc ID != user.id)
-        try {
-          const { data: buList } = await supabase
-            .from('business_users')
-            .select('*')
-            .eq('user_id', userData.user.id);
-
-          if (buList && buList.length > 0) {
-            const hasCorrectDocId = buList.some(bu => bu.id === userData.user.id);
-            if (!hasCorrectDocId) {
-              console.log("Self-healing: Found misplaced business_users document. Copying to user's UID path...");
-              const targetBU = buList[0];
-              await supabase.from('business_users').insert({
-                id: userData.user.id,
-                business_id: targetBU.business_id,
-                user_id: userData.user.id,
-                branch_id: targetBU.branch_id || null,
-                role_id: targetBU.role_id || null,
-                is_active: targetBU.is_active !== false
-              });
-              console.log("Self-healing completed successfully!");
-            }
-          }
-        } catch (healErr) {
-          console.error("Self-healing error:", healErr);
-        }
-
         let finalBusId = '';
         let finalBrId = '';
 
@@ -573,7 +546,6 @@ export default function Dashboard() {
 
           // Link user
           const { error: buErr } = await supabase.from('business_users').insert({
-            id: userData.user.id,
             business_id: bData.id,
             user_id: userData.user.id,
             branch_id: brData.id,

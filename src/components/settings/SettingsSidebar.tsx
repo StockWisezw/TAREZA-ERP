@@ -17,8 +17,7 @@ import {
   Search,
   Megaphone,
   X,
-  BookOpen,
-  Mail
+  BookOpen
 } from 'lucide-react';
 
 interface SettingsSidebarProps {
@@ -61,8 +60,7 @@ const groups: NavGroup[] = [
   {
     title: 'Integrations',
     items: [
-      { id: 'integrations', label: 'Integrations', icon: Puzzle, description: 'Paynow, WooCommerce, and developer API secret keys' },
-      { id: 'email', label: 'Email Configuration', icon: Mail, description: 'SMTP settings for customized automated emails' }
+      { id: 'integrations', label: 'Integrations', icon: Puzzle, description: 'Paynow, WooCommerce, and developer API secret keys' }
     ]
   },
   {

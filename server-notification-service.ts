@@ -107,16 +107,11 @@ export async function sendWhatsAppNotification(message: string): Promise<{ succe
 /**
  * Sends a real Email notification
  */
-export async function sendEmailNotification(
-  subject: string, 
-  htmlContent: string, 
-  plainText: string,
-  customSmtp?: { host: string; port: number; user: string; pass: string }
-): Promise<{ success: boolean; notes: string }> {
-  const smtpHost = customSmtp?.host || process.env.SMTP_HOST;
-  const smtpPort = customSmtp?.port !== undefined ? customSmtp.port : (process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587);
-  const smtpUser = customSmtp?.user || process.env.SMTP_USER;
-  const smtpPass = customSmtp?.pass || process.env.SMTP_PASS;
+export async function sendEmailNotification(subject: string, htmlContent: string, plainText: string): Promise<{ success: boolean; notes: string }> {
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
 
   if (smtpHost && smtpUser && smtpPass) {
     try {
@@ -161,8 +156,7 @@ export async function sendEmailNotification(
  */
 export async function dispatchAlert(
   type: "signup" | "ticket" | "subscription", 
-  payload: any,
-  customSmtp?: { host: string; port: number; user: string; pass: string }
+  payload: any
 ): Promise<{ email: any; whatsapp: any }> {
   const timestamp = new Date().toLocaleString();
   let emailSubject = "";
@@ -339,7 +333,7 @@ Tareza Automated Billing Monitor`;
 
   // Execute both in parallel and swallow fine failures, recording them to internal audit logs array
   const [emailRes, whatsappRes] = await Promise.all([
-    sendEmailNotification(emailSubject, emailHtml, emailText, customSmtp),
+    sendEmailNotification(emailSubject, emailHtml, emailText),
     sendWhatsAppNotification(whatsappMsg)
   ]);
 

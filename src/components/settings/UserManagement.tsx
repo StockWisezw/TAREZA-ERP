@@ -159,42 +159,25 @@ export function UserManagement() {
         setRoles(prev => [...prev, newRole]);
       }
 
-      // 2. Register staff credentials
+      // 2. Initialize isolated temporary Firebase app instance for secure email/pass generation without admin logout!
+      const { initializeApp, deleteApp } = await import('firebase/app');
+      const { getAuth, createUserWithEmailAndPassword, signOut } = await import('firebase/auth');
+      
+      const tempApp = initializeApp(firebaseConfig, `TempStaffApp-${Date.now()}`);
+      const tempAuth = getAuth(tempApp);
+
+      // 3. Register user credentials into Firebase Auth
       toast.loading("Registering staff credentials...", { id: "user-op" });
       let newUserUid = '';
-
-      const { isRealSupabaseEnabled } = await import('../../lib/firebaseClient');
-
-      if (isRealSupabaseEnabled) {
-        // Register via secure backend Supabase Admin API endpoint without administrator logout
-        const res = await fetch('/api/auth/register-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, firstName, lastName, phone })
-        });
-        const registerData = await res.json();
-        if (!res.ok || registerData.error) {
-          throw new Error(registerData.error || "Failed to register staff credentials in Supabase.");
-        }
-        newUserUid = registerData.user?.id;
-      } else {
-        // Initialize isolated temporary Firebase app instance for secure email/pass generation without admin logout!
-        const { initializeApp, deleteApp } = await import('firebase/app');
-        const { getAuth, createUserWithEmailAndPassword, signOut } = await import('firebase/auth');
-        
-        const tempApp = initializeApp(firebaseConfig, `TempStaffApp-${Date.now()}`);
-        const tempAuth = getAuth(tempApp);
-        
-        try {
-          const cred = await createUserWithEmailAndPassword(tempAuth, email, password);
-          newUserUid = cred.user.uid;
-          await signOut(tempAuth);
-        } finally {
-          await deleteApp(tempApp);
-        }
+      try {
+        const cred = await createUserWithEmailAndPassword(tempAuth, email, password);
+        newUserUid = cred.user.uid;
+        await signOut(tempAuth);
+      } finally {
+        await deleteApp(tempApp);
       }
 
-      if (!newUserUid) throw new Error("Authentication driver failed to generate user details.");
+      if (!newUserUid) throw new Error("Firebase Auth failed to generate user details.");
 
       // 4. Create internal CRM / user Profile link
       toast.loading("Saving employee profile record...", { id: "user-op" });
@@ -210,7 +193,6 @@ export function UserManagement() {
       // 5. Create business-branch link relation record
       toast.loading("Mapping permissions & assigned branch...", { id: "user-op" });
       const { error: buError } = await supabase.from('business_users').insert({
-        id: newUserUid,
         business_id: businessId,
         user_id: newUserUid,
         branch_id: selectedBranchId || null,

@@ -15,10 +15,6 @@
         "subscription_status": { "type": "string" },
         "max_users": { "type": "number" },
         "max_branches": { "type": "number" },
-        "smtp_host": { "type": "string" },
-        "smtp_port": { "type": "number" },
-        "smtp_user": { "type": "string" },
-        "smtp_pass": { "type": "string" },
         "created_at": { "type": "string" },
         "updated_at": { "type": "string" }
       },
