@@ -704,7 +704,7 @@ class SupabaseQueryBuilder {
           }
 
           const cleanItem = normalizeInput(item, this.table);
-          if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business') {
+          if (requiresBusinessScope && activeBizId) {
             if (!(isDevAdminTable && cleanItem.business_id)) {
               cleanItem.business_id = activeBizId;
             }
@@ -724,12 +724,12 @@ class SupabaseQueryBuilder {
       
       if (this.isUpdate) {
         if (this.targetId) {
-          if (this.table === 'businesses' && !isSystemDev && activeBizId && activeBizId !== 'default_business' && this.targetId !== activeBizId) {
+          if (this.table === 'businesses' && !isSystemDev && activeBizId && this.targetId !== activeBizId) {
             throw new Error(`Permission denied: Cannot update other business profile`);
           }
           const docRef = fireDoc(db, this.table, this.targetId);
           const cleanItem = normalizeInput(this.payload, this.table);
-          if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business') {
+          if (requiresBusinessScope && activeBizId) {
             if (!(isDevAdminTable && cleanItem.business_id)) {
               cleanItem.business_id = activeBizId;
             }
@@ -740,7 +740,7 @@ class SupabaseQueryBuilder {
         } else {
           const results = await this.getFilteredDocs();
           const cleanItem = normalizeInput(this.payload, this.table);
-          if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business') {
+          if (requiresBusinessScope && activeBizId) {
             if (!(isDevAdminTable && cleanItem.business_id)) {
               cleanItem.business_id = activeBizId;
             }
@@ -755,7 +755,7 @@ class SupabaseQueryBuilder {
 
       if (this.isDelete) {
         if (this.targetId) {
-          if (requiresBusinessScope && !isSystemDev && activeBizId && activeBizId !== 'default_business') {
+          if (requiresBusinessScope && !isSystemDev && activeBizId) {
             const docRef = fireDoc(db, this.table, this.targetId);
             const snap = await fireGetDoc(docRef);
             if (snap.exists() && snap.data()?.business_id !== activeBizId) {
@@ -833,14 +833,14 @@ class SupabaseQueryBuilder {
      const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id');
      const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
  
-     if (requiresBusinessScope && activeBizId && activeBizId !== 'default_business' && !isDevAdminTable) {
+     if (requiresBusinessScope && activeBizId && !isDevAdminTable) {
        const hasBizIdFilter = this.eqFilters.some(f => f.col === 'business_id');
        if (!hasBizIdFilter) {
          this.eqFilters.push({ col: 'business_id', val: activeBizId });
        } else {
          this.eqFilters = this.eqFilters.map(f => f.col === 'business_id' ? { col: 'business_id', val: activeBizId } : f);
        }
-     } else if (this.table === 'businesses' && activeBizId && activeBizId !== 'default_business' && !isDevAdminTable) {
+     } else if (this.table === 'businesses' && activeBizId && !isDevAdminTable) {
        if (this.targetId) {
          this.targetId = activeBizId;
        } else {

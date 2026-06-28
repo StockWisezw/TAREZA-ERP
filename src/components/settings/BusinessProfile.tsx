@@ -250,7 +250,8 @@ export function BusinessProfile() {
                     setVatNumber(e.target.value);
                   }}
                   placeholder="e.g. TZ-123456/2026"
-                  className="h-11 font-mono font-medium"
+                  className="h-11 font-mono font-medium bg-zinc-50 border-zinc-200 text-zinc-500 cursor-not-allowed"
+                  disabled={true}
                 />
                 <p className="text-[11px] text-zinc-400 font-mono">This unique registration ID identifies your workspace.</p>
               </div>

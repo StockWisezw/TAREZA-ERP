@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Activity, CreditCard, DollarSign, Package, Sparkles, Clock, Lock, Unlock, Play, RefreshCw, AlertTriangle, CheckCircle2, BarChart3, PieChart as PieChartIcon, Check, TrendingUp, Coins } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, Legend, PieChart, Pie, LineChart, Line } from 'recharts';
 import { useEffect, useState } from 'react';
-import { supabase } from '../lib/firebaseClient';
+import { supabase, firebaseConfig } from '../lib/firebaseClient';
 import { DynamicBranchOverview } from '../components/dashboard/DynamicBranchOverview';
 import { toast } from 'sonner';
 import { useTheme } from 'next-themes';
@@ -567,17 +567,26 @@ export default function Dashboard() {
           } catch(e) {}
           
           const regNo = `TZ-${Math.floor(100000 + Math.random() * 900000)}/${new Date().getFullYear()}`;
-          const newBusinessId = regNo.replace(/\//g, '-');
-          const newRoleId = crypto.randomUUID();
-          const newBranchId = crypto.randomUUID();
+          const sanitizedRegNo = regNo.replace(/[\/\s]/g, '-').replace(/[^A-Z0-9-]/g, '');
+          const newBusinessId = sanitizedRegNo;
+          
+          // Role IDs
+          const adminRoleId = crypto.randomUUID();
+          const managerRoleId = crypto.randomUUID();
+          const cashierRoleId = crypto.randomUUID();
+
+          // Branch IDs
+          const mainBranchId = crypto.randomUUID();
+          const warehouseBranchId = crypto.randomUUID();
+          const bulawayoBranchId = crypto.randomUUID();
 
           // Step 1: Establish tenancy link in business_users FIRST to satisfy belongsToUserBusiness rule
           const { error: buErr } = await supabase.from('business_users').insert({
             id: userData.user.id,
             business_id: newBusinessId,
             user_id: userData.user.id,
-            branch_id: newBranchId,
-            role_id: newRoleId,
+            branch_id: mainBranchId,
+            role_id: adminRoleId,
             is_active: true
           });
           if (buErr) throw buErr;
@@ -591,37 +600,79 @@ export default function Dashboard() {
             id: newBusinessId,
             name: `My Business (${regNo})`,
             tax_number: regNo,
+            email: userData.user.email || '',
             created_at: new Date().toISOString()
           });
           if (bErr) throw bErr || new Error("Failed to create business");
           finalBusId = newBusinessId;
           
-          // Step 4: Create role
-          const { error: rErr } = await supabase.from('roles').insert({
-            id: newRoleId,
-            business_id: newBusinessId,
-            name: 'Admin',
-            description: 'System Administrator'
-          });
-          if (rErr) throw rErr || new Error("Failed to create role");
+          // Seed Roles
+          await supabase.from('roles').insert([
+            { id: adminRoleId, business_id: newBusinessId, name: 'Admin', description: 'System Administrator with full access' },
+            { id: managerRoleId, business_id: newBusinessId, name: 'Manager', description: 'Branch Manager with operational control' },
+            { id: cashierRoleId, business_id: newBusinessId, name: 'Cashier', description: 'POS Cashier with checkout-only access' }
+          ]);
 
-          // Step 5: Create branch
-          const { error: brErr } = await supabase.from('branches').insert({
-            id: newBranchId,
-            business_id: newBusinessId,
-            name: 'Main Branch',
-            type: 'retail'
-          });
-          if (brErr) throw brErr || new Error("Failed to create branch");
-          finalBrId = newBranchId;
+          // Seed Branches
+          await supabase.from('branches').insert([
+            { id: mainBranchId, business_id: newBusinessId, name: 'Main Retail Branch', type: 'retail', address: '100 Samora Machel Ave, Harare' },
+            { id: warehouseBranchId, business_id: newBusinessId, name: 'Harare Central Warehouse', type: 'warehouse', address: '12 Coventry Rd, Workington, Harare' },
+            { id: bulawayoBranchId, business_id: newBusinessId, name: 'Bulawayo CBD Branch', type: 'retail', address: '55 Jason Moyo St, Bulawayo' }
+          ]);
+          finalBrId = mainBranchId;
 
-          // Default category
-          await supabase.from('categories').insert({ business_id: newBusinessId, name: 'General' });
+          // Default categories
+          await supabase.from('categories').insert([
+            { business_id: newBusinessId, name: 'General' },
+            { business_id: newBusinessId, name: 'Beverages' },
+            { business_id: newBusinessId, name: 'Dry Goods' }
+          ]);
 
           // Free trial sub
           await supabase.from('subscriptions').insert({ business_id: newBusinessId, plan_name: 'free_trial', status: 'active' });
           
-          toast.success('Your business profile has been initialized.');
+          // Seed Default Staff Users (Manager, Cashier)
+          try {
+            const { initializeApp, deleteApp } = await import('firebase/app');
+            const { getAuth, createUserWithEmailAndPassword, signOut } = await import('firebase/auth');
+            
+            const managerEmail = `manager@${sanitizedRegNo.toLowerCase()}.tarezaerp.co.zw`;
+            const cashierEmail = `cashier@${sanitizedRegNo.toLowerCase()}.tarezaerp.co.zw`;
+            const staffPassword = 'Password123!';
+
+            const staffToCreate = [
+              { email: managerEmail, firstName: 'Tendai', lastName: 'Manager', roleId: managerRoleId, branchId: warehouseBranchId },
+              { email: cashierEmail, firstName: 'Chipo', lastName: 'Cashier', roleId: cashierRoleId, branchId: mainBranchId }
+            ];
+
+            for (const staff of staffToCreate) {
+              const tempApp = initializeApp(firebaseConfig, `TempStaffSeed-${crypto.randomUUID()}`);
+              const tempAuth = getAuth(tempApp);
+              try {
+                const cred = await createUserWithEmailAndPassword(tempAuth, staff.email, staffPassword);
+                const uid = cred.user.uid;
+                await signOut(tempAuth);
+
+                // Create Profile
+                await supabase.from('profiles').insert([
+                  { id: uid, first_name: staff.firstName, last_name: staff.lastName, email: staff.email, phone: '+263777000000' }
+                ]);
+
+                // Create link
+                await supabase.from('business_users').insert([
+                  { id: uid, business_id: newBusinessId, user_id: uid, branch_id: staff.branchId, role_id: staff.roleId, is_active: true }
+                ]);
+              } catch (staffErr) {
+                console.error(`Failed to register staff ${staff.email}:`, staffErr);
+              } finally {
+                await deleteApp(tempApp);
+              }
+            }
+          } catch (tempSetupErr) {
+            console.error("Staff seeding helper failed in dashboard:", tempSetupErr);
+          }
+
+          toast.success('Your business profile and default branches/staff have been initialized.');
         }
 
         const context = {

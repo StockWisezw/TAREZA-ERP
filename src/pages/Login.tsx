@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, signOut as fireSignOut } from 'firebase/auth';
-import { fireAuth, supabase } from '../lib/firebaseClient';
+import { fireAuth, supabase, firebaseConfig } from '../lib/firebaseClient';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -17,6 +17,7 @@ export default function Login() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [businessName, setBusinessName] = useState('');
+  const [phone, setPhone] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState(() => {
     return `TZ-${Math.floor(100000 + Math.random() * 900000)}/${new Date().getFullYear()}`;
   });
@@ -208,7 +209,7 @@ export default function Login() {
 
         // Setup Firebase Data
         await supabase.from('profiles').insert([
-          { id: user.id, first_name: firstName, last_name: lastName, email: user.email }
+          { id: user.id, first_name: firstName, last_name: lastName, email: user.email, phone: phone || null }
         ]);
 
         const endDate = new Date();
@@ -219,26 +220,36 @@ export default function Login() {
         }
 
         // Pre-generate IDs to avoid race conditions and secure sequence
-        const sanitizedRegNo = registrationNumber.trim().toUpperCase().replace(/\//g, '-');
+        const sanitizedRegNo = registrationNumber.trim().toUpperCase().replace(/[\/\s]/g, '-').replace(/[^A-Z0-9-]/g, '');
         const newBusinessId = sanitizedRegNo;
-        const newRoleId = crypto.randomUUID();
-        const newBranchId = crypto.randomUUID();
+        
+        // Role IDs
+        const adminRoleId = crypto.randomUUID();
+        const managerRoleId = crypto.randomUUID();
+        const cashierRoleId = crypto.randomUUID();
 
-        // Step 1: Establish tenancy link in business_users FIRST
+        // Branch IDs
+        const mainBranchId = crypto.randomUUID();
+        const warehouseBranchId = crypto.randomUUID();
+        const bulawayoBranchId = crypto.randomUUID();
+
+        // Step 1: Establish tenancy link in business_users FIRST for the owner
         await supabase.from('business_users').insert([
-          { id: user.id, business_id: newBusinessId, user_id: user.id, branch_id: newBranchId, role_id: newRoleId, is_active: true }
+          { id: user.id, business_id: newBusinessId, user_id: user.id, branch_id: mainBranchId, role_id: adminRoleId, is_active: true }
         ]);
 
         // Step 2: Set target active business ID cache
         const { setActiveBusinessId } = await import('../lib/firebaseClient');
         setActiveBusinessId(newBusinessId);
 
-        // Step 3: Build Business
+        // Step 3: Build Business with full profile details
         await supabase.from('businesses').insert([
           { 
             id: newBusinessId,
             name: businessName, // The business name is mutable
             tax_number: registrationNumber,
+            email: email,
+            phone: phone || null,
             created_at: new Date().toISOString() 
           }
         ]);
@@ -251,17 +262,67 @@ export default function Login() {
            end_date: endDate.toISOString()
         }]);
 
+        // Seed Roles
         await supabase.from('roles').insert([
-          { id: newRoleId, business_id: newBusinessId, name: 'Admin', description: 'System Administrator' }
+          { id: adminRoleId, business_id: newBusinessId, name: 'Admin', description: 'System Administrator with full access' },
+          { id: managerRoleId, business_id: newBusinessId, name: 'Manager', description: 'Branch Manager with operational control' },
+          { id: cashierRoleId, business_id: newBusinessId, name: 'Cashier', description: 'POS Cashier with checkout-only access' }
         ]);
 
+        // Seed Multiple Branches (Default)
         await supabase.from('branches').insert([
-          { id: newBranchId, business_id: newBusinessId, name: 'Main Branch', type: 'retail' }
+          { id: mainBranchId, business_id: newBusinessId, name: 'Main Retail Branch', type: 'retail', address: '100 Samora Machel Ave, Harare' },
+          { id: warehouseBranchId, business_id: newBusinessId, name: 'Harare Central Warehouse', type: 'warehouse', address: '12 Coventry Rd, Workington, Harare' },
+          { id: bulawayoBranchId, business_id: newBusinessId, name: 'Bulawayo CBD Branch', type: 'retail', address: '55 Jason Moyo St, Bulawayo' }
         ]);
 
+        // Seed Default Categories
         await supabase.from('categories').insert([
-          { business_id: newBusinessId, name: 'General' }
+          { business_id: newBusinessId, name: 'General' },
+          { business_id: newBusinessId, name: 'Beverages' },
+          { business_id: newBusinessId, name: 'Dry Goods' }
         ]);
+
+        // Seed Default Staff Users (Manager, Cashier)
+        try {
+          const { initializeApp, deleteApp } = await import('firebase/app');
+          const { getAuth, createUserWithEmailAndPassword, signOut } = await import('firebase/auth');
+          
+          const managerEmail = `manager@${sanitizedRegNo.toLowerCase()}.tarezaerp.co.zw`;
+          const cashierEmail = `cashier@${sanitizedRegNo.toLowerCase()}.tarezaerp.co.zw`;
+          const staffPassword = 'Password123!';
+
+          const staffToCreate = [
+            { email: managerEmail, firstName: 'Tendai', lastName: 'Manager', roleId: managerRoleId, branchId: warehouseBranchId },
+            { email: cashierEmail, firstName: 'Chipo', lastName: 'Cashier', roleId: cashierRoleId, branchId: mainBranchId }
+          ];
+
+          for (const staff of staffToCreate) {
+            const tempApp = initializeApp(firebaseConfig, `TempStaffSeed-${crypto.randomUUID()}`);
+            const tempAuth = getAuth(tempApp);
+            try {
+              const cred = await createUserWithEmailAndPassword(tempAuth, staff.email, staffPassword);
+              const uid = cred.user.uid;
+              await signOut(tempAuth);
+
+              // Create Profile
+              await supabase.from('profiles').insert([
+                { id: uid, first_name: staff.firstName, last_name: staff.lastName, email: staff.email, phone: '+263777000000' }
+              ]);
+
+              // Create link
+              await supabase.from('business_users').insert([
+                { id: uid, business_id: newBusinessId, user_id: uid, branch_id: staff.branchId, role_id: staff.roleId, is_active: true }
+              ]);
+            } catch (staffErr) {
+              console.error(`Failed to register staff ${staff.email}:`, staffErr);
+            } finally {
+              await deleteApp(tempApp);
+            }
+          }
+        } catch (tempSetupErr) {
+          console.error("Staff seeding helper failed:", tempSetupErr);
+        }
 
         // Trigger email and WhatsApp signup alerts in background securely
         fetch('/api/notifications/notify', {
@@ -279,12 +340,7 @@ export default function Login() {
           })
         }).catch(err => console.error("Signup notification dispatch failed", err));
 
-        // Send Email Verification
-        // await sendEmailVerification(firebaseUser);
-        
-        // Sign-out bypassed to keep user logged in upon successful signup
-
-        toast.success('Signup successful! Welcome to Tareza ERP!');
+        toast.success('Signup successful! Welcome to Tareza ERP! Default branches and staff users are pre-configured.');
         navigate('/dashboard');
         setIsSignUp(false);
       } catch (error: any) {
@@ -618,6 +674,28 @@ export default function Login() {
                         </div>
                       </div>
                       <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="businessName" className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Business / Company Name</Label>
+                          <Input 
+                            id="businessName" 
+                            placeholder="e.g. Acme Zimbabwe (Pvt) Ltd" 
+                            value={businessName}
+                            onChange={(e) => setBusinessName(e.target.value)}
+                            required={isSignUp}
+                            className="h-11 bg-zinc-50 focus-visible:ring-primary focus-visible:bg-white border-zinc-200"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="phone" className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Contact Phone Number</Label>
+                          <Input 
+                            id="phone" 
+                            placeholder="e.g. +263777123456" 
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            required={isSignUp}
+                            className="h-11 bg-zinc-50 focus-visible:ring-primary focus-visible:bg-white border-zinc-200 font-mono"
+                          />
+                        </div>
                         <div className="space-y-2">
                           <Label htmlFor="registrationNumber" className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Business Registration / Tax Number</Label>
                           <Input 

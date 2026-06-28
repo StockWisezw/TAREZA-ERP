@@ -57,7 +57,7 @@ service cloud.firestore {
         belongsToUserBusiness(existing().business_id)
       ));
       allow create: if isSystemDeveloper() || (isSignedIn() && (
-        request.auth.uid == userId ||
+        (request.auth.uid == userId && !exists(/databases/$(database)/documents/businesses/$(incoming().business_id))) ||
         belongsToUserBusiness(incoming().business_id)
       ));
       allow update: if isSystemDeveloper() || (isSignedIn() && (
@@ -72,7 +72,7 @@ service cloud.firestore {
     
     // 3. Businesses Profile
     match /businesses/{businessId} {
-      allow read: if isSignedIn();
+      allow read: if isSystemDeveloper() || belongsToUserBusiness(businessId) || businessId == "default_business";
       allow write: if isSystemDeveloper() || 
                    belongsToUserBusiness(businessId) || 
                    (request.resource.data.system_admin_key == "paynow_secure_bypass_3892");
