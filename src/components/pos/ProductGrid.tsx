@@ -43,6 +43,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   isLoading,
   filteredProducts
 }) => {
+  const [selectedTiers, setSelectedTiers] = useState<Record<string, string>>({});
   const [gridScale, setGridScale] = useState<'cozy' | 'comfortable' | 'compact'>('comfortable');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
     return typeof window !== 'undefined' && window.innerWidth < 1024 ? 'list' : 'grid';
@@ -190,11 +191,12 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
               const colorClass = bgColors[product.name.charCodeAt(0) % bgColors.length];
               const pSize = getPackSize(product.sku);
               const hasPack = pSize > 1;
+              const selectedTier = selectedTiers[product.id] || 'retail';
 
               return (
                 <div 
                   key={product.id}
-                  onClick={() => addToCart(product, 0, 'retail')}
+                  onClick={() => addToCart(product, 0, selectedTier)}
                   className="group flex flex-col md:flex-row md:items-center justify-between p-2.5 bg-white border border-zinc-200 hover:border-zinc-350 active:bg-zinc-50 rounded-xl transition-all cursor-pointer hover:shadow-2xs gap-2"
                 >
                   <div className="flex items-center gap-2.5 overflow-hidden min-w-0">
@@ -225,35 +227,32 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1.5 overflow-x-auto max-w-full">
-                      <Button 
-                        size="sm"
-                        variant="secondary"
-                        className="text-[10px] h-7 px-2 px-2.5 font-extrabold bg-zinc-150/75 hover:bg-zinc-200 text-zinc-800 hover:text-zinc-950 border border-zinc-200 rounded-lg cursor-pointer flex items-center gap-1"
-                        onClick={() => addToCart(product, 0, 'retail')}
-                      >
-                        <span>+1 Unit</span>
-                      </Button>
-
-                      {hasPack && (
-                        <Button 
-                          size="sm"
-                          className="text-[10px] h-7 px-2.5 font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-lg cursor-pointer"
-                          onClick={() => addToCart(product, 0, 'wholesale')}
+                      {((product.bundles && product.bundles.length > 0) || hasPack) && (
+                        <select
+                          value={selectedTier}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => setSelectedTiers({ ...selectedTiers, [product.id]: e.target.value })}
+                          className="bg-zinc-50 border border-zinc-200 text-zinc-700 text-[10px] font-bold py-1 px-1.5 rounded-lg cursor-pointer h-7 focus:outline-none"
                         >
-                          <span>+Pack ({pSize})</span>
-                        </Button>
+                          <option value="retail">Single Unit (${product.retailPrice.toFixed(2)})</option>
+                          {hasPack && (
+                            <option value="wholesale">Pack ({pSize}) (${product.wholesalePrice.toFixed(2)})</option>
+                          )}
+                          {product.bundles?.map((b: any, bIdx: number) => (
+                            <option key={bIdx} value={b.name}>
+                              {b.name} ({b.pack_size || b.packSize}) (${Number(b.price || 0).toFixed(2)})
+                            </option>
+                          ))}
+                        </select>
                       )}
 
-                      {product.bundles?.map((b: any, index: number) => (
-                        <Button 
-                          key={index}
-                          size="sm"
-                          className="text-[10px] h-7 px-2.5 font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg cursor-pointer"
-                          onClick={() => addToCart(product, 0, b.name || b.pack_size)}
-                        >
-                          <span>+{b.name || 'Bundle'}</span>
-                        </Button>
-                      ))}
+                      <Button 
+                        size="sm"
+                        className="text-[10px] h-7 px-2.5 font-bold bg-zinc-900 hover:bg-zinc-855 text-white rounded-lg cursor-pointer flex items-center gap-1"
+                        onClick={() => addToCart(product, 0, selectedTier)}
+                      >
+                        <span>+ Add</span>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -295,11 +294,12 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
               const colorClass = bgColors[product.name.charCodeAt(0) % bgColors.length];
               const pSize = getPackSize(product.sku);
               const hasPack = pSize > 1;
+              const selectedTier = selectedTiers[product.id] || 'retail';
 
               return (
                 <div 
                   key={product.id}
-                  onClick={() => addToCart(product, 0, 'retail')}
+                  onClick={() => addToCart(product, 0, selectedTier)}
                   className="group relative bg-white border border-zinc-200 rounded-xl overflow-hidden hover:shadow-md transition-all duration-200 flex flex-col cursor-pointer hover:border-zinc-400"
                 >
                   <div className={`h-11 relative overflow-hidden flex items-center justify-center shrink-0 ${colorClass}`}>
@@ -332,39 +332,30 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                         </div>
                       </div>
                     )}
-                    
-                    {((product.bundles && product.bundles.length > 0) || hasPack) ? (
+                                       {((product.bundles && product.bundles.length > 0) || hasPack) ? (
                       <div className="space-y-1 mt-auto pt-1 select-none" onClick={(e) => e.stopPropagation()}>
+                        <select
+                          value={selectedTier}
+                          onChange={(e) => setSelectedTiers({ ...selectedTiers, [product.id]: e.target.value })}
+                          className="w-full text-[10px] font-bold py-1 px-1.5 border border-zinc-200 bg-zinc-50 rounded-lg focus:outline-none cursor-pointer h-7"
+                        >
+                          <option value="retail">Single Unit (${product.retailPrice.toFixed(2)})</option>
+                          {hasPack && (
+                            <option value="wholesale">Pack ({pSize}) (${product.wholesalePrice.toFixed(2)})</option>
+                          )}
+                          {product.bundles?.map((b: any, bIdx: number) => (
+                            <option key={bIdx} value={b.name}>
+                              {b.name} ({b.pack_size || b.packSize}) (${Number(b.price || 0).toFixed(2)})
+                            </option>
+                          ))}
+                        </select>
                         <Button 
                           size="sm" 
-                          variant="outline"
-                          className="w-full text-[10px] h-6 flex justify-between px-1.5 text-zinc-700 border-zinc-200 hover:bg-zinc-50 hover:text-zinc-950 transition-all rounded-md"
-                          onClick={() => addToCart(product, 0, 'retail')}
+                          className="w-full text-[10px] h-6.5 font-bold bg-zinc-900 hover:bg-zinc-855 text-white rounded-lg cursor-pointer"
+                          onClick={() => addToCart(product, 0, selectedTier)}
                         >
-                          <span>+1 Unit</span>
-                          <span className="font-mono font-bold">${product.retailPrice.toFixed(2)}</span>
+                          + Add Selected
                         </Button>
-                        {hasPack && (
-                          <Button 
-                            size="sm" 
-                            className="w-full text-[10px] h-6 flex justify-between px-1.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-all rounded-md"
-                            onClick={() => addToCart(product, 0, 'wholesale')}
-                          >
-                            <span>+Pack ({pSize})</span>
-                            <span className="font-mono font-bold">${product.wholesalePrice.toFixed(2)}</span>
-                          </Button>
-                        )}
-                        {product.bundles?.map((b: any, index: number) => (
-                          <Button 
-                            key={index}
-                            size="sm" 
-                            className="w-full text-[10px] h-6 flex justify-between px-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold transition-all rounded-md"
-                            onClick={() => addToCart(product, 0, b.name)}
-                          >
-                            <span>+{b.name} ({b.pack_size || b.packSize})</span>
-                            <span className="font-mono font-bold">${Number(b.price || 0).toFixed(2)}</span>
-                          </Button>
-                        ))}
                       </div>
                     ) : (
                       <div className="mt-auto pt-1 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
@@ -373,7 +364,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                         </span>
                         <Button 
                           size="icon" 
-                          className="h-5 w-5 rounded-full bg-zinc-900 hover:bg-zinc-850 text-white flex items-center justify-center p-0 cursor-pointer"
+                          className="h-5 w-5 rounded-full bg-zinc-900 hover:bg-zinc-855 text-white flex items-center justify-center p-0 cursor-pointer"
                           onClick={() => addToCart(product, 0, 'retail')}
                         >
                           <span className="text-xs leading-none font-bold">+</span>

@@ -300,7 +300,8 @@ export default function POS() {
                     taxClass: p.tax_class || p.taxClass || 'standard',
                     category: p.category_id || p.category || 'all',
                     imageUrl: '', 
-                    stock: totalStock
+                    stock: totalStock,
+                    bundles: p.bundles || []
                   };
                 });
                 setProducts(updatedProducts);
@@ -361,7 +362,8 @@ export default function POS() {
               taxClass: p.tax_class || p.taxClass || 'standard',
               category: p.category_id || p.category || 'all',
               imageUrl: '', 
-              stock: totalStock
+              stock: totalStock,
+              bundles: p.bundles
             };
           });
           setProducts(processedProducts);
