@@ -28,6 +28,7 @@ import { supabase } from '../lib/firebaseClient';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
 import { RegulatoryComplianceExports } from '../components/reports/RegulatoryComplianceExports';
+import { useBusinessStore } from '../store';
 import { AIForecasting } from '../components/reports/AIForecasting';
 import QuickBooksStyleReports from '../components/reports/QuickBooksStyleReports';
 
@@ -44,6 +45,7 @@ interface Branch {
 }
 
 export default function Reports() {
+  const { activeBranch } = useBusinessStore();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
 
@@ -412,8 +414,7 @@ export default function Reports() {
         .eq('business_id', businessId)
         .eq('status', 'COMPLETED');
       
-      const salesList = salesRes.data || [];
-      setSales(salesList);
+      let salesList = salesRes.data || [];
 
       // 3. Fetch cash drawer expenses + approved manual expenses
       const expenseLogsRes = await supabase.from('cash_drawer_logs')
@@ -422,8 +423,7 @@ export default function Reports() {
         .eq('type', 'payout')
         .eq('transaction_type', 'expense');
 
-      const drawerExpenses = expenseLogsRes.data || [];
-      setExpenses(drawerExpenses);
+      let drawerExpenses = expenseLogsRes.data || [];
 
       // 4. Fetch accounts for Balance Sheet/Ledger live balances
       const { data: accountsData } = await supabase.from('accounts').select('*').eq('business_id', businessId);
@@ -436,11 +436,24 @@ export default function Reports() {
 
       // 6. Fetch inventory levels
       const { data: inventoryData } = await supabase.from('inventory').select('*').eq('business_id', businessId);
-      setInventory(inventoryData || []);
+      let inventoryList = inventoryData || [];
 
       // 7. Fetch purchase orders
       const { data: poData } = await supabase.from('purchase_orders').select('*').eq('business_id', businessId);
-      setPurchaseOrders(poData || []);
+      let poList = poData || [];
+
+      // Apply activeBranch filter client-side!
+      if (activeBranch && activeBranch.id !== 'all') {
+        salesList = salesList.filter((s: any) => s.branch_id === activeBranch.id);
+        drawerExpenses = drawerExpenses.filter((e: any) => e.branch_id === activeBranch.id);
+        inventoryList = inventoryList.filter((i: any) => i.branch_id === activeBranch.id);
+        poList = poList.filter((p: any) => p.branch_id === activeBranch.id);
+      }
+
+      setSales(salesList);
+      setExpenses(drawerExpenses);
+      setInventory(inventoryList);
+      setPurchaseOrders(poList);
 
       const dynamicTotalRevenue = salesList.reduce((sum, s) => sum + Number(s.total || s.total_amount || 0), 0);
 
@@ -565,7 +578,7 @@ export default function Reports() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [activeBranch]);
 
   // Custom sales filter query helper
   const handleCustomSalesFilter = () => {

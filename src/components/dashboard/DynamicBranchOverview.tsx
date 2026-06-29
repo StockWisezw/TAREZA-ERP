@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/firebaseClient';
 import { toast } from 'sonner';
+import { useBusinessStore } from '../../store';
 
 interface Branch {
   id: string;
@@ -74,9 +75,18 @@ export interface DynamicBranchOverviewProps {
 }
 
 export function DynamicBranchOverview({ businessId }: DynamicBranchOverviewProps) {
+  const { activeBranch } = useBusinessStore();
   const [loading, setLoading] = useState<boolean>(true);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
+
+  useEffect(() => {
+    if (activeBranch) {
+      setSelectedBranchId(activeBranch.id);
+    } else {
+      setSelectedBranchId('all');
+    }
+  }, [activeBranch]);
   
   // RAW Data States
   const [products, setProducts] = useState<Product[]>([]);

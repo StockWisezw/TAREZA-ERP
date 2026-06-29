@@ -25,6 +25,8 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useBusinessStore } from '../store';
+import { Building2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
@@ -84,6 +86,7 @@ export default function Layout() {
   const isDeveloper = user?.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(user.email.toLowerCase());
   // Screen lock removed per user request
   const isLocked = false;
+  const { setBranches, activeBranch, setActiveBranch, branches } = useBusinessStore();
   const [businessName, setBusinessName] = React.useState<string>('');
   const [businessLogo, setBusinessLogo] = React.useState<string>('');
   const [subStatus, setSubStatus] = React.useState<string>('ACTIVE');
@@ -91,7 +94,7 @@ export default function Layout() {
   const [sidebarExpanded, setSidebarExpanded] = React.useState<boolean>(false);
 
   React.useEffect(() => {
-    async function fetchBusinessName() {
+    async function fetchBusinessAndBranches() {
       try {
         const { data: userData } = await supabase.auth.getUser();
         const userId = userData?.user?.id;
@@ -99,7 +102,7 @@ export default function Layout() {
 
         const { data: businessData } = await supabase
           .from('business_users')
-          .select('business_id')
+          .select('business_id, branch_id')
           .eq('user_id', userId)
           .limit(1)
           .maybeSingle();
@@ -125,12 +128,24 @@ export default function Layout() {
               setBusinessLogo(bData.logo_url);
             }
           }
+
+          // Fetch branches for branch-wise displays
+          const { data: branchesData } = await supabase
+            .from('branches')
+            .select('id, name, type')
+            .eq('business_id', businessData.business_id);
+
+          if (branchesData) {
+            setBranches(branchesData);
+            const defaultBr = branchesData.find(b => b.id === businessData.branch_id);
+            setActiveBranch(defaultBr || branchesData[0] || { id: 'all', name: 'All Branches', type: 'all' });
+          }
         }
       } catch (err) {
-        console.error('Error fetching business name in layout:', err);
+        console.error('Error fetching business and branches in layout:', err);
       }
     }
-    fetchBusinessName();
+    fetchBusinessAndBranches();
   }, [user]);
   
   const [notifications, setNotifications] = React.useState<NotificationItem[]>(() => {
@@ -373,6 +388,49 @@ export default function Layout() {
                   </div>
                 </SheetContent>
               </Sheet>
+
+              {/* Branch Selector Dropdown */}
+              {branches.length > 0 && (
+                <div className="ml-2 mr-2 flex items-center">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger render={
+                      <Button variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-xs font-bold border-zinc-250 dark:border-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl shadow-xs transition-all">
+                        <Store className="h-3.5 w-3.5 text-zinc-500" />
+                        <span className="max-w-[120px] truncate">{activeBranch?.id === 'all' ? 'All Branches' : (activeBranch?.name || 'All Branches')}</span>
+                      </Button>
+                    } />
+                    <DropdownMenuContent className="w-56 align-start" align="start">
+                      <DropdownMenuLabel className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider">
+                        Select Active Branch
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        onClick={() => setActiveBranch({ id: 'all', name: 'All Branches', type: 'all' })}
+                        className="py-2 cursor-pointer flex items-center justify-between text-xs font-semibold"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Building2 className="w-3.5 h-3.5 text-zinc-400" />
+                          All Branches (Consolidated)
+                        </span>
+                        {(activeBranch?.id === 'all' || !activeBranch) && <Check className="w-3.5 h-3.5 text-emerald-500" />}
+                      </DropdownMenuItem>
+                      {branches.map((br) => (
+                        <DropdownMenuItem 
+                          key={br.id}
+                          onClick={() => setActiveBranch(br)}
+                          className="py-2 cursor-pointer flex items-center justify-between text-xs font-semibold"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Store className="w-3.5 h-3.5 text-zinc-400" />
+                            {br.name}
+                          </span>
+                          {activeBranch?.id === br.id && <Check className="w-3.5 h-3.5 text-emerald-500" />}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              )}
               
               <div 
                 className="hidden sm:flex relative w-64 max-w-md ml-2 cursor-pointer"

@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { supabase } from '../../lib/firebaseClient';
 import { toast } from 'sonner';
 import { ProductSchema } from '../../utils/validation';
+import { useBusinessStore } from '../../store';
 
 const getPackSize = (sku: string | undefined): number => {
   if (!sku) return 1;
@@ -32,6 +33,7 @@ interface ProductListProps {
 }
 
 export function ProductList({ onImportClick }: ProductListProps) {
+  const { activeBranch } = useBusinessStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +57,16 @@ export function ProductList({ onImportClick }: ProductListProps) {
   // Branch configuration states
   const [branches, setBranches] = useState<any[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
+
+  useEffect(() => {
+    if (activeBranch && activeBranch.id !== 'all') {
+      setSelectedBranchId(activeBranch.id);
+    } else if (activeBranch && activeBranch.id === 'all') {
+      if (branches.length > 0) {
+        setSelectedBranchId(branches[0].id);
+      }
+    }
+  }, [activeBranch, branches]);
 
   // Inline editing state
   const [isInlineEditMode, setIsInlineEditMode] = useState(false);

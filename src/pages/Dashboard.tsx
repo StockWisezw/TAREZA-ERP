@@ -9,6 +9,7 @@ import { useTheme } from 'next-themes';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { useBusinessStore } from '../store';
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ import {
 } from '../components/ui/dialog';
 
 export default function Dashboard() {
+  const { activeBranch } = useBusinessStore();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
 
@@ -264,11 +266,17 @@ export default function Dashboard() {
         const branches = branchesRes.data || [];
         setBranchesList(branches);
 
-        const salesInfo = salesRes.data || [];
+        let salesInfo = salesRes.data || [];
         const activeProducts = activeProductsRes.data || [];
-        const inventoryData = inventoryRes.data || [];
+        let inventoryData = inventoryRes.data || [];
 
-        const branchesCount = branches.length;
+        // Apply activeBranch filter client-side!
+        if (activeBranch && activeBranch.id !== 'all') {
+          salesInfo = salesInfo.filter((s: any) => s.branch_id === activeBranch.id);
+          inventoryData = inventoryData.filter((i: any) => i.branch_id === activeBranch.id);
+        }
+
+        const branchesCount = activeBranch && activeBranch.id !== 'all' ? 1 : branches.length;
         
         const activeProductIds = new Set(activeProducts?.map((p: any) => p.id) || []);
         const lowStockCount = (inventoryData || []).filter((inv: any) => {
@@ -478,7 +486,7 @@ export default function Dashboard() {
       }
     }
     loadStats();
-  }, [businessContext]);
+  }, [businessContext, activeBranch]);
 
   useEffect(() => {
     if (!businessContext?.business_id) {

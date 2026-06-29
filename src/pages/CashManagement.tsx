@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { supabase } from '../lib/firebaseClient';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { usePOSStore } from '../store/posStore';
+import { useBusinessStore } from '../store';
 import { postJournalEntry } from '../services/ledgerService';
 
 interface CashLog {
@@ -52,6 +53,7 @@ interface Profile {
 }
 
 export default function CashManagement() {
+  const { activeBranch } = useBusinessStore();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('active-shift');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -139,7 +141,7 @@ export default function CashManagement() {
     fetchActiveShiftAndAccounting();
     const floatStored = localStorage.getItem('tareza_require_float');
     setRequireFloat(floatStored === 'true');
-  }, []);
+  }, [activeBranch]);
 
   const fetchActiveShiftAndAccounting = async () => {
     setIsLoading(true);
@@ -160,7 +162,7 @@ export default function CashManagement() {
           .maybeSingle();
         if (businessData?.business_id) {
           busId = businessData.business_id;
-          brId = businessData.branch_id || '';
+          brId = activeBranch && activeBranch.id !== 'all' ? activeBranch.id : (businessData.branch_id || '');
         }
       }
 

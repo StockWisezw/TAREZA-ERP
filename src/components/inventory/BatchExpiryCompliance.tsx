@@ -22,12 +22,22 @@ import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
 import { recordStockMovement } from '../../services/ledgerService';
+import { useBusinessStore } from '../../store';
 
 export function BatchExpiryCompliance() {
+  const { activeBranch } = useBusinessStore();
   const [batches, setBatches] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
+
+  useEffect(() => {
+    if (activeBranch) {
+      setSelectedBranchId(activeBranch.id);
+    } else {
+      setSelectedBranchId('all');
+    }
+  }, [activeBranch]);
   const [threatFilter, setThreatFilter] = useState<string>('all');
   const [search, setSearch] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
