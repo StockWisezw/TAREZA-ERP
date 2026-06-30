@@ -756,7 +756,7 @@ class SupabaseQueryBuilder {
       const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
       const isDevAdminTable = isSystemDev && adminTables.includes(this.table);
 
-      const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id');
+      const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id') && this.table !== 'business_users';
       const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
 
       if (this.isInsert) {
@@ -851,14 +851,33 @@ class SupabaseQueryBuilder {
       if (this.targetId) {
         const docRef = fireDoc(db, this.table, this.targetId);
         let snap;
+        let loadedFromCache = false;
+
+        // Try cache-first read to optimize startup latency and provide immediate optimistic UI state
         try {
-          snap = await fireGetDoc(docRef);
-        } catch (err: any) {
-          if (checkIsOfflineError(err)) {
-            const { getDocFromCache } = await import('firebase/firestore');
-            snap = await getDocFromCache(docRef);
-          } else {
-            throw err;
+          const { getDocFromCache } = await import('firebase/firestore');
+          snap = await getDocFromCache(docRef);
+          if (snap && snap.exists()) {
+            loadedFromCache = true;
+            // Background update to keep cache synchronized with remote server
+            setTimeout(async () => {
+              try {
+                await fireGetDoc(docRef);
+              } catch (bgErr) {}
+            }, 50);
+          }
+        } catch (cacheErr) {}
+
+        if (!loadedFromCache) {
+          try {
+            snap = await fireGetDoc(docRef);
+          } catch (err: any) {
+            if (checkIsOfflineError(err)) {
+              const { getDocFromCache } = await import('firebase/firestore');
+              snap = await getDocFromCache(docRef);
+            } else {
+              throw err;
+            }
           }
         }
         let mappedData = [];
@@ -903,7 +922,7 @@ class SupabaseQueryBuilder {
      const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
      const isDevAdminTable = isSystemDev && adminTables.includes(this.table);
  
-     const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id');
+     const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id') && this.table !== 'business_users';
      const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
  
      if (requiresBusinessScope && activeBizId && !isDevAdminTable) {
@@ -970,19 +989,38 @@ class SupabaseQueryBuilder {
     }
 
     let querySnap;
+    let loadedFromCache = false;
+
+    // Try cache-first query execution to achieve near-instantaneous load speeds for the dashboard and UI
     try {
-      querySnap = await fireGetDocs(q);
-    } catch (err: any) {
-      if (checkIsOfflineError(err)) {
-        try {
-          console.warn(`[Firebase] Client offline, loading query on ${this.table} from cache...`);
-          const { getDocsFromCache } = await import('firebase/firestore');
-          querySnap = await getDocsFromCache(q);
-        } catch (cacheErr) {
+      const { getDocsFromCache } = await import('firebase/firestore');
+      querySnap = await getDocsFromCache(q);
+      if (querySnap && !querySnap.empty) {
+        loadedFromCache = true;
+        // Background refresh to keep the local database synchronized with any external remote edits
+        setTimeout(async () => {
+          try {
+            await fireGetDocs(q);
+          } catch (bgErr) {}
+        }, 50);
+      }
+    } catch (cacheErr) {}
+
+    if (!loadedFromCache) {
+      try {
+        querySnap = await fireGetDocs(q);
+      } catch (err: any) {
+        if (checkIsOfflineError(err)) {
+          try {
+            console.warn(`[Firebase] Client offline, loading query on ${this.table} from cache...`);
+            const { getDocsFromCache } = await import('firebase/firestore');
+            querySnap = await getDocsFromCache(q);
+          } catch (cacheErr) {
+            throw err;
+          }
+        } else {
           throw err;
         }
-      } else {
-        throw err;
       }
     }
     return querySnap.docs;
