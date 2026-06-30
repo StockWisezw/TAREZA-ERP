@@ -4,9 +4,9 @@ import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
-import { Shield, Key, History, Save, Smartphone, Eye, EyeOff, Lock, Database, RefreshCw } from 'lucide-react';
+import { Shield, Key, History, Save, Smartphone, Eye, EyeOff, Lock, Database, RefreshCw, User } from 'lucide-react';
 import { toast } from 'sonner';
-import { updatePassword } from 'firebase/auth';
+import { updatePassword, updateEmail } from 'firebase/auth';
 import { fireAuth, rawSupabase } from '../../lib/firebaseClient';
 
 export function SecuritySettings() {
@@ -16,6 +16,83 @@ export function SecuritySettings() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  React.useEffect(() => {
+    async function loadUserProfile() {
+      try {
+        const user = fireAuth.currentUser;
+        if (!user) return;
+        
+        setEmail(user.email || '');
+
+        const { data, error } = await rawSupabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.uid)
+          .maybeSingle();
+
+        if (data) {
+          setFirstName(data.first_name || '');
+          setLastName(data.last_name || '');
+          setPhone(data.phone || '');
+          if (data.email) setEmail(data.email);
+        }
+      } catch (err) {
+        console.error('Failed to load user profile', err);
+      } finally {
+        setIsLoadingProfile(false);
+      }
+    }
+    loadUserProfile();
+  }, []);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const user = fireAuth.currentUser;
+    if (!user) {
+      toast.error('You must be logged in to update your profile');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    try {
+      // 1. If email has changed, update it in Firebase Auth
+      if (email.toLowerCase() !== user.email?.toLowerCase()) {
+        await updateEmail(user, email);
+      }
+
+      // 2. Update profiles table
+      const { error: profileError } = await rawSupabase
+        .from('profiles')
+        .upsert({
+          id: user.uid,
+          first_name: firstName,
+          last_name: lastName,
+          phone: phone,
+          email: email
+        });
+
+      if (profileError) throw profileError;
+
+      toast.success('Personal profile updated successfully!');
+    } catch (err: any) {
+      console.error('[Profile Update] Error:', err);
+      if (err.code === 'auth/requires-recent-login') {
+        toast.error('Changing your email is a security-sensitive action. Please log out and log back in, then try again.');
+      } else {
+        toast.error(err.message || 'Failed to update personal profile');
+      }
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   const [offlineCacheEnabled, setOfflineCacheEnabled] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -278,6 +355,82 @@ export function SecuritySettings() {
                 <RefreshCw className="w-3.5 h-3.5 mr-2" /> Clear Offline Cache
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-zinc-200/60 shadow-sm md:col-span-2">
+          <CardHeader className="pb-4 border-b border-zinc-100">
+            <div className="flex items-center gap-2">
+              <User className="w-5 h-5 text-zinc-400" />
+              <CardTitle className="text-lg">Personal Profile Details</CardTitle>
+            </div>
+            <CardDescription>Update your personal information, including name, email address, and phone number.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6">
+            {isLoadingProfile ? (
+              <div className="flex items-center justify-center py-6">
+                <RefreshCw className="w-6 h-6 animate-spin text-zinc-400" />
+                <span className="ml-2 text-sm text-zinc-500">Loading profile...</span>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveProfile} className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="first-name-input" className="text-sm font-semibold text-zinc-800">First Name</Label>
+                    <Input 
+                      id="first-name-input"
+                      type="text" 
+                      value={firstName} 
+                      onChange={e => setFirstName(e.target.value)} 
+                      placeholder="Enter first name" 
+                      className="h-11 border-zinc-200 bg-zinc-50 focus-visible:bg-white"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="last-name-input" className="text-sm font-semibold text-zinc-800">Last Name</Label>
+                    <Input 
+                      id="last-name-input"
+                      type="text" 
+                      value={lastName} 
+                      onChange={e => setLastName(e.target.value)} 
+                      placeholder="Enter last name" 
+                      className="h-11 border-zinc-200 bg-zinc-50 focus-visible:bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email-input" className="text-sm font-semibold text-zinc-800">Email Address</Label>
+                    <Input 
+                      id="email-input"
+                      type="email" 
+                      value={email} 
+                      onChange={e => setEmail(e.target.value)} 
+                      required
+                      placeholder="Enter email address" 
+                      className="h-11 border-zinc-200 bg-zinc-50 focus-visible:bg-white"
+                    />
+                    <p className="text-[11px] text-zinc-400">Changing this will update your login email.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="phone-input" className="text-sm font-semibold text-zinc-800">Phone Number</Label>
+                    <Input 
+                      id="phone-input"
+                      type="tel" 
+                      value={phone} 
+                      onChange={e => setPhone(e.target.value)} 
+                      placeholder="Enter phone number" 
+                      className="h-11 border-zinc-200 bg-zinc-50 focus-visible:bg-white"
+                    />
+                  </div>
+                </div>
+
+                <Button type="submit" disabled={isSavingProfile} className="h-11 px-6 bg-primary font-semibold text-secondary-foreground shadow-sm">
+                  {isSavingProfile ? 'Saving Profile...' : 'Save Personal Profile'}
+                </Button>
+              </form>
+            )}
           </CardContent>
         </Card>
 

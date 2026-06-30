@@ -789,8 +789,16 @@ class SupabaseQueryBuilder {
       
       if (this.isUpdate) {
         if (this.targetId) {
-          if (this.table === 'businesses' && !isSystemDev && activeBizId && this.targetId !== activeBizId) {
-            throw new Error(`Permission denied: Cannot update other business profile`);
+          if (this.table === 'businesses' && !isSystemDev) {
+            const currentUser = fireAuth.currentUser;
+            if (currentUser) {
+              const directDocRef = fireDoc(db, 'business_users', currentUser.uid);
+              const directSnap = await fireGetDoc(directDocRef);
+              const userBizId = directSnap.exists() ? directSnap.data()?.business_id : null;
+              if (userBizId && this.targetId !== userBizId) {
+                throw new Error(`Permission denied: Cannot update other business profile (Target: ${this.targetId}, User Business: ${userBizId})`);
+              }
+            }
           }
           const docRef = fireDoc(db, this.table, this.targetId);
           const cleanItem = normalizeInput(this.payload, this.table);

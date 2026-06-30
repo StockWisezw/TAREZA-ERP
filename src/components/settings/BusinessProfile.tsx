@@ -93,11 +93,28 @@ export function BusinessProfile() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user) {
+        throw new Error("You must be logged in to save a business profile.");
+      }
+      const userId = userData.user.id;
+
       if (!businessData) {
-        // Create new business profile
+        if (!regNumber.trim()) {
+          throw new Error("Please enter a Company Registration Number to identify this workspace.");
+        }
+
+        // Sanitize registration number to form the permanent workspace ID
+        const sanitizedId = regNumber.trim().toUpperCase().replace(/[\/\s]/g, '-').replace(/[^A-Z0-9-]/g, '');
+        if (!sanitizedId) {
+          throw new Error("The Company Registration Number contains no valid characters.");
+        }
+
+        // 1. Establish the business record
         const { data, error } = await supabase
           .from("businesses")
           .insert({
+            id: sanitizedId,
             name: name || "My Business",
             tax_number: regNumber,
             email: email,
@@ -109,7 +126,41 @@ export function BusinessProfile() {
 
         if (error) throw error;
         setBusinessData(data);
-        toast.success("Business profile created successfully");
+
+        // 2. Pre-generate roles & branches
+        const adminRoleId = crypto.randomUUID();
+        const mainBranchId = crypto.randomUUID();
+
+        try {
+          await supabase.from('roles').insert([
+            { id: adminRoleId, business_id: sanitizedId, name: 'Admin', description: 'System Administrator with full access' }
+          ]);
+        } catch (err) {
+          console.error("Admin role seeding failed:", err);
+        }
+
+        try {
+          await supabase.from('branches').insert([
+            { id: mainBranchId, business_id: sanitizedId, name: 'Main Retail Branch', type: 'retail', address: 'Default Address' }
+          ]);
+        } catch (err) {
+          console.error("Main branch seeding failed:", err);
+        }
+
+        // 3. Establish the business_users link for the owner
+        const { error: linkError } = await supabase.from('business_users').insert([
+          { id: userId, business_id: sanitizedId, user_id: userId, branch_id: mainBranchId, role_id: adminRoleId, is_active: true }
+        ]);
+        if (linkError) console.error("Business user link failed:", linkError);
+
+        // 4. Update the active business ID cache
+        const { setActiveBusinessId } = await import('../../lib/firebaseClient');
+        setActiveBusinessId(sanitizedId);
+
+        toast.success("Business profile created successfully! Initializing workspace...");
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
       } else {
         // Update existing business profile
         const { error } = await supabase
@@ -250,8 +301,8 @@ export function BusinessProfile() {
                     setVatNumber(e.target.value);
                   }}
                   placeholder="e.g. TZ-123456/2026"
-                  className="h-11 font-mono font-medium bg-zinc-50 border-zinc-200 text-zinc-500 cursor-not-allowed"
-                  disabled={true}
+                  className={`h-11 font-mono font-medium border-zinc-200 ${businessData ? 'bg-zinc-50 text-zinc-500 cursor-not-allowed' : 'bg-white text-zinc-900'}`}
+                  disabled={!!businessData}
                 />
                 <p className="text-[11px] text-zinc-400 font-mono">This unique registration ID identifies your workspace.</p>
               </div>
