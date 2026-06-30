@@ -44,6 +44,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   filteredProducts
 }) => {
   const [selectedTiers, setSelectedTiers] = useState<Record<string, string>>({});
+  const [expandedBundles, setExpandedBundles] = useState<Record<string, boolean>>({});
   const [gridScale, setGridScale] = useState<'cozy' | 'comfortable' | 'compact'>('comfortable');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
     return typeof window !== 'undefined' && window.innerWidth < 1024 ? 'list' : 'grid';
@@ -228,6 +229,22 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
 
                     <div className="flex items-center gap-1.5 overflow-x-auto max-w-full">
                       {((product.bundles && product.bundles.length > 0) || hasPack) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setExpandedBundles({ ...expandedBundles, [product.id]: !expandedBundles[product.id] })}
+                          className={`text-[9px] h-7 px-2 font-bold border rounded-lg transition-all flex items-center gap-1 whitespace-nowrap ${
+                            expandedBundles[product.id]
+                              ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                              : 'bg-zinc-50 text-zinc-650 border-zinc-200 hover:bg-zinc-100'
+                          }`}
+                        >
+                          <span>Expand Bundle</span>
+                          <span className="text-[7px]">{expandedBundles[product.id] ? '▲' : '▼'}</span>
+                        </Button>
+                      )}
+
+                      {((product.bundles && product.bundles.length > 0) || hasPack) && expandedBundles[product.id] && (
                         <select
                           value={selectedTier}
                           onClick={(e) => e.stopPropagation()}
@@ -249,9 +266,9 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                       <Button 
                         size="sm"
                         className="text-[10px] h-7 px-2.5 font-bold bg-zinc-900 hover:bg-zinc-855 text-white rounded-lg cursor-pointer flex items-center gap-1"
-                        onClick={() => addToCart(product, 0, selectedTier)}
+                        onClick={() => addToCart(product, 0, ((product.bundles && product.bundles.length > 0) || hasPack) && expandedBundles[product.id] ? selectedTier : 'retail')}
                       >
-                        <span>+ Add</span>
+                        <span>{((product.bundles && product.bundles.length > 0) || hasPack) && !expandedBundles[product.id] ? '+ Quick Add' : '+ Add'}</span>
                       </Button>
                     </div>
                   </div>
@@ -332,30 +349,60 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                         </div>
                       </div>
                     )}
-                                       {((product.bundles && product.bundles.length > 0) || hasPack) ? (
-                      <div className="space-y-1 mt-auto pt-1 select-none" onClick={(e) => e.stopPropagation()}>
-                        <select
-                          value={selectedTier}
-                          onChange={(e) => setSelectedTiers({ ...selectedTiers, [product.id]: e.target.value })}
-                          className="w-full text-[10px] font-bold py-1 px-1.5 border border-zinc-200 bg-zinc-50 rounded-lg focus:outline-none cursor-pointer h-7"
-                        >
-                          <option value="retail">Single Unit (${product.retailPrice.toFixed(2)})</option>
-                          {hasPack && (
-                            <option value="wholesale">Pack ({pSize}) (${product.wholesalePrice.toFixed(2)})</option>
-                          )}
-                          {product.bundles?.map((b: any, bIdx: number) => (
-                            <option key={bIdx} value={b.name}>
-                              {b.name} ({b.pack_size || b.packSize}) (${Number(b.price || 0).toFixed(2)})
-                            </option>
-                          ))}
-                        </select>
-                        <Button 
-                          size="sm" 
-                          className="w-full text-[10px] h-6.5 font-bold bg-zinc-900 hover:bg-zinc-855 text-white rounded-lg cursor-pointer"
-                          onClick={() => addToCart(product, 0, selectedTier)}
-                        >
-                          + Add Selected
-                        </Button>
+                    {((product.bundles && product.bundles.length > 0) || hasPack) ? (
+                      <div className="space-y-1.5 mt-auto pt-1 select-none" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className="font-bold text-xs text-zinc-950 leading-none">
+                            ${product.retailPrice.toFixed(2)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedBundles({ ...expandedBundles, [product.id]: !expandedBundles[product.id] })}
+                            className={`text-[9px] px-1.5 py-0.5 font-bold border rounded-md transition-all flex items-center gap-1 shrink-0 ${
+                              expandedBundles[product.id]
+                                ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                                : 'bg-zinc-50 text-zinc-650 border-zinc-200 hover:bg-zinc-100'
+                            }`}
+                          >
+                            <span>Expand Bundle</span>
+                            <span className="text-[7px]">{expandedBundles[product.id] ? '▲' : '▼'}</span>
+                          </button>
+                        </div>
+
+                        {expandedBundles[product.id] ? (
+                          <div className="space-y-1 bg-zinc-50 p-1 rounded-lg border border-zinc-150">
+                            <select
+                              value={selectedTier}
+                              onChange={(e) => setSelectedTiers({ ...selectedTiers, [product.id]: e.target.value })}
+                              className="w-full text-[10px] font-bold py-1 px-1.5 border border-zinc-200 bg-white rounded-md focus:outline-none cursor-pointer h-7"
+                            >
+                              <option value="retail">Single Unit (${product.retailPrice.toFixed(2)})</option>
+                              {hasPack && (
+                                <option value="wholesale">Pack ({pSize}) (${product.wholesalePrice.toFixed(2)})</option>
+                              )}
+                              {product.bundles?.map((b: any, bIdx: number) => (
+                                <option key={bIdx} value={b.name}>
+                                  {b.name} ({b.pack_size || b.packSize}) (${Number(b.price || 0).toFixed(2)})
+                                </option>
+                              ))}
+                            </select>
+                            <Button 
+                              size="sm" 
+                              className="w-full text-[10px] h-6.5 font-bold bg-zinc-900 hover:bg-zinc-855 text-white rounded-lg cursor-pointer"
+                              onClick={() => addToCart(product, 0, selectedTier)}
+                            >
+                              + Add Selected
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button 
+                            size="sm" 
+                            className="w-full text-[10px] h-6.5 font-bold bg-zinc-900 hover:bg-zinc-855 text-white rounded-lg cursor-pointer flex items-center justify-center gap-1"
+                            onClick={() => addToCart(product, 0, 'retail')}
+                          >
+                            <span>+ Quick Add</span>
+                          </Button>
+                        )}
                       </div>
                     ) : (
                       <div className="mt-auto pt-1 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
