@@ -47,7 +47,7 @@ export function UserManagement() {
       const { data: subData } = await supabase.from('subscriptions').select('plan_name').eq('business_id', buData.business_id).order('created_at', { ascending: false }).limit(1).maybeSingle();
       
       const planNameRaw = subData?.plan_name || 'free_trial';
-      const planMaxUsers = planNameRaw === 'starter' ? 3 : planNameRaw === 'pro' ? 10 : planNameRaw === 'enterprise' ? 100 : (bData?.max_users || 5);
+      const planMaxUsers = planNameRaw === 'free' ? 999 : (planNameRaw === 'free_trial' || planNameRaw === 'starter') ? 3 : planNameRaw === 'pro' ? 10 : planNameRaw === 'enterprise' ? 100 : (bData?.max_users || 5);
       setMaxAllowedUsers(planMaxUsers);
 
       // Fetch Branches

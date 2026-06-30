@@ -21,7 +21,7 @@ export default function Login() {
   const [registrationNumber, setRegistrationNumber] = useState(() => {
     return `TZ-${Math.floor(100000 + Math.random() * 900000)}/${new Date().getFullYear()}`;
   });
-  const [planChoice, setPlanChoice] = useState('TRIAL');
+  const [planChoice, setPlanChoice] = useState('STARTER_TRIAL');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -212,11 +212,26 @@ export default function Login() {
           { id: user.id, first_name: firstName, last_name: lastName, email: user.email, phone: phone || null }
         ]);
 
+        const isSuperAdminEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(email.toLowerCase());
+        
+        let planNameInDb: 'free_trial' | 'free' | 'starter' | 'pro' | 'enterprise' = 'free_trial';
         const endDate = new Date();
-        if (planChoice === 'TRIAL') {
-           endDate.setDate(endDate.getDate() + 14); // 14-day free trial
-        } else {
-           endDate.setDate(endDate.getDate() + 30); // 30-day Pro plan
+
+        if (isSuperAdminEmail) {
+          planNameInDb = 'free'; // "Forever Free"
+          endDate.setFullYear(2099); // Forever!
+        } else if (planChoice === 'STARTER_TRIAL') {
+          planNameInDb = 'free_trial';
+          endDate.setDate(endDate.getDate() + 14); // 14-day free trial
+        } else if (planChoice === 'STARTER_PAID') {
+          planNameInDb = 'starter';
+          endDate.setDate(endDate.getDate() + 30); // 30-day starter
+        } else if (planChoice === 'PRO') {
+          planNameInDb = 'pro';
+          endDate.setDate(endDate.getDate() + 30); // 30-day pro
+        } else if (planChoice === 'ENTERPRISE') {
+          planNameInDb = 'enterprise';
+          endDate.setDate(endDate.getDate() + 30); // 30-day enterprise
         }
 
         // Pre-generate IDs to avoid race conditions and secure sequence
@@ -250,13 +265,15 @@ export default function Login() {
             tax_number: registrationNumber,
             email: email,
             phone: phone || null,
+            subscription_status: 'ACTIVE',
+            subscription_end_date: endDate.toISOString(),
             created_at: new Date().toISOString() 
           }
         ]);
 
         await supabase.from('subscriptions').insert([{
            business_id: newBusinessId,
-           plan_name: planChoice === 'TRIAL' ? 'free_trial' : 'pro',
+           plan_name: planNameInDb,
            status: 'active',
            start_date: new Date().toISOString(),
            end_date: endDate.toISOString()
@@ -269,12 +286,21 @@ export default function Login() {
           { id: cashierRoleId, business_id: newBusinessId, name: 'Cashier', description: 'POS Cashier with checkout-only access' }
         ]);
 
-        // Seed Multiple Branches (Default)
-        await supabase.from('branches').insert([
-          { id: mainBranchId, business_id: newBusinessId, name: 'Main Retail Branch', type: 'retail', address: '100 Samora Machel Ave, Harare' },
-          { id: warehouseBranchId, business_id: newBusinessId, name: 'Harare Central Warehouse', type: 'warehouse', address: '12 Coventry Rd, Workington, Harare' },
-          { id: bulawayoBranchId, business_id: newBusinessId, name: 'Bulawayo CBD Branch', type: 'retail', address: '55 Jason Moyo St, Bulawayo' }
-        ]);
+        // Seed Branches: Try not to give everything away on starter/free trials!
+        const branchesToSeed = [];
+        if ((planChoice === 'STARTER_TRIAL' || planChoice === 'STARTER_PAID') && !isSuperAdminEmail) {
+          branchesToSeed.push(
+            { id: mainBranchId, business_id: newBusinessId, name: 'Main Retail Branch', type: 'retail', address: '100 Samora Machel Ave, Harare' }
+          );
+        } else {
+          branchesToSeed.push(
+            { id: mainBranchId, business_id: newBusinessId, name: 'Main Retail Branch', type: 'retail', address: '100 Samora Machel Ave, Harare' },
+            { id: warehouseBranchId, business_id: newBusinessId, name: 'Harare Central Warehouse', type: 'warehouse', address: '12 Coventry Rd, Workington, Harare' },
+            { id: bulawayoBranchId, business_id: newBusinessId, name: 'Bulawayo CBD Branch', type: 'retail', address: '55 Jason Moyo St, Bulawayo' }
+          );
+        }
+
+        await supabase.from('branches').insert(branchesToSeed);
 
         // Seed Default Categories
         await supabase.from('categories').insert([
@@ -294,12 +320,12 @@ export default function Login() {
               firstName: firstName,
               lastName: lastName,
               businessName: businessName,
-              plan: planChoice === 'TRIAL' ? '14-Day Free Trial' : '30-Day Pro Plan'
+              plan: isSuperAdminEmail ? 'Super Admin (Forever Free)' : planChoice === 'STARTER_TRIAL' ? 'Starter 14-Day Free Trial' : planChoice === 'STARTER_PAID' ? 'Starter Paid Plan' : planChoice === 'PRO' ? 'Professional Plan' : 'Enterprise Plan'
             }
           })
         }).catch(err => console.error("Signup notification dispatch failed", err));
 
-        toast.success('Signup successful! Welcome to Tareza ERP! Default branches are pre-configured.');
+        toast.success(`Signup successful! Welcome to Tareza ERP! ${isSuperAdminEmail ? 'Forever Free Developer trial configured.' : (planChoice === 'STARTER_TRIAL' || planChoice === 'STARTER_PAID') ? 'Your Starter branch has been pre-configured.' : 'Your multiple branches are pre-configured.'}`);
         navigate('/dashboard');
         setIsSignUp(false);
       } catch (error: any) {
@@ -671,21 +697,69 @@ export default function Login() {
                           )}
                         </div>
                         <div className="space-y-2 pb-2">
-                          <Label className="text-xs uppercase tracking-wider font-semibold text-zinc-500 mb-2 block">Choose Plan</Label>
-                          <div className="grid grid-cols-2 gap-3">
+                          <Label className="text-xs uppercase tracking-wider font-semibold text-zinc-500 mb-2 block">Choose Workspace Plan</Label>
+                          <div className="flex justify-between items-center mt-2 mb-1">
+                            <span className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded border border-indigo-100">Starter Only Trial</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {/* STARTER TRIAL */}
                             <div 
-                               className={`border rounded-lg p-3 cursor-pointer transition-all ${planChoice === 'TRIAL' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border bg-white hover:bg-zinc-50'}`}
-                               onClick={() => setPlanChoice('TRIAL')}
+                              className={`border rounded-xl p-3.5 cursor-pointer transition-all flex flex-col justify-between text-left ${planChoice === 'STARTER_TRIAL' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-zinc-200 bg-white hover:bg-zinc-50'}`}
+                              onClick={() => setPlanChoice('STARTER_TRIAL')}
                             >
-                               <p className="font-bold text-zinc-900 text-sm">14-Day Free Trial</p>
-                               <p className="text-xs text-zinc-500">Explore all features</p>
+                              <div>
+                                <div className="flex items-center justify-between gap-2 mb-1.5">
+                                  <p className="font-bold text-zinc-950 text-xs font-sans">Starter (Free Trial)</p>
+                                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0">14 Days</span>
+                                </div>
+                                <p className="text-[11px] text-zinc-500 leading-snug font-sans">Explore core features. Strictly limited to 1 branch and 3 user seats.</p>
+                              </div>
+                              <p className="font-mono text-[11px] font-semibold text-zinc-650 mt-3">$0 first 14 days, then $15/mo</p>
                             </div>
+
+                            {/* STARTER PAID */}
                             <div 
-                               className={`border rounded-lg p-3 cursor-pointer transition-all ${planChoice === 'PRO' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border bg-white hover:bg-zinc-50'}`}
-                               onClick={() => setPlanChoice('PRO')}
+                              className={`border rounded-xl p-3.5 cursor-pointer transition-all flex flex-col justify-between text-left ${planChoice === 'STARTER_PAID' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-zinc-200 bg-white hover:bg-zinc-50'}`}
+                              onClick={() => setPlanChoice('STARTER_PAID')}
                             >
-                               <p className="font-bold text-zinc-900 text-sm">Pro ($50/mo)</p>
-                               <p className="text-xs text-zinc-500">Includes ERP + Stocktake</p>
+                              <div>
+                                <div className="flex items-center justify-between gap-2 mb-1.5">
+                                  <p className="font-bold text-zinc-950 text-xs font-sans">Starter (Paid)</p>
+                                  <span className="bg-zinc-100 text-zinc-700 border border-zinc-200 text-[9px] font-medium px-1.5 py-0.5 rounded shrink-0 font-sans">Immediate</span>
+                                </div>
+                                <p className="text-[11px] text-zinc-500 leading-snug font-sans">No trial needed. Standard core setup. Limits: 1 branch and 3 user seats.</p>
+                              </div>
+                              <p className="font-mono text-[11px] font-bold text-zinc-800 mt-3">$15 / month</p>
+                            </div>
+
+                            {/* PRO PAID */}
+                            <div 
+                              className={`border rounded-xl p-3.5 cursor-pointer transition-all flex flex-col justify-between text-left ${planChoice === 'PRO' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-zinc-200 bg-white hover:bg-zinc-50'}`}
+                              onClick={() => setPlanChoice('PRO')}
+                            >
+                              <div>
+                                <div className="flex items-center justify-between gap-2 mb-1.5">
+                                  <p className="font-bold text-zinc-950 text-xs font-sans">Professional (Paid)</p>
+                                  <span className="bg-indigo-50 text-indigo-700 border border-indigo-150 text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 font-sans font-medium">ERP + Stock</span>
+                                </div>
+                                <p className="text-[11px] text-zinc-500 leading-snug font-sans font-medium">Full access. Limits: 3 branches, 10 users, comprehensive accounts ledger.</p>
+                              </div>
+                              <p className="font-mono text-[11px] font-bold text-primary mt-3">$30 / month</p>
+                            </div>
+
+                            {/* ENTERPRISE PAID */}
+                            <div 
+                              className={`border rounded-xl p-3.5 cursor-pointer transition-all flex flex-col justify-between text-left ${planChoice === 'ENTERPRISE' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-zinc-200 bg-white hover:bg-zinc-50'}`}
+                              onClick={() => setPlanChoice('ENTERPRISE')}
+                            >
+                              <div>
+                                <div className="flex items-center justify-between gap-2 mb-1.5">
+                                  <p className="font-bold text-zinc-950 text-xs font-sans">Enterprise (Paid)</p>
+                                  <span className="bg-purple-50 text-purple-700 border border-purple-100 text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 font-sans">Premium</span>
+                                </div>
+                                <p className="text-[11px] text-zinc-500 leading-snug font-sans">Advanced franchise tools. Unlimited branches, users & 24/7 priority support.</p>
+                              </div>
+                              <p className="font-mono text-[11px] font-bold text-purple-700 mt-3">$99 / month</p>
                             </div>
                           </div>
                         </div>

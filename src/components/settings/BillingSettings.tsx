@@ -157,10 +157,10 @@ export function BillingSettings() {
   const expiresAt = businessData?.subscription_end_date ? new Date(businessData.subscription_end_date) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
   const gracePeriodEnd = new Date(expiresAt.getTime() + 7 * 24 * 60 * 60 * 1000);
   const daysLeftInGrace = Math.floor((gracePeriodEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  const planName = subscription?.plan_name === 'free_trial' ? 'Free Trial' : subscription?.plan_name === 'free' ? 'Forever Free' : subscription?.plan_name === 'starter' ? 'Starter' : subscription?.plan_name === 'pro' ? 'Professional' : subscription?.plan_name === 'enterprise' ? 'Enterprise' : (subscription?.plan_name || 'Free Trial');
+  const planName = subscription?.plan_name === 'free_trial' ? 'Starter Free Trial' : subscription?.plan_name === 'free' ? 'Forever Free' : subscription?.plan_name === 'starter' ? 'Starter' : subscription?.plan_name === 'pro' ? 'Professional' : subscription?.plan_name === 'enterprise' ? 'Enterprise' : (subscription?.plan_name || 'Starter Free Trial');
   const planNameRaw = subscription?.plan_name || 'free_trial';
-  const maxUsers = planNameRaw === 'free' ? 1 : planNameRaw === 'starter' ? 2 : planNameRaw === 'pro' ? 10 : planNameRaw === 'enterprise' ? 9999 : (businessData?.max_users || 5);
-  const planCost = planNameRaw === 'free' ? '$0.00' : planNameRaw === 'starter' ? '$15.00' : planNameRaw === 'pro' ? '$30.00' : planNameRaw === 'enterprise' ? 'Custom' : '$0.00';
+  const maxUsers = planNameRaw === 'free' ? 999 : (planNameRaw === 'free_trial' || planNameRaw === 'starter') ? 3 : planNameRaw === 'pro' ? 10 : planNameRaw === 'enterprise' ? 100 : (businessData?.max_users || 5);
+  const planCost = planNameRaw === 'free' ? '$0.00 (Forever Free)' : planNameRaw === 'free_trial' ? '$0.00 (Trialing)' : planNameRaw === 'starter' ? '$15.00' : planNameRaw === 'pro' ? '$30.00' : planNameRaw === 'enterprise' ? '$99.00' : '$0.00';
   const userPercent = Math.min((userCount / maxUsers) * 100, 100);
 
   // Remaining days to actual renewal due date

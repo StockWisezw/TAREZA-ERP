@@ -16,6 +16,8 @@ export function BranchWarehouseSettings() {
   const [loading, setLoading] = useState(true);
   const [businessId, setBusinessId] = useState<string | null>(null);
   
+  const [planName, setPlanName] = useState<string>('free_trial');
+  
   // New branch form state
   const [newBranchName, setNewBranchName] = useState('');
   const [newBranchType, setNewBranchType] = useState('branch');
@@ -49,6 +51,19 @@ export function BranchWarehouseSettings() {
         const bizId = buData[0].business_id;
         setBusinessId(bizId);
 
+        // Fetch subscription plan
+        const { data: subData } = await supabase
+          .from('subscriptions')
+          .select('plan_name')
+          .eq('business_id', bizId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (subData?.plan_name) {
+          setPlanName(subData.plan_name);
+        }
+
         await fetchBranches(bizId);
       } catch (err) {
         console.error(err);
@@ -66,6 +81,14 @@ export function BranchWarehouseSettings() {
         toast.error("Branch name is required");
         return;
     }
+
+    // Limit check based on plan
+    const maxBranches = planName === 'free' ? 999 : (planName === 'free_trial' || planName === 'starter') ? 1 : planName === 'pro' ? 3 : 100;
+    if (locations.length >= maxBranches) {
+      toast.error(`Branch limit reached! Your ${planName === 'free_trial' ? 'Free Trial' : planName + ' plan'} limits you to ${maxBranches} branch${maxBranches > 1 ? 'es' : ''}. Please upgrade your subscription to add more branches.`);
+      return;
+    }
+
     setIsAdding(true);
     try {
         const { error } = await supabase.from('branches').insert([{
