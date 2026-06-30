@@ -29,7 +29,10 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager,
   memoryLocalCache,
-  setLogLevel
+  setLogLevel,
+  disableNetwork,
+  enableNetwork,
+  waitForPendingWrites
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 import firebaseConfigPlaceholder from '../../firebase-applet-config.json';
@@ -115,7 +118,6 @@ function createFirestoreInstance() {
   if (isPersistenceEnabled) {
     try {
       return initializeFirestore(app, {
-        experimentalForceLongPolling: true,
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager()
         })
@@ -128,19 +130,45 @@ function createFirestoreInstance() {
   // Fallback to memoryLocalCache to guarantee 100% stability against IndexedDb transaction restrictions in sandboxed iframes
   try {
     return initializeFirestore(app, {
-      experimentalForceLongPolling: true,
       localCache: memoryLocalCache()
     }, resolvedConfig.firestoreDatabaseId);
   } catch (err: any) {
     console.warn('[Firebase] Fallback to standard initializeFirestore: ', err);
     return initializeFirestore(app, {
-      experimentalForceLongPolling: true
     }, resolvedConfig.firestoreDatabaseId);
   }
 }
 
 export const db = createFirestoreInstance();
 export const fireAuth = getAuth(app);
+
+// Simulated Offline Mode Enforcement
+if (typeof window !== 'undefined') {
+  const checkAndApplyNetworkStatus = async () => {
+    const isOfflineForced = localStorage.getItem('tareza_offline_mode') === 'true';
+    if (isOfflineForced) {
+      try {
+        await disableNetwork(db);
+        console.log('[Firebase] Network disabled. Enforced Offline database mode active.');
+      } catch (err) {
+        console.error('[Firebase] Error disabling network:', err);
+      }
+    } else {
+      try {
+        await enableNetwork(db);
+        console.log('[Firebase] Network enabled. Cloud Firestore connected.');
+      } catch (err) {
+        console.error('[Firebase] Error enabling network:', err);
+      }
+    }
+  };
+
+  // Run on initial load
+  checkAndApplyNetworkStatus();
+
+  // Listen for changes
+  window.addEventListener('offline-mode-changed', checkAndApplyNetworkStatus);
+}
 
 // Immediate validation of Firestore connection
 async function testConnection() {
@@ -511,6 +539,7 @@ function safeSetLocalStorage(key: string, value: string | null) {
 
 // Active business ID cache & auto-resolving mechanism
 let cachedBusinessId: string | null = null;
+let activeBusinessIdPromise: Promise<string | null> | null = null;
 
 export function setActiveBusinessId(id: string | null) {
   cachedBusinessId = id;
@@ -521,85 +550,121 @@ export async function getActiveBusinessId(): Promise<string | null> {
   if (cachedBusinessId) return cachedBusinessId;
 
   const localId = safeGetLocalStorage('tareza_active_business_id');
-  if (localId && localId !== 'default_business') {
+  if (localId && localId !== 'default_business' && localId !== 'null') {
     cachedBusinessId = localId;
     return localId;
   }
 
   const user = fireAuth.currentUser;
-  if (!user) return null;
+  if (!user) return 'default_business';
 
-  let retries = 3;
-  let delay = 350;
-
-  while (retries > 0) {
-    try {
-      // 1. Direct document lookup (extremely efficient, no composite indexes or secure queries required if UID is docId)
-      const directDocRef = fireDoc(db, 'business_users', user.uid);
-      const directSnap = await fireGetDoc(directDocRef);
-      if (directSnap && directSnap.exists()) {
-        const bizId = directSnap.data()?.business_id;
-        if (bizId) {
-          setActiveBusinessId(bizId);
-          return bizId;
-        }
-      }
-
-      // 2. Fallback query for legacy or non-UID-keyed setups
-      const q = fireQuery(
-        fireCollection(db, 'business_users'),
-        fireWhere('user_id', '==', user.uid)
-      );
-      const qSnap = await fireGetDocs(q);
-      if (qSnap && !qSnap.empty) {
-        const bizId = qSnap.docs[0].data()?.business_id;
-        if (bizId) {
-          setActiveBusinessId(bizId);
-          return bizId;
-        }
-      }
-
-      // If both completed but no record exists yet, exit loop to allow creation
-      break;
-    } catch (err: any) {
-      const errMsg = String(err).toLowerCase();
-      const isOfflineOrNetwork = checkIsOfflineError(err) || 
-                                 errMsg.includes('permission-denied') || 
-                                 errMsg.includes('insufficient permissions');
-
-      if (isOfflineOrNetwork) {
-        if (retries > 1) {
-          console.warn(`[Firebase] Transient error resolving business ID (retrying in ${delay}ms, auth state: ${fireAuth.currentUser ? 'signed-in' : 'signed-out'}). Error:`, err);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2;
-          retries--;
-        } else {
-          console.warn('[Firebase] Client is offline or disconnected. Resolving active business ID from local cache or fallback.');
-          try {
-            const { getDocFromCache } = await import('firebase/firestore');
-            const directDocRef = fireDoc(db, 'business_users', user.uid);
-            const cacheSnap = await getDocFromCache(directDocRef);
-            if (cacheSnap && cacheSnap.exists()) {
-              const bizId = cacheSnap.data()?.business_id;
-              if (bizId) {
-                setActiveBusinessId(bizId);
-                return bizId;
-              }
-            }
-          } catch (cacheErr) {
-            // Ignore cache fetch failures
-          }
-          break;
-        }
-      } else {
-        console.error('[Firebase] Error auto-resolving active business ID:', err);
-        break;
-      }
-    }
+  if (activeBusinessIdPromise) {
+    return activeBusinessIdPromise;
   }
 
-  // Return 'default_business' as a last-resort fallback when completely offline and unresolvable
-  return 'default_business';
+  activeBusinessIdPromise = (async () => {
+    let retries = 3;
+    let delay = 350;
+
+    while (retries > 0) {
+      try {
+        // 1. Direct document lookup (extremely efficient, no composite indexes or secure queries required if UID is docId)
+        const directDocRef = fireDoc(db, 'business_users', user.uid);
+        const directSnap = await fireGetDoc(directDocRef);
+        if (directSnap && directSnap.exists()) {
+          const bizId = directSnap.data()?.business_id;
+          if (bizId) {
+            setActiveBusinessId(bizId);
+            return bizId;
+          }
+        }
+
+        // 2. Fallback query for legacy or non-UID-keyed setups
+        const q = fireQuery(
+          fireCollection(db, 'business_users'),
+          fireWhere('user_id', '==', user.uid)
+        );
+        const qSnap = await fireGetDocs(q);
+        if (qSnap && !qSnap.empty) {
+          const bizId = qSnap.docs[0].data()?.business_id;
+          if (bizId) {
+            setActiveBusinessId(bizId);
+            return bizId;
+          }
+        }
+
+        // If both completed but no record exists yet, exit loop to allow creation
+        break;
+      } catch (err: any) {
+        const errMsg = String(err).toLowerCase();
+        const isOfflineOrNetwork = checkIsOfflineError(err) || 
+                                   errMsg.includes('permission-denied') || 
+                                   errMsg.includes('insufficient permissions');
+
+        if (isOfflineOrNetwork) {
+          if (retries > 1) {
+            console.warn(`[Firebase] Transient error resolving business ID (retrying in ${delay}ms). Error:`, err);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2;
+            retries--;
+          } else {
+            console.warn('[Firebase] Client is offline or disconnected. Resolving active business ID from local cache or fallback.');
+            try {
+              const { getDocFromCache } = await import('firebase/firestore');
+              const directDocRef = fireDoc(db, 'business_users', user.uid);
+              const cacheSnap = await getDocFromCache(directDocRef);
+              if (cacheSnap && cacheSnap.exists()) {
+                const bizId = cacheSnap.data()?.business_id;
+                if (bizId) {
+                  setActiveBusinessId(bizId);
+                  return bizId;
+                }
+              }
+            } catch (cacheErr) {
+              // Ignore cache fetch failures
+            }
+            break;
+          }
+        } else {
+          console.error('[Firebase] Error auto-resolving active business ID:', err);
+          break;
+        }
+      }
+    }
+    return 'default_business';
+  })();
+
+  try {
+    const res = await activeBusinessIdPromise;
+    cachedBusinessId = res;
+    return res;
+  } finally {
+    activeBusinessIdPromise = null;
+  }
+}
+
+// Enterprise manual offline-database synchronization pusher
+export async function syncOfflineDatabase(): Promise<void> {
+  const isOfflineForced = typeof window !== 'undefined' && localStorage.getItem('tareza_offline_mode') === 'true';
+  
+  if (isOfflineForced) {
+    console.log('[Firebase Sync] Temporarily enabling network to flush pending writes...');
+    await enableNetwork(db);
+  }
+  
+  try {
+    console.log('[Firebase Sync] Waiting for all pending local writes to synchronize to the server...');
+    await waitForPendingWrites(db);
+    console.log('[Firebase Sync] All database mutations synchronized successfully!');
+  } catch (err) {
+    console.error('[Firebase Sync] Error waiting for pending writes:', err);
+    throw err;
+  } finally {
+    if (isOfflineForced) {
+      console.log('[Firebase Sync] Re-enforcing simulated offline mode...');
+      await disableNetwork(db);
+    }
+  }
 }
 
 // Low-level query emulator on top of Firestore collections

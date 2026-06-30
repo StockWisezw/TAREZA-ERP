@@ -349,27 +349,16 @@ export function SyncManager() {
     }
   };
 
+  // Synchronize ONLY when the user explicitly triggers a manual push
   useEffect(() => {
-    if (navigator.onLine && offlineQueue.length > 0) {
-      processSync();
-    }
-  }, [offlineQueue]);
-
-  useEffect(() => {
-    const handleOnline = () => {
-      if (offlineQueue.length > 0) processSync();
-    };
-
     const handleManualSync = () => {
       console.log('[SyncManager] Manual sync trigger received via global event.');
       if (offlineQueue.length > 0) processSync();
     };
 
-    window.addEventListener('online', handleOnline);
     window.addEventListener('tareza-trigger-sync', handleManualSync);
 
     return () => {
-      window.removeEventListener('online', handleOnline);
       window.removeEventListener('tareza-trigger-sync', handleManualSync);
     };
   }, [offlineQueue]);

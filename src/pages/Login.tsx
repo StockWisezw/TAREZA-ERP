@@ -283,47 +283,6 @@ export default function Login() {
           { business_id: newBusinessId, name: 'Dry Goods' }
         ]);
 
-        // Seed Default Staff Users (Manager, Cashier)
-        try {
-          const { initializeApp, deleteApp } = await import('firebase/app');
-          const { getAuth, createUserWithEmailAndPassword, signOut } = await import('firebase/auth');
-          
-          const managerEmail = `manager@${sanitizedRegNo.toLowerCase()}.tarezaerp.co.zw`;
-          const cashierEmail = `cashier@${sanitizedRegNo.toLowerCase()}.tarezaerp.co.zw`;
-          const staffPassword = 'Password123!';
-
-          const staffToCreate = [
-            { email: managerEmail, firstName: 'Tendai', lastName: 'Manager', roleId: managerRoleId, branchId: warehouseBranchId },
-            { email: cashierEmail, firstName: 'Chipo', lastName: 'Cashier', roleId: cashierRoleId, branchId: mainBranchId }
-          ];
-
-          for (const staff of staffToCreate) {
-            const tempApp = initializeApp(firebaseConfig, `TempStaffSeed-${crypto.randomUUID()}`);
-            const tempAuth = getAuth(tempApp);
-            try {
-              const cred = await createUserWithEmailAndPassword(tempAuth, staff.email, staffPassword);
-              const uid = cred.user.uid;
-              await signOut(tempAuth);
-
-              // Create Profile
-              await supabase.from('profiles').insert([
-                { id: uid, first_name: staff.firstName, last_name: staff.lastName, email: staff.email, phone: '+263777000000' }
-              ]);
-
-              // Create link
-              await supabase.from('business_users').insert([
-                { id: uid, business_id: newBusinessId, user_id: uid, branch_id: staff.branchId, role_id: staff.roleId, is_active: true }
-              ]);
-            } catch (staffErr) {
-              console.error(`Failed to register staff ${staff.email}:`, staffErr);
-            } finally {
-              await deleteApp(tempApp);
-            }
-          }
-        } catch (tempSetupErr) {
-          console.error("Staff seeding helper failed:", tempSetupErr);
-        }
-
         // Trigger email and WhatsApp signup alerts in background securely
         fetch('/api/notifications/notify', {
           method: 'POST',
@@ -340,7 +299,7 @@ export default function Login() {
           })
         }).catch(err => console.error("Signup notification dispatch failed", err));
 
-        toast.success('Signup successful! Welcome to Tareza ERP! Default branches and staff users are pre-configured.');
+        toast.success('Signup successful! Welcome to Tareza ERP! Default branches are pre-configured.');
         navigate('/dashboard');
         setIsSignUp(false);
       } catch (error: any) {

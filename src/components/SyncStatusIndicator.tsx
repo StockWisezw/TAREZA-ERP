@@ -26,25 +26,30 @@ export function SyncStatusIndicator() {
 
   const pendingCount = offlineQueue.length;
 
-  const handleManualSyncClick = () => {
+  const handleManualSyncClick = async () => {
     if (!navigator.onLine) {
       toast.error('Cannot sync: Internet connection is currently offline. Please check your networks.');
       return;
     }
 
-    if (pendingCount === 0) {
-      toast.info('All transactions are already synchronized to Supabase.');
-      return;
-    }
-
     setIsManualSyncing(true);
-    // Dispatch custom global event to notify SyncManager
-    window.dispatchEvent(new CustomEvent('tareza-trigger-sync'));
-    toast.success('Sync queue triggered! Live updates will begin instantly.');
-    
-    setTimeout(() => {
+    const syncToast = toast.loading('Initiating manual database & transaction queue synchronization...');
+
+    try {
+      // 1. Manually sync local Firestore mutations across all modules (Cash logs, shifts, accounting)
+      const { syncOfflineDatabase } = await import('../lib/firebaseClient');
+      await syncOfflineDatabase();
+
+      // 2. Dispatch custom global event to notify SyncManager to sync POS sales
+      window.dispatchEvent(new CustomEvent('tareza-trigger-sync'));
+
+      toast.success('All cash registers, ledger journals, and transactions synchronized successfully!', { id: syncToast });
+    } catch (err: any) {
+      console.error('[Manual Sync] Error synchronizing database:', err);
+      toast.error('Sync failed: ' + (err.message || String(err)), { id: syncToast });
+    } finally {
       setIsManualSyncing(false);
-    }, 800);
+    }
   };
 
   let triggerContent = null;
@@ -119,7 +124,7 @@ export function SyncStatusIndicator() {
             disabled={isManualSyncing || !isOnline}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isManualSyncing ? 'animate-spin' : ''}`} />
-            {isOnline ? (pendingCount > 0 ? 'Sync Now' : 'Synced to Cloud') : 'Offline - Reconnect'}
+            {isOnline ? (pendingCount > 0 || (typeof window !== 'undefined' && localStorage.getItem('tareza_offline_mode') === 'true') ? 'Sync Now' : 'Synced to Cloud') : 'Offline - Reconnect'}
           </Button>
         </div>
       </PopoverContent>
