@@ -318,6 +318,37 @@ export default function DeveloperPanel() {
     }
   };
 
+  const handleDeleteUser = async (userId: string, email: string) => {
+    if (!window.confirm(`Are you absolutely sure you want to permanently delete user ${email}? This action cannot be undone and will delete their profile and workspace links.`)) {
+      return;
+    }
+    try {
+      setLoading(true);
+      
+      // 1. Delete links
+      const { error: buError } = await supabase
+        .from('business_users')
+        .delete()
+        .eq('user_id', userId);
+      if (buError) throw buError;
+
+      // 2. Delete profile
+      const { error: pError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', userId);
+      if (pError) throw pError;
+
+      toast.success(`Successfully deleted user account ${email}`);
+      fetchBusinessesAndSubscriptions();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Failed to delete user: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const updateUserRole = async (userId: string, targetRoleId: string) => {
     try {
       const matchedRecords = businessUsers.filter(bu => bu.user_id === userId);
@@ -1079,6 +1110,10 @@ export default function DeveloperPanel() {
                                     </DropdownMenuItem>
                                     <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => updateUserRole(p.id, 'staff')}>
                                       Set as Staff
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem className="cursor-pointer text-xs text-rose-600 focus:text-rose-600 focus:bg-rose-50 dark:focus:bg-rose-950/40 font-bold" onClick={() => handleDeleteUser(p.id, p.email)}>
+                                      Delete User Account
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>

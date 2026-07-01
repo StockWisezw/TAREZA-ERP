@@ -76,6 +76,7 @@ export function BillingSettings() {
   const [subscription, setSubscription] = useState<any>(null);
   const [userCount, setUserCount] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [userEmail, setUserEmail] = useState<string>('');
 
   // EcoCash & POP billing states
   const [isPaynowOpen, setIsPaynowOpen] = useState(false); 
@@ -102,6 +103,7 @@ export function BillingSettings() {
     try {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) return;
+      setUserEmail(userData.user.email || '');
       
       const { data: buData } = await supabase.from('business_users').select('business_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
       if (!buData) return;
@@ -137,6 +139,97 @@ export function BillingSettings() {
       }
     } catch (err) {
       console.error('Error fetching subscription details:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDevExtendPlan = async (days: number) => {
+    if (!businessData) return;
+    setLoading(true);
+    try {
+      let currentEndDate = businessData.subscription_end_date ? new Date(businessData.subscription_end_date) : new Date();
+      if (currentEndDate.getTime() < Date.now()) {
+        currentEndDate = new Date();
+      }
+      currentEndDate.setDate(currentEndDate.getDate() + days);
+      const updatedEndDateStr = currentEndDate.toISOString();
+
+      // Update business record
+      const { error: bError } = await supabase.from('businesses').update({
+        subscription_end_date: updatedEndDateStr,
+        subscription_status: 'ACTIVE',
+        updated_at: new Date().toISOString()
+      }).eq('id', businessData.id);
+      if (bError) throw bError;
+
+      // Update subscription record
+      if (subscription?.id) {
+        const { error: sError } = await supabase.from('subscriptions').update({
+          status: 'active',
+          end_date: updatedEndDateStr
+        }).eq('id', subscription.id);
+        if (sError) throw sError;
+      } else {
+        const { error: sError } = await supabase.from('subscriptions').insert([{
+          id: 'sub-' + Math.floor(Math.random() * 1000000),
+          business_id: businessData.id,
+          plan_name: businessData.subscription_plan || 'pro',
+          status: 'active',
+          start_date: new Date().toISOString(),
+          end_date: updatedEndDateStr,
+          created_at: new Date().toISOString()
+        }]);
+        if (sError) throw sError;
+      }
+
+      toast.success(`Successfully extended plan by ${days} days!`);
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Failed to extend plan: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDevChangePlan = async (newPlan: string) => {
+    if (!businessData) return;
+    setLoading(true);
+    try {
+      // Update business record
+      const { error: bError } = await supabase.from('businesses').update({
+        subscription_plan: newPlan,
+        subscription_status: 'ACTIVE',
+        updated_at: new Date().toISOString()
+      }).eq('id', businessData.id);
+      if (bError) throw bError;
+
+      // Update subscription record
+      if (subscription?.id) {
+        const { error: sError } = await supabase.from('subscriptions').update({
+          plan_name: newPlan,
+          status: 'active'
+        }).eq('id', subscription.id);
+        if (sError) throw sError;
+      } else {
+        const { error: sError } = await supabase.from('subscriptions').insert([{
+          id: 'sub-' + Math.floor(Math.random() * 1000000),
+          business_id: businessData.id,
+          plan_name: newPlan,
+          status: 'active',
+          start_date: new Date().toISOString(),
+          end_date: businessData.subscription_end_date || new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+          created_at: new Date().toISOString()
+        }]);
+        if (sError) throw sError;
+      }
+
+      toast.success(`Successfully changed plan to ${newPlan}!`);
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Failed to change plan: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -478,6 +571,85 @@ export function BillingSettings() {
             </Button>
           </div>
         </div>
+      )}
+
+      {/* 🛠️ Developer System Administration Bypass Card */}
+      {userEmail && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(userEmail.toLowerCase()) && (
+        <Card className="border border-indigo-500/30 bg-indigo-55/10 dark:bg-indigo-950/10 shadow-sm rounded-2xl overflow-hidden mb-6">
+          <CardHeader className="bg-indigo-500/5 pb-4 border-b border-indigo-100/10">
+            <div>
+              <CardTitle className="text-sm text-indigo-900 dark:text-indigo-450 font-extrabold flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                Developer Subscription Bypass Panel
+              </CardTitle>
+              <CardDescription className="text-xs text-indigo-700/80 dark:text-indigo-400/80 mt-1">
+                Active developer session verified ({userEmail}). Modify workspace duration or license tiers instantly without transaction audits.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="p-5 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <h4 className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">Extend Current License</h4>
+                <div className="flex flex-wrap gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="text-[11px] h-8 bg-white dark:bg-zinc-900 border-indigo-100 dark:border-indigo-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 cursor-pointer"
+                    onClick={() => handleDevExtendPlan(30)}
+                  >
+                    +30 Days (1 Month)
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="text-[11px] h-8 bg-white dark:bg-zinc-900 border-indigo-100 dark:border-indigo-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 cursor-pointer"
+                    onClick={() => handleDevExtendPlan(90)}
+                  >
+                    +90 Days (Quarterly)
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="text-[11px] h-8 bg-white dark:bg-zinc-900 border-indigo-100 dark:border-indigo-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 cursor-pointer"
+                    onClick={() => handleDevExtendPlan(365)}
+                  >
+                    +365 Days (Annual)
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">Change License Tier</h4>
+                <div className="flex flex-wrap gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className={`text-[11px] h-8 cursor-pointer ${planNameRaw === 'starter' ? 'bg-indigo-600 text-white hover:bg-indigo-700 border-transparent' : 'bg-white dark:bg-zinc-900 border-indigo-100 dark:border-indigo-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/50'}`}
+                    onClick={() => handleDevChangePlan('starter')}
+                  >
+                    Starter
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className={`text-[11px] h-8 cursor-pointer ${planNameRaw === 'pro' ? 'bg-indigo-600 text-white hover:bg-indigo-700 border-transparent' : 'bg-white dark:bg-zinc-900 border-indigo-100 dark:border-indigo-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/50'}`}
+                    onClick={() => handleDevChangePlan('pro')}
+                  >
+                    Pro
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className={`text-[11px] h-8 cursor-pointer ${planNameRaw === 'enterprise' ? 'bg-indigo-600 text-white hover:bg-indigo-700 border-transparent' : 'bg-white dark:bg-zinc-900 border-indigo-100 dark:border-indigo-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/50'}`}
+                    onClick={() => handleDevChangePlan('enterprise')}
+                  >
+                    Enterprise
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Subscription Summary Card */}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Search, 
   Mic, 
@@ -49,6 +49,99 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
     return typeof window !== 'undefined' && window.innerWidth < 1024 ? 'list' : 'grid';
   });
+
+  // Transform products with packs/bundles into individual sub-product representations
+  const sellableItems = useMemo(() => {
+    const items: any[] = [];
+    filteredProducts.forEach((product) => {
+      const pSize = getPackSize(product.sku);
+      const hasPack = pSize > 1;
+      const hasBundles = product.bundles && product.bundles.length > 0;
+
+      if (!hasPack && !hasBundles) {
+        // Simple product, keep as is
+        items.push({
+          id: product.id,
+          originalProduct: product,
+          name: product.name,
+          sku: product.sku,
+          price: product.retailPrice,
+          wholesalePrice: product.wholesalePrice,
+          tier: 'retail',
+          stockDisplay: product.stock !== undefined ? `${product.stock} units` : undefined,
+          isSubProduct: false,
+          pSize: 1,
+          taxClass: product.taxClass,
+          category: product.category,
+        });
+      } else {
+        // 1. Single Unit Sub-Product
+        items.push({
+          id: `${product.id}-single`,
+          originalProduct: product,
+          name: `${product.name} (Single)`,
+          sku: `${product.sku}-SG`,
+          price: product.retailPrice,
+          wholesalePrice: product.wholesalePrice,
+          tier: 'retail',
+          stockDisplay: product.stock !== undefined ? `${product.stock} units` : undefined,
+          isSubProduct: true,
+          subType: 'single',
+          pSize: 1,
+          taxClass: product.taxClass,
+          category: product.category,
+        });
+
+        // 2. Pack Sub-Product
+        if (hasPack) {
+          const packStock = product.stock !== undefined 
+            ? `${Math.floor(product.stock / pSize)} packs (${product.stock} units)` 
+            : undefined;
+          items.push({
+            id: `${product.id}-pack`,
+            originalProduct: product,
+            name: `${product.name} (Pack of ${pSize})`,
+            sku: `${product.sku}-PK${pSize}`,
+            price: product.wholesalePrice,
+            wholesalePrice: product.wholesalePrice,
+            tier: 'wholesale',
+            stockDisplay: packStock,
+            isSubProduct: true,
+            subType: 'pack',
+            pSize: pSize,
+            taxClass: product.taxClass,
+            category: product.category,
+          });
+        }
+
+        // 3. Bundle Sub-Products
+        if (hasBundles) {
+          product.bundles?.forEach((b: any, bIdx: number) => {
+            const bSize = Number(b.pack_size || b.packSize || 1);
+            const bundleStock = product.stock !== undefined 
+              ? `${Math.floor(product.stock / bSize)} bundles (${product.stock} units)` 
+              : undefined;
+            items.push({
+              id: `${product.id}-bundle-${bIdx}`,
+              originalProduct: product,
+              name: `${product.name} (${b.name})`,
+              sku: `${product.sku}-BD${bSize}`,
+              price: Number(b.price || 0),
+              wholesalePrice: product.wholesalePrice,
+              tier: b.name,
+              stockDisplay: bundleStock,
+              isSubProduct: true,
+              subType: 'bundle',
+              pSize: bSize,
+              taxClass: product.taxClass,
+              category: product.category,
+            });
+          });
+        }
+      }
+    });
+    return items;
+  }, [filteredProducts]);
 
   let gridColsClass = "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4";
   if (gridScale === 'compact') {
@@ -179,7 +272,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                   <div className="h-6 bg-zinc-100 rounded w-1/4" />
                 </div>
               ))
-            ) : filteredProducts.map((product) => {
+            ) : sellableItems.map((item) => {
               const bgColors = [
                 'bg-rose-50 border border-rose-100 text-rose-600', 
                 'bg-blue-50 border border-blue-100 text-blue-600', 
@@ -189,15 +282,12 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                 'bg-indigo-50 border border-indigo-100 text-indigo-600', 
                 'bg-cyan-50 border border-cyan-100 text-cyan-600'
               ];
-              const colorClass = bgColors[product.name.charCodeAt(0) % bgColors.length];
-              const pSize = getPackSize(product.sku);
-              const hasPack = pSize > 1;
-              const selectedTier = selectedTiers[product.id] || 'retail';
+              const colorClass = bgColors[item.originalProduct.name.charCodeAt(0) % bgColors.length];
 
               return (
                 <div 
-                  key={product.id}
-                  onClick={() => addToCart(product, 0, selectedTier)}
+                  key={item.id}
+                  onClick={() => addToCart(item.originalProduct, 1, item.tier)}
                   className="group flex flex-col md:flex-row md:items-center justify-between p-2.5 bg-white border border-zinc-200 hover:border-zinc-350 active:bg-zinc-50 rounded-xl transition-all cursor-pointer hover:shadow-2xs gap-2"
                 >
                   <div className="flex items-center gap-2.5 overflow-hidden min-w-0">
@@ -206,14 +296,19 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                     </div>
                     <div className="overflow-hidden min-w-0">
                       <h4 className="font-bold text-xs text-zinc-900 group-hover:text-blue-600 transition-colors truncate">
-                        {product.name}
+                        {item.name}
                       </h4>
                       <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-mono mt-0.5 whitespace-nowrap">
-                        <span>{product.sku}</span>
-                        {product.stock !== undefined && (
-                          <span className={product.stock > 0 ? "text-emerald-600 font-bold" : "text-rose-500 font-bold"}>
-                            • Qty: {product.stock}
+                        <span>{item.sku}</span>
+                        {item.stockDisplay !== undefined && (
+                          <span className="text-emerald-600 font-bold">
+                            • {item.stockDisplay}
                           </span>
+                        )}
+                        {item.isSubProduct && (
+                          <Badge variant="outline" className="text-[8px] h-3.5 px-1 bg-zinc-50 text-zinc-650 border-zinc-200 ml-1">
+                            {item.subType === 'pack' ? 'Pack' : item.subType === 'bundle' ? 'Bundle' : 'Single'}
+                          </Badge>
                         )}
                       </div>
                     </div>
@@ -221,62 +316,22 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
 
                   <div className="flex items-center justify-between md:justify-end gap-3 shrink-0" onClick={(e) => e.stopPropagation()}>
                     <div className="text-left md:text-right">
-                      <span className="font-bold text-xs text-zinc-900">${product.retailPrice.toFixed(2)}</span>
-                      {hasPack && (
-                        <div className="text-[9px] text-purple-600 font-semibold">Pack: ${product.wholesalePrice.toFixed(2)}</div>
-                      )}
+                      <span className="font-bold text-xs text-zinc-900">${item.price.toFixed(2)}</span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 overflow-x-auto max-w-full">
-                      {((product.bundles && product.bundles.length > 0) || hasPack) && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setExpandedBundles({ ...expandedBundles, [product.id]: !expandedBundles[product.id] })}
-                          className={`text-[9px] h-7 px-2 font-bold border rounded-lg transition-all flex items-center gap-1 whitespace-nowrap ${
-                            expandedBundles[product.id]
-                              ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
-                              : 'bg-zinc-50 text-zinc-650 border-zinc-200 hover:bg-zinc-100'
-                          }`}
-                        >
-                          <span>Expand Bundle</span>
-                          <span className="text-[7px]">{expandedBundles[product.id] ? '▲' : '▼'}</span>
-                        </Button>
-                      )}
-
-                      {((product.bundles && product.bundles.length > 0) || hasPack) && expandedBundles[product.id] && (
-                        <select
-                          value={selectedTier}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => setSelectedTiers({ ...selectedTiers, [product.id]: e.target.value })}
-                          className="bg-zinc-50 border border-zinc-200 text-zinc-700 text-[10px] font-bold py-1 px-1.5 rounded-lg cursor-pointer h-7 focus:outline-none"
-                        >
-                          <option value="retail">Single Unit (${product.retailPrice.toFixed(2)})</option>
-                          {hasPack && (
-                            <option value="wholesale">Pack ({pSize}) (${product.wholesalePrice.toFixed(2)})</option>
-                          )}
-                          {product.bundles?.map((b: any, bIdx: number) => (
-                            <option key={bIdx} value={b.name}>
-                              {b.name} ({b.pack_size || b.packSize}) (${Number(b.price || 0).toFixed(2)})
-                            </option>
-                          ))}
-                        </select>
-                      )}
-
-                      <Button 
-                        size="sm"
-                        className="text-[10px] h-7 px-2.5 font-bold bg-zinc-900 hover:bg-zinc-855 text-white rounded-lg cursor-pointer flex items-center gap-1"
-                        onClick={() => addToCart(product, 0, ((product.bundles && product.bundles.length > 0) || hasPack) && expandedBundles[product.id] ? selectedTier : 'retail')}
-                      >
-                        <span>{((product.bundles && product.bundles.length > 0) || hasPack) && !expandedBundles[product.id] ? '+ Quick Add' : '+ Add'}</span>
-                      </Button>
-                    </div>
+                    <Button 
+                      size="sm"
+                      className="text-[10px] h-7 px-2.5 font-bold bg-zinc-900 hover:bg-zinc-855 text-white rounded-lg cursor-pointer flex items-center gap-1"
+                      onClick={() => addToCart(item.originalProduct, 1, item.tier)}
+                    >
+                      <span>+ Add</span>
+                    </Button>
                   </div>
                 </div>
               );
             })}
 
-            {filteredProducts.length === 0 && !isLoading && (
+            {sellableItems.length === 0 && !isLoading && (
               <div className="py-20 flex flex-col items-center justify-center text-zinc-500 text-center">
                 <Package className="w-12 h-12 text-zinc-300 mb-4" />
                 <p className="text-sm font-semibold text-zinc-700">No products found</p>
@@ -298,7 +353,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                   </div>
                 </div>
               ))
-            ) : filteredProducts.map((product) => {
+            ) : sellableItems.map((item) => {
               const bgColors = [
                 'bg-rose-100 text-rose-600', 
                 'bg-blue-100 text-blue-600', 
@@ -308,122 +363,65 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                 'bg-indigo-100 text-indigo-600', 
                 'bg-cyan-100 text-cyan-600'
               ];
-              const colorClass = bgColors[product.name.charCodeAt(0) % bgColors.length];
-              const pSize = getPackSize(product.sku);
-              const hasPack = pSize > 1;
-              const selectedTier = selectedTiers[product.id] || 'retail';
+              const colorClass = bgColors[item.originalProduct.name.charCodeAt(0) % bgColors.length];
 
               return (
                 <div 
-                  key={product.id}
-                  onClick={() => addToCart(product, 0, selectedTier)}
+                  key={item.id}
+                  onClick={() => addToCart(item.originalProduct, 1, item.tier)}
                   className="group relative bg-white border border-zinc-200 rounded-xl overflow-hidden hover:shadow-md transition-all duration-200 flex flex-col cursor-pointer hover:border-zinc-400"
                 >
                   <div className={`h-11 relative overflow-hidden flex items-center justify-center shrink-0 ${colorClass}`}>
                     <Package className="w-5 h-5 group-hover:scale-110 transition-transform duration-300 opacity-80" />
-                    {product.taxClass && product.taxClass !== 'standard' && (
+                    {item.taxClass && item.taxClass !== 'standard' && (
                       <Badge variant="secondary" className="absolute top-1 left-1 text-[8px] h-3 px-1 bg-white/90 backdrop-blur-sm border-zinc-200 text-zinc-700">
-                        {product.taxClass}
+                        {item.taxClass}
                       </Badge>
                     )}
-                    {hasPack && (
-                      <Badge className="absolute top-1 right-1 text-[8px] h-3 px-1 bg-purple-600 text-white font-semibold shadow-sm border-0">
-                        Pack ({pSize})
+                    {item.isSubProduct && (
+                      <Badge className={`absolute top-1 right-1 text-[8px] h-3.5 px-1 border-0 text-white font-semibold shadow-sm ${
+                        item.subType === 'pack' ? 'bg-purple-600' : item.subType === 'bundle' ? 'bg-pink-600' : 'bg-zinc-600'
+                      }`}>
+                        {item.subType === 'pack' ? 'Pack' : item.subType === 'bundle' ? 'Bundle' : 'Single'}
                       </Badge>
                     )}
                   </div>
                   <div className="p-1.5 flex flex-col flex-1">
                     <h4 className="font-semibold text-xs text-zinc-800 line-clamp-2 leading-tight min-h-[1.75rem] mb-0.5">
-                      {product.name}
+                      {item.name}
                     </h4>
                     <p className="text-[10px] text-zinc-400 font-mono leading-none mb-1">
-                      {product.sku}
+                      {item.sku}
                     </p>
                     
-                    {product.stock !== undefined && (
-                      <div className="flex flex-col gap-0.5 mb-1">
+                    {item.stockDisplay !== undefined && (
+                      <div className="flex flex-col gap-0.5 mb-1 mt-auto">
                         <div className="flex items-center gap-1">
-                          <span className={`text-[10px] font-mono font-semibold ${(product.stock || 0) > 0 ? 'text-zinc-500' : 'text-rose-500 font-bold'}`}>
-                            Stock: {product.stock}
+                          <span className="text-[10px] font-mono font-semibold text-zinc-500">
+                            {item.stockDisplay}
                           </span>
                         </div>
                       </div>
                     )}
-                    {((product.bundles && product.bundles.length > 0) || hasPack) ? (
-                      <div className="space-y-1.5 mt-auto pt-1 select-none" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-between gap-1.5">
-                          <span className="font-bold text-xs text-zinc-950 leading-none">
-                            ${product.retailPrice.toFixed(2)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setExpandedBundles({ ...expandedBundles, [product.id]: !expandedBundles[product.id] })}
-                            className={`text-[9px] px-1.5 py-0.5 font-bold border rounded-md transition-all flex items-center gap-1 shrink-0 ${
-                              expandedBundles[product.id]
-                                ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
-                                : 'bg-zinc-50 text-zinc-650 border-zinc-200 hover:bg-zinc-100'
-                            }`}
-                          >
-                            <span>Expand Bundle</span>
-                            <span className="text-[7px]">{expandedBundles[product.id] ? '▲' : '▼'}</span>
-                          </button>
-                        </div>
-
-                        {expandedBundles[product.id] ? (
-                          <div className="space-y-1 bg-zinc-50 p-1 rounded-lg border border-zinc-150">
-                            <select
-                              value={selectedTier}
-                              onChange={(e) => setSelectedTiers({ ...selectedTiers, [product.id]: e.target.value })}
-                              className="w-full text-[10px] font-bold py-1 px-1.5 border border-zinc-200 bg-white rounded-md focus:outline-none cursor-pointer h-7"
-                            >
-                              <option value="retail">Single Unit (${product.retailPrice.toFixed(2)})</option>
-                              {hasPack && (
-                                <option value="wholesale">Pack ({pSize}) (${product.wholesalePrice.toFixed(2)})</option>
-                              )}
-                              {product.bundles?.map((b: any, bIdx: number) => (
-                                <option key={bIdx} value={b.name}>
-                                  {b.name} ({b.pack_size || b.packSize}) (${Number(b.price || 0).toFixed(2)})
-                                </option>
-                              ))}
-                            </select>
-                            <Button 
-                              size="sm" 
-                              className="w-full text-[10px] h-6.5 font-bold bg-zinc-900 hover:bg-zinc-855 text-white rounded-lg cursor-pointer"
-                              onClick={() => addToCart(product, 0, selectedTier)}
-                            >
-                              + Add Selected
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button 
-                            size="sm" 
-                            className="w-full text-[10px] h-6.5 font-bold bg-zinc-900 hover:bg-zinc-855 text-white rounded-lg cursor-pointer flex items-center justify-center gap-1"
-                            onClick={() => addToCart(product, 0, 'retail')}
-                          >
-                            <span>+ Quick Add</span>
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="mt-auto pt-1 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
-                        <span className="font-bold text-xs text-zinc-950 leading-none">
-                          ${product.retailPrice.toFixed(2)}
-                        </span>
-                        <Button 
-                          size="icon" 
-                          className="h-5 w-5 rounded-full bg-zinc-900 hover:bg-zinc-855 text-white flex items-center justify-center p-0 cursor-pointer"
-                          onClick={() => addToCart(product, 0, 'retail')}
-                        >
-                          <span className="text-xs leading-none font-bold">+</span>
-                        </Button>
-                      </div>
-                    )}
+                    
+                    <div className="mt-auto pt-1 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
+                      <span className="font-bold text-xs text-zinc-950 leading-none">
+                        ${item.price.toFixed(2)}
+                      </span>
+                      <Button 
+                        size="icon" 
+                        className="h-5 w-5 rounded-full bg-zinc-900 hover:bg-zinc-855 text-white flex items-center justify-center p-0 cursor-pointer"
+                        onClick={() => addToCart(item.originalProduct, 1, item.tier)}
+                      >
+                        <span className="text-xs leading-none font-bold">+</span>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               );
             })}
             
-            {filteredProducts.length === 0 && !isLoading && (
+            {sellableItems.length === 0 && !isLoading && (
                <div className="col-span-full py-20 flex flex-col items-center justify-center text-zinc-500 text-center">
                  <Package className="w-12 h-12 text-zinc-300 mb-4" />
                  <p className="text-sm font-semibold text-zinc-700">No products found</p>

@@ -199,6 +199,31 @@ export default function Login() {
         return;
       }
 
+      // Prevent sign-up if a prior free trial or subscription using this email has expired
+      try {
+        const { data: existingBiz } = await supabase
+          .from('businesses')
+          .select('subscription_status, subscription_end_date, subscription_plan')
+          .eq('email', email);
+        
+        if (existingBiz && existingBiz.length > 0) {
+          const hasExpiredTrial = existingBiz.some(b => {
+            const isTrial = b.subscription_plan === 'free_trial' || !b.subscription_plan;
+            const isExpired = b.subscription_status === 'EXPIRED' || 
+                              (b.subscription_end_date && new Date(b.subscription_end_date).getTime() < Date.now());
+            return isExpired;
+          });
+          
+          if (hasExpiredTrial) {
+            toast.error("This email has already been used for a free trial that has now expired. Re-registration is blocked. To continue using Tareza ERP, please contact our support at sales@tarezaerp.co.zw to upgrade.");
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (checkErr) {
+        console.warn("Could not verify prior trial status:", checkErr);
+      }
+
       try {
         const userCredential = await createUserWithEmailAndPassword(fireAuth, email, password);
         const firebaseUser = userCredential.user;
