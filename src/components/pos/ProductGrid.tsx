@@ -12,6 +12,7 @@ import {
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Product, getPackSize } from '../../store/posStore';
 
 interface ProductGridProps {
@@ -49,6 +50,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
     return typeof window !== 'undefined' && window.innerWidth < 1024 ? 'list' : 'grid';
   });
+  const [selectedProductForPack, setSelectedProductForPack] = useState<Product | null>(null);
 
   // Transform products with packs/bundles into individual sub-product representations
   const sellableItems = useMemo(() => {
@@ -58,24 +60,26 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
       const hasPack = pSize > 1;
       const hasBundles = product.bundles && product.bundles.length > 0;
 
-      if (!hasPack && !hasBundles) {
-        // Simple product, keep as is
-        items.push({
-          id: product.id,
-          originalProduct: product,
-          name: product.name,
-          sku: product.sku,
-          price: product.retailPrice,
-          wholesalePrice: product.wholesalePrice,
-          tier: 'retail',
-          stockDisplay: product.stock !== undefined ? `${product.stock} units` : undefined,
-          isSubProduct: false,
-          pSize: 1,
-          taxClass: product.taxClass,
-          category: product.category,
-        });
-      } else {
-        // 1. Single Unit Sub-Product
+      // Always add the single/main product
+      items.push({
+        id: product.id,
+        originalProduct: product,
+        name: product.name,
+        sku: product.sku,
+        price: product.retailPrice,
+        wholesalePrice: product.wholesalePrice,
+        tier: 'retail',
+        stockDisplay: product.stock !== undefined ? `${product.stock} units` : undefined,
+        isSubProduct: false,
+        pSize: 1,
+        taxClass: product.taxClass,
+        category: product.category,
+        hasPacksOrBundles: hasPack || hasBundles,
+      });
+
+      // ONLY generate sub-products for packs and bundles if there is an active search term
+      if (searchTerm.trim() !== '') {
+        // 1. Single Unit Sub-Product (for explicit search context)
         items.push({
           id: `${product.id}-single`,
           originalProduct: product,
@@ -141,7 +145,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
       }
     });
     return items;
-  }, [filteredProducts]);
+  }, [filteredProducts, searchTerm]);
 
   let gridColsClass = "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4";
   if (gridScale === 'compact') {
@@ -287,7 +291,13 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
               return (
                 <div 
                   key={item.id}
-                  onClick={() => addToCart(item.originalProduct, 1, item.tier)}
+                  onClick={() => {
+                    if (!item.isSubProduct && item.hasPacksOrBundles) {
+                      setSelectedProductForPack(item.originalProduct);
+                    } else {
+                      addToCart(item.originalProduct, 1, item.tier);
+                    }
+                  }}
                   className="group flex flex-col md:flex-row md:items-center justify-between p-2.5 bg-white border border-zinc-200 hover:border-zinc-350 active:bg-zinc-50 rounded-xl transition-all cursor-pointer hover:shadow-2xs gap-2"
                 >
                   <div className="flex items-center gap-2.5 overflow-hidden min-w-0">
@@ -322,7 +332,14 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                     <Button 
                       size="sm"
                       className="text-[10px] h-7 px-2.5 font-bold bg-zinc-900 hover:bg-zinc-855 text-white rounded-lg cursor-pointer flex items-center gap-1"
-                      onClick={() => addToCart(item.originalProduct, 1, item.tier)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!item.isSubProduct && item.hasPacksOrBundles) {
+                          setSelectedProductForPack(item.originalProduct);
+                        } else {
+                          addToCart(item.originalProduct, 1, item.tier);
+                        }
+                      }}
                     >
                       <span>+ Add</span>
                     </Button>
@@ -368,7 +385,13 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
               return (
                 <div 
                   key={item.id}
-                  onClick={() => addToCart(item.originalProduct, 1, item.tier)}
+                  onClick={() => {
+                    if (!item.isSubProduct && item.hasPacksOrBundles) {
+                      setSelectedProductForPack(item.originalProduct);
+                    } else {
+                      addToCart(item.originalProduct, 1, item.tier);
+                    }
+                  }}
                   className="group relative bg-white border border-zinc-200 rounded-xl overflow-hidden hover:shadow-md transition-all duration-200 flex flex-col cursor-pointer hover:border-zinc-400"
                 >
                   <div className={`h-11 relative overflow-hidden flex items-center justify-center shrink-0 ${colorClass}`}>
@@ -411,7 +434,13 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                       <Button 
                         size="icon" 
                         className="h-5 w-5 rounded-full bg-zinc-900 hover:bg-zinc-855 text-white flex items-center justify-center p-0 cursor-pointer"
-                        onClick={() => addToCart(item.originalProduct, 1, item.tier)}
+                        onClick={() => {
+                          if (!item.isSubProduct && item.hasPacksOrBundles) {
+                            setSelectedProductForPack(item.originalProduct);
+                          } else {
+                            addToCart(item.originalProduct, 1, item.tier);
+                          }
+                        }}
                       >
                         <span className="text-xs leading-none font-bold">+</span>
                       </Button>
@@ -431,6 +460,113 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
           </div>
         )}
       </div>
+
+      {/* PACK / BUNDLE SELECTOR DIALOG */}
+      <Dialog open={selectedProductForPack !== null} onOpenChange={(open) => { if (!open) setSelectedProductForPack(null); }}>
+        <DialogContent className="max-w-md bg-white border border-zinc-200 shadow-xl rounded-2xl p-6">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold text-zinc-900 uppercase tracking-wide">
+              Select Selling Option
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-500 font-medium">
+              Choose the package or tier to add to cart for <strong className="text-zinc-800">{selectedProductForPack?.name}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedProductForPack && (() => {
+            const product = selectedProductForPack;
+            const pSize = getPackSize(product.sku);
+            const hasPack = pSize > 1;
+            const hasBundles = product.bundles && product.bundles.length > 0;
+
+            return (
+              <div className="space-y-3 mt-4">
+                {/* 1. Single Unit Option */}
+                <div className="flex items-center justify-between p-3.5 bg-zinc-50/50 hover:bg-zinc-50 border border-zinc-150 rounded-xl transition-all">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-zinc-800">Single Unit</span>
+                    <span className="text-[10px] text-zinc-400 font-mono mt-0.5">
+                      SKU: {product.sku} • Stock: {product.stock !== undefined ? `${product.stock} units` : 'unlimited'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-zinc-900 font-mono">${product.retailPrice.toFixed(2)}</span>
+                    <Button
+                      size="sm"
+                      className="text-[10px] h-7.5 px-3 font-semibold bg-zinc-900 hover:bg-zinc-855 text-white rounded-lg"
+                      onClick={() => {
+                        addToCart(product, 1, 'retail');
+                        setSelectedProductForPack(null);
+                      }}
+                    >
+                      + Add
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 2. Pack Option */}
+                {hasPack && (
+                  <div className="flex items-center justify-between p-3.5 bg-purple-50/30 hover:bg-purple-50/50 border border-purple-100 rounded-xl transition-all">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
+                        <Package className="h-3.5 w-3.5 text-purple-600" />
+                        Pack (of {pSize})
+                      </span>
+                      <span className="text-[10px] text-purple-500/70 font-mono mt-0.5">
+                        SKU: {product.sku}-PK{pSize} • Stock: {product.stock !== undefined ? `${Math.floor(product.stock / pSize)} packs (${product.stock} units)` : 'unlimited'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-purple-950 font-mono">${product.wholesalePrice.toFixed(2)}</span>
+                      <Button
+                        size="sm"
+                        className="text-[10px] h-7.5 px-3 font-semibold bg-purple-600 hover:bg-purple-700 text-white rounded-lg border-0 cursor-pointer"
+                        onClick={() => {
+                          addToCart(product, 1, 'wholesale');
+                          setSelectedProductForPack(null);
+                        }}
+                      >
+                        + Add Pack
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Bundle Options */}
+                {hasBundles && product.bundles?.map((b: any, bIdx: number) => {
+                  const bSize = Number(b.pack_size || b.packSize || 1);
+                  return (
+                    <div key={bIdx} className="flex items-center justify-between p-3.5 bg-pink-50/30 hover:bg-pink-50/50 border border-pink-100 rounded-xl transition-all">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-pink-950 flex items-center gap-1.5">
+                          <Tag className="h-3.5 w-3.5 text-pink-500" />
+                          {b.name} ({bSize} Units)
+                        </span>
+                        <span className="text-[10px] text-pink-500/70 font-mono mt-0.5">
+                          SKU: {product.sku}-BD{bSize} • Stock: {product.stock !== undefined ? `${Math.floor(product.stock / bSize)} bundles (${product.stock} units)` : 'unlimited'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold text-pink-950 font-mono">${Number(b.price || 0).toFixed(2)}</span>
+                        <Button
+                          size="sm"
+                          className="text-[10px] h-7.5 px-3 font-semibold bg-pink-600 hover:bg-pink-700 text-white rounded-lg border-0 cursor-pointer"
+                          onClick={() => {
+                            addToCart(product, 1, b.name);
+                            setSelectedProductForPack(null);
+                          }}
+                        >
+                          + Add Bundle
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

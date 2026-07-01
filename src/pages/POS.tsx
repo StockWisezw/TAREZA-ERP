@@ -4,7 +4,8 @@ import {
   Product, 
   SaleRecord, 
   Customer, 
-  getItemPackSize 
+  getItemPackSize,
+  getPackSize
 } from '../store/posStore';
 import { 
   getProducts as getLocalProducts, 
@@ -1175,10 +1176,14 @@ export default function POS() {
   const filteredProducts = products.filter(product => {
     const isCatMatch = activeCategory === 'all' || product.category === activeCategory;
     const lowerSearch = searchTerm.toLowerCase();
+    const isPackMatch = getPackSize(product.sku) > 1 && ("pack".includes(lowerSearch) || "wholesale".includes(lowerSearch));
+    const isBundleMatch = product.bundles && product.bundles.some((b: any) => b.name.toLowerCase().includes(lowerSearch));
     const isSearchMatch = 
       product.name.toLowerCase().includes(lowerSearch) || 
       product.sku.toLowerCase().includes(lowerSearch) || 
-      product.barcode.includes(lowerSearch);
+      product.barcode.includes(lowerSearch) ||
+      isPackMatch ||
+      isBundleMatch;
     return isCatMatch && isSearchMatch;
   });
 
