@@ -6,6 +6,8 @@ export type ProductBundle = {
   name: string;
   pack_size: number;
   price: number;
+  is_bom?: boolean;
+  bom_composition?: { product_id: string; sku: string; quantity: number }[];
 };
 
 export type Product = {
@@ -119,7 +121,7 @@ interface POSState {
   clearCart: () => void;
   parkSale: () => void;
   resumeSale: (saleId: string) => void;
-  completeSale: (options?: { isOffline?: boolean }) => SaleRecord | null;
+  completeSale: (options?: { isOffline?: boolean; allProducts?: Product[] }) => SaleRecord | null;
   getTotals: () => { subtotal: number; vat: number; discount: number; total: number; amountPaid: number; balance: number };
   removeSaleFromOfflineQueue: (saleId: string) => void;
   clearOfflineQueue: () => void;
@@ -371,13 +373,49 @@ export const usePOSStore = create<POSState>()(
         // Check stock availability before completing the sale if strict inventory checking is enabled
         const isStrict = typeof window !== 'undefined' ? localStorage.getItem('tareza_strict_inventory') === 'true' : false;
         if (isStrict) {
+          const accumulatedRequirements: Record<string, { name: string; required: number; available: number }> = {};
+          const allProducts = options?.allProducts || [];
+
           for (const item of state.cart) {
-            const itemStock = item.product.stock;
-            if (itemStock !== undefined && itemStock !== null) {
-              const requestedUnits = item.quantity * getItemPackSize(item);
-              if (requestedUnits > itemStock) {
-                throw new Error(`Insufficient stock for "${item.product.name}". (Available: ${itemStock} units, requested: ${requestedUnits} units)`);
+            const bomBundle = item.product.bundles?.find((b: any) => b.is_bom);
+            if (bomBundle && bomBundle.bom_composition && bomBundle.bom_composition.length > 0) {
+              // Virtual BOM kit/bundle product. Explode it!
+              for (const comp of bomBundle.bom_composition) {
+                const compProduct = allProducts.find(p => p.id === comp.product_id || p.sku === comp.sku);
+                const available = compProduct ? (compProduct.stock ?? 0) : 0;
+                const required = item.quantity * comp.quantity;
+                const compId = compProduct ? compProduct.id : comp.product_id;
+                
+                if (!accumulatedRequirements[compId]) {
+                  accumulatedRequirements[compId] = {
+                    name: compProduct ? compProduct.name : comp.sku || 'Component',
+                    required: 0,
+                    available,
+                  };
+                }
+                accumulatedRequirements[compId].required += required;
               }
+            } else {
+              // Standard item
+              const requestedUnits = item.quantity * getItemPackSize(item);
+              const available = item.product.stock ?? 0;
+              const prodId = item.product.id;
+              
+              if (!accumulatedRequirements[prodId]) {
+                accumulatedRequirements[prodId] = {
+                  name: item.product.name,
+                  required: 0,
+                  available,
+                };
+              }
+              accumulatedRequirements[prodId].required += requestedUnits;
+            }
+          }
+
+          // Validate accumulated requirements against available warehouse single-unit stock levels
+          for (const [prodId, req] of Object.entries(accumulatedRequirements)) {
+            if (req.required > req.available) {
+              throw new Error(`Insufficient warehouse stock for constituent single-unit item "${req.name}". (Available: ${req.available} units, requested: ${req.required} units)`);
             }
           }
         }

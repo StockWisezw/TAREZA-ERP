@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Filter, Download, MoreHorizontal, Settings2, ArrowUpDown, Printer, Edit3, Check, RotateCcw, Loader2, Tag, Trash2 } from 'lucide-react';
+import { Search, Plus, Filter, Download, MoreHorizontal, Settings2, ArrowUpDown, Printer, Edit3, Check, RotateCcw, Loader2, Tag, Trash2, Package } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -95,6 +95,17 @@ export function ProductList({ onImportClick }: ProductListProps) {
   const [editBundleName, setEditBundleName] = useState('');
   const [editBundleSize, setEditBundleSize] = useState('');
   const [editBundlePrice, setEditBundlePrice] = useState('');
+
+  // Bill of Materials (BOM) Virtual Kit states
+  const [isVirtualKit, setIsVirtualKit] = useState(false);
+  const [bomComponents, setBomComponents] = useState<any[]>([]);
+  const [tempComponentId, setTempComponentId] = useState('');
+  const [tempComponentQty, setTempComponentQty] = useState(1);
+
+  const [editIsVirtualKit, setEditIsVirtualKit] = useState(false);
+  const [editBomComponents, setEditBomComponents] = useState<any[]>([]);
+  const [editTempComponentId, setEditTempComponentId] = useState('');
+  const [editTempComponentQty, setEditTempComponentQty] = useState(1);
 
   // Categories list state map
   const [categories, setCategories] = useState<any[]>([]);
@@ -415,6 +426,9 @@ export function ProductList({ onImportClick }: ProductListProps) {
 
        const price = parseFloat(newProductPrice);
        const finalSku = isPack && parseInt(packSize) > 1 ? `${newProductSKU}|PK:${packSize}` : newProductSKU;
+        const finalBundles = isVirtualKit 
+          ? [{ name: 'BOM Kit', is_bom: true, bom_composition: bomComponents }]
+          : bundles;
        
        const { data: newProduct, error: productError } = await supabase.from('products').insert({
          business_id: businessData.business_id,
@@ -423,14 +437,14 @@ export function ProductList({ onImportClick }: ProductListProps) {
          retail_price: price,
          wholesale_price: isPack ? parseFloat(wholesalePrice) : (price * 0.9),
           cost_price: parseFloat(newProductCostPrice || "0") || 0,
-         bundles: bundles,
+         bundles: finalBundles,
          is_active: true
        }).select().single();
 
        if (productError) throw productError;
 
        // Always establish inventory record with custom reorder level
-       const stock = parseFloat(newProductStock) || 0;
+       const stock = isVirtualKit ? 0 : (parseFloat(newProductStock) || 0);
        if (true) {
          const { data: branchData } = await supabase
            .from('branches')
@@ -453,6 +467,10 @@ export function ProductList({ onImportClick }: ProductListProps) {
        }
 
        toast.success("Product added successfully");
+        setIsVirtualKit(false);
+        setBomComponents([]);
+        setTempComponentId('');
+        setTempComponentQty(1);
        setIsAddOpen(false);
        setBundles([]);
        setNewProductName('');
@@ -497,7 +515,9 @@ export function ProductList({ onImportClick }: ProductListProps) {
           wholesale_price: isNaN(wholesale) ? (retail * 0.9) : wholesale,
           cost_price: parseFloat(editCostPrice || "0") || 0,
           category_id: editCategory || null,
-          bundles: editBundles,
+          bundles: editIsVirtualKit
+            ? [{ name: 'BOM Kit', is_bom: true, bom_composition: editBomComponents }]
+            : editBundles,
           updated_at: new Date().toISOString()
         })
         .eq('id', editingProduct.id);
@@ -1232,7 +1252,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
                 
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-zinc-650">Initial Stock Quantity</Label>
-                  <Input type="number" value={newProductStock} onChange={e => setNewProductStock(e.target.value)} className="bg-white h-10 rounded-xl border-zinc-200" placeholder="0" />
+                  <Input type="number" disabled={isVirtualKit} value={isVirtualKit ? '0' : newProductStock} onChange={e => setNewProductStock(e.target.value)} className="bg-white h-10 rounded-xl border-zinc-200 disabled:opacity-60 disabled:bg-zinc-50" placeholder="0" />
                   {isPack && <p className="text-[10px] text-zinc-450 -mt-1">Stock is measured in units. If you have 5 packs of 10, enter 50.</p>}
                 </div>
 
@@ -1315,6 +1335,123 @@ export function ProductList({ onImportClick }: ProductListProps) {
                       + Add Bundle Option
                     </Button>
                   </div>
+                </div>
+
+                {/* Bill of Materials (BOM) Creator section */}
+                <div className="space-y-3 pt-3 border-t border-zinc-100">
+                  <div className="flex items-center space-x-2">
+                    <input 
+                      type="checkbox" 
+                      id="isVirtualKit" 
+                      checked={isVirtualKit} 
+                      onChange={(e) => {
+                        setIsVirtualKit(e.target.checked);
+                        if (e.target.checked) {
+                          setNewProductStock('0');
+                        }
+                      }} 
+                      className="h-4 w-4 text-primary rounded border-zinc-300 cursor-pointer" 
+                    />
+                    <Label htmlFor="isVirtualKit" className="font-bold cursor-pointer text-xs text-zinc-700 uppercase tracking-wider flex items-center gap-1.5 select-none">
+                      <Package className="h-3.5 w-3.5 text-indigo-500" />
+                      Define as Virtual Kit (BOM)
+                    </Label>
+                  </div>
+
+                  {isVirtualKit && (
+                    <div className="p-3 bg-indigo-50/40 border border-indigo-150 rounded-xl space-y-3">
+                      <p className="text-[10px] text-zinc-500 leading-normal">
+                        Virtual Kits hold 0 physical inventory. Dynamic stock is calculated dynamically based on the component units available.
+                      </p>
+
+                      {/* Current BOM list */}
+                      {bomComponents.length > 0 && (
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold text-indigo-900 uppercase">BOM Composition</Label>
+                          <div className="space-y-1.5 max-h-[140px] overflow-y-auto">
+                            {bomComponents.map((comp, cIdx) => {
+                              const matchedProd = products.find(p => p.id === comp.product_id || p.sku === comp.sku);
+                              return (
+                                <div key={cIdx} className="flex justify-between items-center text-xs p-2 rounded bg-white border border-indigo-100 shadow-2xs">
+                                  <div className="flex flex-col">
+                                    <span className="font-semibold text-zinc-850">{matchedProd?.name || comp.sku}</span>
+                                    <span className="text-[10px] text-zinc-450 font-mono">Qty: {comp.quantity} x SKU: {comp.sku}</span>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setBomComponents(prev => prev.filter((_, idx) => idx !== cIdx))}
+                                    className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                                  >
+                                    ×
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Add component inline form */}
+                      <div className="flex gap-2 items-end">
+                        <div className="flex-1 space-y-1">
+                          <Label className="text-[10px] font-semibold text-zinc-650">Select Component Single</Label>
+                          <select
+                            value={tempComponentId}
+                            onChange={e => setTempComponentId(e.target.value)}
+                            className="w-full text-xs h-8 px-2 bg-white border border-zinc-200 rounded-lg focus-visible:outline-hidden"
+                          >
+                            <option value="">-- Choose Product --</option>
+                            {products.filter(p => {
+                              const b = p.bundles?.find((x: any) => x.is_bom);
+                              return !b; // don't list other virtual kits
+                            }).map(p => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} ({p.sku})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="w-16 space-y-1">
+                          <Label className="text-[10px] font-semibold text-zinc-650">Qty</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={tempComponentQty}
+                            onChange={e => setTempComponentQty(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="h-8 text-xs bg-white text-center"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            if (!tempComponentId) {
+                              toast.error('Please select a product first.');
+                              return;
+                            }
+                            const prod = products.find(p => p.id === tempComponentId);
+                            if (prod) {
+                              if (bomComponents.some(c => c.product_id === prod.id)) {
+                                toast.error('Product already exists in BOM composition.');
+                                return;
+                              }
+                              setBomComponents(prev => [
+                                ...prev,
+                                { product_id: prod.id, sku: prod.sku, quantity: tempComponentQty }
+                              ]);
+                              setTempComponentId('');
+                              setTempComponentQty(1);
+                            }
+                          }}
+                          className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg px-3 flex items-center justify-center cursor-pointer"
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <DialogFooter className="mt-6">
@@ -1670,6 +1807,11 @@ export function ProductList({ onImportClick }: ProductListProps) {
                               setEditWholesalePrice(item.wholesale_price?.toString() || '0');
                               setEditCostPrice(item.cost_price?.toString() || '0');
                               setEditBundles(item.bundles ? JSON.parse(JSON.stringify(item.bundles)) : []);
+                              const bomBundle = item.bundles?.find((b: any) => b.is_bom);
+                              setEditIsVirtualKit(!!bomBundle);
+                              setEditBomComponents(bomBundle ? JSON.parse(JSON.stringify(bomBundle.bom_composition || [])) : []);
+                              setEditTempComponentId('');
+                              setEditTempComponentQty(1);
                               const stockRec = selectedBranchId 
                                 ? item.inventory?.find((i: any) => i.branch_id === selectedBranchId)
                                 : item.inventory?.[0];
@@ -1846,6 +1988,121 @@ export function ProductList({ onImportClick }: ProductListProps) {
                   + Add Bundle Option
                 </Button>
               </div>
+            </div>
+
+            {/* Bill of Materials (BOM) Creator section */}
+            <div className="space-y-3 pt-3 border-t border-zinc-100">
+              <div className="flex items-center space-x-2">
+                <input 
+                  type="checkbox" 
+                  id="editIsVirtualKit" 
+                  checked={editIsVirtualKit} 
+                  onChange={(e) => {
+                    setEditIsVirtualKit(e.target.checked);
+                  }} 
+                  className="h-4 w-4 text-primary rounded border-zinc-300 cursor-pointer" 
+                />
+                <Label htmlFor="editIsVirtualKit" className="font-bold cursor-pointer text-xs text-zinc-700 uppercase tracking-wider flex items-center gap-1.5 select-none">
+                  <Package className="h-3.5 w-3.5 text-indigo-500" />
+                  Define as Virtual Kit (BOM)
+                </Label>
+              </div>
+
+              {editIsVirtualKit && (
+                <div className="p-3 bg-indigo-50/40 border border-indigo-150 rounded-xl space-y-3">
+                  <p className="text-[10px] text-zinc-500 leading-normal">
+                    Virtual Kits hold 0 physical inventory. Dynamic stock is calculated dynamically based on the component units available.
+                  </p>
+
+                  {/* Current BOM list */}
+                  {editBomComponents.length > 0 && (
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold text-indigo-900 uppercase">BOM Composition</Label>
+                      <div className="space-y-1.5 max-h-[140px] overflow-y-auto">
+                        {editBomComponents.map((comp, cIdx) => {
+                          const matchedProd = products.find(p => p.id === comp.product_id || p.sku === comp.sku);
+                          return (
+                            <div key={cIdx} className="flex justify-between items-center text-xs p-2 rounded bg-white border border-indigo-100 shadow-2xs">
+                              <div className="flex flex-col">
+                                <span className="font-semibold text-zinc-850">{matchedProd?.name || comp.sku}</span>
+                                <span className="text-[10px] text-zinc-450 font-mono">Qty: {comp.quantity} x SKU: {comp.sku}</span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setEditBomComponents(prev => prev.filter((_, idx) => idx !== cIdx))}
+                                className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                              >
+                                ×
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Add component inline form */}
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-[10px] font-semibold text-zinc-650">Select Component Single</Label>
+                      <select
+                        value={editTempComponentId}
+                        onChange={e => setEditTempComponentId(e.target.value)}
+                        className="w-full text-xs h-8 px-2 bg-white border border-zinc-200 rounded-lg focus-visible:outline-hidden"
+                      >
+                        <option value="">-- Choose Product --</option>
+                        {products.filter(p => {
+                          if (editingProduct && p.id === editingProduct.id) return false; // don't add itself
+                          const b = p.bundles?.find((x: any) => x.is_bom);
+                          return !b; // don't list other virtual kits
+                        }).map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({p.sku})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="w-16 space-y-1">
+                      <Label className="text-[10px] font-semibold text-zinc-650">Qty</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={editTempComponentQty}
+                        onChange={e => setEditTempComponentQty(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="h-8 text-xs bg-white text-center border-zinc-200"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        if (!editTempComponentId) {
+                          toast.error('Please select a product first.');
+                          return;
+                        }
+                        const prod = products.find(p => p.id === editTempComponentId);
+                        if (prod) {
+                          if (editBomComponents.some(c => c.product_id === prod.id)) {
+                            toast.error('Product already exists in BOM composition.');
+                            return;
+                          }
+                          setEditBomComponents(prev => [
+                            ...prev,
+                            { product_id: prod.id, sku: prod.sku, quantity: editTempComponentQty }
+                          ]);
+                          setEditTempComponentId('');
+                          setEditTempComponentQty(1);
+                        }
+                      }}
+                      className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg px-3 flex items-center justify-center cursor-pointer"
+                    >
+                      Add
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter className="mt-6 flex justify-end gap-2">

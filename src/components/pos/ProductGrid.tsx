@@ -52,13 +52,35 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   });
   const [selectedProductForPack, setSelectedProductForPack] = useState<Product | null>(null);
 
+  // Helper to calculate virtual stock dynamically for BOM bundles
+  const getVirtualStock = (prod: Product, allProducts: Product[]): number => {
+    const bomBundle = prod.bundles?.find((b: any) => b.is_bom);
+    if (bomBundle && bomBundle.bom_composition && bomBundle.bom_composition.length > 0) {
+      let minStock = Infinity;
+      for (const comp of bomBundle.bom_composition) {
+        const compProduct = allProducts.find(x => x.id === comp.product_id || x.sku === comp.sku);
+        const compStock = compProduct ? (compProduct.stock ?? 0) : 0;
+        const compAvailable = Math.floor(compStock / comp.quantity);
+        if (compAvailable < minStock) {
+          minStock = compAvailable;
+        }
+      }
+      return minStock === Infinity ? 0 : minStock;
+    }
+    return prod.stock ?? 0;
+  };
+
   // Transform products with packs/bundles into individual sub-product representations
   const sellableItems = useMemo(() => {
     const items: any[] = [];
     filteredProducts.forEach((product) => {
       const pSize = getPackSize(product.sku);
       const hasPack = pSize > 1;
-      const hasBundles = product.bundles && product.bundles.length > 0;
+      const bomBundle = product.bundles?.find((b: any) => b.is_bom);
+      const hasBundles = product.bundles && product.bundles.length > 0 && !bomBundle;
+
+      const isBOM = !!bomBundle;
+      const virtualStock = getVirtualStock(product, products);
 
       // Always add the single/main product
       items.push({
@@ -69,16 +91,18 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
         price: product.retailPrice,
         wholesalePrice: product.wholesalePrice,
         tier: 'retail',
-        stockDisplay: product.stock !== undefined ? `${product.stock} units` : undefined,
+        stockDisplay: isBOM 
+          ? `${virtualStock} units (Virtual)` 
+          : (product.stock !== undefined ? `${product.stock} units` : undefined),
         isSubProduct: false,
         pSize: 1,
         taxClass: product.taxClass,
         category: product.category,
-        hasPacksOrBundles: hasPack || hasBundles,
+        hasPacksOrBundles: (hasPack || hasBundles) && !isBOM,
       });
 
-      // ONLY generate sub-products for packs and bundles if there is an active search term
-      if (searchTerm.trim() !== '') {
+      // ONLY generate sub-products for packs and bundles if there is an active search term AND it is not a virtual BOM kit
+      if (searchTerm.trim() !== '' && !isBOM) {
         // 1. Single Unit Sub-Product (for explicit search context)
         items.push({
           id: `${product.id}-single`,
@@ -145,7 +169,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
       }
     });
     return items;
-  }, [filteredProducts, searchTerm]);
+  }, [filteredProducts, searchTerm, products]);
 
   let gridColsClass = "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4";
   if (gridScale === 'compact') {
@@ -311,7 +335,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                       <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-mono mt-0.5 whitespace-nowrap">
                         <span>{item.sku}</span>
                         {item.stockDisplay !== undefined && (
-                          <span className="text-emerald-600 font-bold">
+                          <span className={`${item.stockDisplay.includes('Virtual') ? 'text-indigo-600' : 'text-emerald-600'} font-bold`}>
                             • {item.stockDisplay}
                           </span>
                         )}
@@ -321,6 +345,18 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                           </Badge>
                         )}
                       </div>
+                      {(() => {
+                        const bomBundle = item.originalProduct.bundles?.find((b: any) => b.is_bom);
+                        if (bomBundle && bomBundle.bom_composition) {
+                          return (
+                            <div className="text-[9px] text-indigo-600 bg-indigo-50 border border-indigo-100 font-semibold px-1.5 py-0.5 rounded mt-1.5 inline-block whitespace-normal break-words max-w-full">
+                              <span className="font-bold">BOM:</span>{" "}
+                              {bomBundle.bom_composition.map((comp: any) => `${comp.quantity}x ${comp.sku}`).join(" + ")}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   </div>
 
@@ -417,10 +453,23 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                       {item.sku}
                     </p>
                     
+                    {(() => {
+                      const bomBundle = item.originalProduct.bundles?.find((b: any) => b.is_bom);
+                      if (bomBundle && bomBundle.bom_composition) {
+                        return (
+                          <div className="text-[8.5px] text-indigo-650 bg-indigo-50 border border-indigo-100/60 font-semibold px-1 py-0.5 rounded mb-1.5 leading-tight whitespace-normal break-words">
+                            <span className="font-extrabold">BOM:</span>{" "}
+                            {bomBundle.bom_composition.map((comp: any) => `${comp.quantity}x ${comp.sku}`).join(" + ")}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                    
                     {item.stockDisplay !== undefined && (
                       <div className="flex flex-col gap-0.5 mb-1 mt-auto">
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] font-mono font-semibold text-zinc-500">
+                          <span className={`text-[10px] font-mono font-semibold ${item.stockDisplay.includes('Virtual') ? 'text-indigo-600' : 'text-zinc-500'}`}>
                             {item.stockDisplay}
                           </span>
                         </div>

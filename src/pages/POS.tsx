@@ -894,7 +894,7 @@ export default function POS() {
 
     let sale = null;
     try {
-      sale = completeSale({ isOffline });
+      sale = completeSale({ isOffline, allProducts: products });
     } catch (err: any) {
       toast.error(err.message || 'Failed to complete checkout');
       return;
@@ -907,20 +907,41 @@ export default function POS() {
       toast.success(isOffline ? 'Sale queued — will sync when online.' : 'Sale completed and recorded!');
       shouldPrintRef.current = false;
       
-      // Decrement stock in local state immediately so UI updates instantly
+      // Decrement stock in local state immediately so UI updates instantly with BOM explosion
       setProducts(prevProducts => {
+        const deductions: Record<string, number> = {};
+        
+        for (const item of sale.items) {
+          const bomBundle = item.product.bundles?.find((b: any) => b.is_bom);
+          if (bomBundle && bomBundle.bom_composition && bomBundle.bom_composition.length > 0) {
+            // Explode BOM
+            for (const comp of bomBundle.bom_composition) {
+              const compProduct = prevProducts.find(p => p.id === comp.product_id || p.sku === comp.sku);
+              if (compProduct) {
+                const decAmount = item.quantity * comp.quantity;
+                deductions[compProduct.id] = (deductions[compProduct.id] || 0) + decAmount;
+              }
+            }
+          } else {
+            // Standard item or simple pack
+            const multiplier = getItemPackSize(item);
+            const decAmount = item.quantity * multiplier;
+            deductions[item.product.id] = (deductions[item.product.id] || 0) + decAmount;
+          }
+        }
+
+        // Apply deductions
         const updated = prevProducts.map(p => {
-          const cartItem = sale.items.find(item => item.product.id === p.id);
-          if (cartItem) {
-            const multiplier = getItemPackSize(cartItem);
-            const deduction = cartItem.quantity * multiplier;
+          const dec = deductions[p.id];
+          if (dec !== undefined) {
             return {
               ...p,
-              stock: Math.max(0, (p.stock || 0) - deduction)
+              stock: Math.max(0, (p.stock || 0) - dec)
             };
           }
           return p;
         });
+        
         saveLocalProducts(updated);
         return updated;
       });
@@ -1045,27 +1066,57 @@ export default function POS() {
                 throw new Error(itemsErr.message || 'Failed to save items for this sale.');
               }
 
-              // 2.1: Record stock movements with error handling
+              // 2.1: Record stock movements with error handling & BOM explosion
               const stockErrors: string[] = [];
               for (const item of sale.items) {
-                try {
-                  const multiplier = getItemPackSize(item);
-                  const result = await recordStockMovement(
-                    businessId,
-                    branchId,
-                    item.product.id,
-                    -(item.quantity * multiplier),
-                    'POS_SALE',
-                    userData?.user?.id || 'unknown',
-                    sale.receiptNumber,
-                    item.product.costPrice || 0
-                  );
-                  
-                  if (!result || result.error) {
-                    stockErrors.push(`${item.product.name}: ${result?.error || 'Unknown error'}`);
+                const bomBundle = item.product.bundles?.find((b: any) => b.is_bom);
+                if (bomBundle && bomBundle.bom_composition && bomBundle.bom_composition.length > 0) {
+                  // Explode BOM for virtual kits: log movement for each constituent single unit
+                  for (const comp of bomBundle.bom_composition) {
+                    try {
+                      // Retrieve component product cost price from existing products list
+                      const compProd = products.find(p => p.id === comp.product_id || p.sku === comp.sku);
+                      const compCostPrice = compProd?.costPrice || 0;
+                      
+                      const result = await recordStockMovement(
+                        businessId,
+                        branchId,
+                        comp.product_id,
+                        -(item.quantity * comp.quantity),
+                        'POS_SALE',
+                        userData?.user?.id || 'unknown',
+                        sale.receiptNumber,
+                        compCostPrice
+                      );
+                      
+                      if (!result || result.error) {
+                        stockErrors.push(`${comp.sku || 'Component'}: ${result?.error || 'Unknown error'}`);
+                      }
+                    } catch (err: any) {
+                      stockErrors.push(`${comp.sku || 'Component'}: ${err.message}`);
+                    }
                   }
-                } catch (err: any) {
-                  stockErrors.push(`${item.product.name}: ${err.message}`);
+                } else {
+                  // Standard item or simple pack
+                  try {
+                    const multiplier = getItemPackSize(item);
+                    const result = await recordStockMovement(
+                      businessId,
+                      branchId,
+                      item.product.id,
+                      -(item.quantity * multiplier),
+                      'POS_SALE',
+                      userData?.user?.id || 'unknown',
+                      sale.receiptNumber,
+                      item.product.costPrice || 0
+                    );
+                    
+                    if (!result || result.error) {
+                      stockErrors.push(`${item.product.name}: ${result?.error || 'Unknown error'}`);
+                    }
+                  } catch (err: any) {
+                    stockErrors.push(`${item.product.name}: ${err.message}`);
+                  }
                 }
               }
 
