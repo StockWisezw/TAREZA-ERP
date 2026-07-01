@@ -35,11 +35,19 @@ import { QuotationManager } from '../components/pos/QuotationManager';
 import { PaymentFlow } from '../components/pos/PaymentFlow';
 import { TransactionHistoryManager } from '../components/pos/TransactionHistoryManager';
 import { Button } from '../components/ui/button';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription,
+  DialogFooter
+} from '../components/ui/dialog';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useReactToPrint } from 'react-to-print';
 import { useNavigate } from 'react-router-dom';
-import { Package, Tag, ShoppingCart, HelpCircle } from 'lucide-react';
+import { Package, Tag, ShoppingCart, HelpCircle, Monitor, Cpu, Fingerprint, Maximize, Sliders } from 'lucide-react';
 
 export default function POS() {
   const navigate = useNavigate();
@@ -160,6 +168,52 @@ export default function POS() {
   const [dbQuotes, setDbQuotes] = useState<any[]>([]);
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
   const [activeMobileTab, setActiveMobileTab] = useState<'catalog' | 'cart'>('catalog');
+
+  // POS Hardware & Touchscreen Resolution Optimizers
+  const [posScale, setPosScale] = useState<'75' | '85' | '90' | '100' | '110'>(() => {
+    return (localStorage.getItem('tareza_pos_scale') as any) || '100';
+  });
+  const [hardwareOptimize, setHardwareOptimize] = useState<boolean>(() => {
+    return localStorage.getItem('tareza_pos_hw_optimize') === 'true';
+  });
+  const [touchOptimized, setTouchOptimized] = useState<boolean>(() => {
+    return localStorage.getItem('tareza_pos_touch_optimized') === 'true';
+  });
+  const [showHwSettings, setShowHwSettings] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Persist hardware preferences
+  useEffect(() => {
+    localStorage.setItem('tareza_pos_scale', posScale);
+  }, [posScale]);
+
+  useEffect(() => {
+    localStorage.setItem('tareza_pos_hw_optimize', String(hardwareOptimize));
+  }, [hardwareOptimize]);
+
+  useEffect(() => {
+    localStorage.setItem('tareza_pos_touch_optimized', String(touchOptimized));
+  }, [touchOptimized]);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        toast.error(`Error enabling fullscreen: ${err.message}`);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
 
   // refs
   const receiptRef = useRef<HTMLDivElement>(null);
@@ -1187,6 +1241,15 @@ export default function POS() {
     return isCatMatch && isSearchMatch;
   });
 
+  // Resolution scaler calculation
+  const scaleRatio = parseFloat(posScale) / 100;
+  const scaleStyle: React.CSSProperties = scaleRatio !== 1 ? {
+    transform: `scale(${scaleRatio})`,
+    transformOrigin: 'top left',
+    width: `${100 / scaleRatio}%`,
+    height: `${100 / scaleRatio}%`,
+  } : {};
+
   // Check register session status
   if (sessionLoading) {
     return (
@@ -1238,7 +1301,14 @@ export default function POS() {
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col md:flex-row h-full md:h-full md:max-h-full gap-4 pb-1 overflow-hidden">
+      <div 
+        className={cn(
+          "flex-1 flex flex-col md:flex-row h-full md:h-full md:max-h-full gap-4 pb-1 overflow-hidden pos-scale-container",
+          hardwareOptimize && "pos-hw-optimized",
+          touchOptimized && "pos-touch-optimized"
+        )}
+        style={scaleStyle}
+      >
         
         {/* LEFT COLUMN: Products & Search */}
         <div className={cn("flex-1 flex flex-col h-full overflow-hidden animate-fade-in", activeMobileTab !== 'catalog' && "hidden md:flex")}>
@@ -1252,6 +1322,16 @@ export default function POS() {
                 setActiveSession={setActiveSession}
                 userId={(activeSession as any)?.user_id || (activeSession as any)?.cashier_id || 'unknown'}
               />
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowHwSettings(true)}
+                className="border-blue-200 bg-blue-50/25 text-blue-600 dark:border-blue-900 dark:bg-blue-950/20 dark:text-blue-400 text-xs shadow-none cursor-pointer rounded-xl font-extrabold hover:bg-blue-100/40 flex items-center gap-1"
+                title="POS Hardware & Screen Resolution Optimizer"
+              >
+                <Sliders className="w-3.5 h-3.5 text-blue-500" />
+                <span>Optimize Display</span>
+              </Button>
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -1368,6 +1448,143 @@ export default function POS() {
         resumeQuotation={resumeQuotation}
         deleteQuotation={deleteQuotation}
       />
+
+      {/* POS HARDWARE & DISPLAY OPTIMIZER MODAL */}
+      <Dialog open={showHwSettings} onOpenChange={setShowHwSettings}>
+        <DialogContent className="max-w-md bg-white border border-zinc-200 shadow-2xl rounded-2xl p-6">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-black text-zinc-900 uppercase tracking-wide flex items-center gap-2">
+              <Sliders className="h-4 w-4 text-blue-600" />
+              POS Hardware & Display Optimizer
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-500 font-medium">
+              Fine-tune the interface, layout density, and contrast to perfectly match your terminal hardware.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-4">
+            {/* 1. Scale Setting */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-baseline">
+                <label className="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
+                  <Monitor className="h-3.5 w-3.5 text-zinc-500" />
+                  Resolution Zoom & Scaling
+                </label>
+                <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                  {posScale}% Scale
+                </span>
+              </div>
+              <p className="text-[10px] text-zinc-400 leading-tight">
+                Shrink or expand the entire interface to perfectly fit low-resolution POS screens (such as 1024x768) or small tablet viewports.
+              </p>
+              <div className="grid grid-cols-5 gap-1 bg-zinc-100 p-1 rounded-xl border border-zinc-200">
+                {(['75', '85', '90', '100', '110'] as const).map((scale) => (
+                  <button
+                    key={scale}
+                    type="button"
+                    onClick={() => {
+                      setPosScale(scale);
+                      toast.success(`POS Workspace scaled to ${scale}%`);
+                    }}
+                    className={cn(
+                      "py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer text-center",
+                      posScale === scale
+                        ? "bg-white text-blue-600 shadow-xs border border-zinc-200"
+                        : "text-zinc-500 hover:text-zinc-800 hover:bg-white/50"
+                    )}
+                  >
+                    {scale}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. High Contrast Option */}
+            <div className="flex items-start justify-between p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl hover:bg-zinc-100/70 transition-all">
+              <div className="flex gap-3">
+                <div className="p-1.5 bg-purple-50 rounded-lg text-purple-600 shrink-0 mt-0.5">
+                  <Cpu className="h-4 w-4" />
+                </div>
+                <div className="space-y-0.5 pr-2">
+                  <label className="text-xs font-bold text-zinc-800 cursor-pointer block" htmlFor="hw-contrast">
+                    Legacy Hardware High-Contrast
+                  </label>
+                  <p className="text-[10px] text-zinc-400 leading-normal">
+                    Thicker solid borders, high contrast pure-black text, and disabled fine transparency effects to ensure readability on dim, dusty, or older resistive POS monitors.
+                  </p>
+                </div>
+              </div>
+              <input
+                id="hw-contrast"
+                type="checkbox"
+                checked={hardwareOptimize}
+                onChange={(e) => {
+                  setHardwareOptimize(e.target.checked);
+                  toast.success(e.target.checked ? 'High-Contrast Mode enabled' : 'Standard Contrast Mode restored');
+                }}
+                className="h-4.5 w-4.5 mt-1 cursor-pointer rounded border-zinc-300 text-blue-600 focus:ring-blue-500 shrink-0"
+              />
+            </div>
+
+            {/* 3. Touch Assist Option */}
+            <div className="flex items-start justify-between p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl hover:bg-zinc-100/70 transition-all">
+              <div className="flex gap-3">
+                <div className="p-1.5 bg-amber-50 rounded-lg text-amber-600 shrink-0 mt-0.5">
+                  <Fingerprint className="h-4 w-4" />
+                </div>
+                <div className="space-y-0.5 pr-2">
+                  <label className="text-xs font-bold text-zinc-800 cursor-pointer block" htmlFor="hw-touch">
+                    Touch Target Fingertip Assist
+                  </label>
+                  <p className="text-[10px] text-zinc-400 leading-normal">
+                    Increases row, button, and dropdown action heights to make precise fingertip clicking on old or uncalibrated touchscreen systems effortless.
+                  </p>
+                </div>
+              </div>
+              <input
+                id="hw-touch"
+                type="checkbox"
+                checked={touchOptimized}
+                onChange={(e) => {
+                  setTouchOptimized(e.target.checked);
+                  toast.success(e.target.checked ? 'Touch Target Assist enabled' : 'Standard Target sizes restored');
+                }}
+                className="h-4.5 w-4.5 mt-1 cursor-pointer rounded border-zinc-300 text-blue-600 focus:ring-blue-500 shrink-0"
+              />
+            </div>
+
+            {/* 4. Fullscreen Terminal Toggle */}
+            <div className="flex items-center justify-between p-3.5 bg-blue-50/20 border border-blue-100 rounded-xl">
+              <div className="space-y-0.5">
+                <span className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                  <Maximize className="h-3.5 w-3.5 text-blue-600" />
+                  Terminal Fullscreen Mode
+                </span>
+                <p className="text-[10px] text-blue-600/70 leading-tight">
+                  Hide browser address bar, back buttons, and menus to maximize vertical real estate.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={toggleFullscreen}
+                className="text-[11px] h-8.5 font-bold border-blue-200 bg-white hover:bg-blue-50 text-blue-700 cursor-pointer rounded-lg shrink-0 px-3"
+              >
+                {isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+              </Button>
+            </div>
+          </div>
+
+          <DialogFooter className="bg-zinc-50 dark:bg-zinc-900 p-4 border-t border-zinc-100 dark:border-zinc-800 -mx-6 -mb-6 mt-5 flex justify-end">
+            <Button
+              onClick={() => setShowHwSettings(false)}
+              className="bg-zinc-900 hover:bg-zinc-805 dark:bg-zinc-100 dark:hover:bg-zinc-250 text-white dark:text-zinc-950 rounded-xl px-5 text-xs font-bold select-none cursor-pointer h-9"
+            >
+              Apply Settings
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

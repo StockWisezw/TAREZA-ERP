@@ -163,3 +163,66 @@
     @apply font-sans;
     }
 }
+
+/* POS Hardware & Older Monitor Optimizations */
+.pos-scale-container {
+  transition: transform 0.15s ease-in-out;
+}
+
+/* High Contrast & Bold Typography for low-quality or dim POS displays */
+.pos-hw-optimized {
+  --border: #71717a;
+  --muted: #cccccc;
+}
+.pos-hw-optimized * {
+  border-color: #52525b !important; /* solid, darker borders */
+  text-rendering: optimizeLegibility;
+}
+.pos-hw-optimized h1, 
+.pos-hw-optimized h2, 
+.pos-hw-optimized h3, 
+.pos-hw-optimized h4, 
+.pos-hw-optimized span, 
+.pos-hw-optimized div, 
+.pos-hw-optimized p,
+.pos-hw-optimized label,
+.pos-hw-optimized button {
+  font-weight: 700 !important;
+  color: #000000 !important; /* maximum black text contrast */
+}
+.dark .pos-hw-optimized h1,
+.dark .pos-hw-optimized h2,
+.dark .pos-hw-optimized h3,
+.dark .pos-hw-optimized h4,
+.dark .pos-hw-optimized span,
+.dark .pos-hw-optimized div,
+.dark .pos-hw-optimized p,
+.dark .pos-hw-optimized label,
+.dark .pos-hw-optimized button {
+  color: #ffffff !important; /* maximum white text contrast */
+}
+
+/* Larger Touch targets for older resistive touchscreen monitors */
+.pos-touch-optimized button,
+.pos-touch-optimized input,
+.pos-touch-optimized select,
+.pos-touch-optimized option {
+  min-height: 40px !important;
+}
+
+.pos-touch-optimized .grid {
+  gap: 12px !important;
+}
+
+/* Touch friendly custom scrollbars for older hardware mouse/touch scroll */
+.pos-hw-optimized ::-webkit-scrollbar,
+.pos-touch-optimized ::-webkit-scrollbar {
+  width: 14px !important;
+  height: 14px !important;
+}
+.pos-hw-optimized ::-webkit-scrollbar-thumb,
+.pos-touch-optimized ::-webkit-scrollbar-thumb {
+  background-color: #52525b !important;
+  border-radius: 8px !important;
+  border: 2px solid #ffffff !important;
+}

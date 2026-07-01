@@ -39,7 +39,7 @@ interface ProductImportCandidate {
 
 export function BulkImport() {
   const [activeSubTab, setActiveSubTab] = useState<'csv' | 'manual'>('csv');
-  const [importStrategy, setImportStrategy] = useState<'create' | 'update' | 'merge'>('create');
+  const [importStrategy, setImportStrategy] = useState<'create' | 'update' | 'merge' | 'stock_only_overwrite' | 'stock_only_add'>('create');
   const [businessId, setBusinessId] = useState<string>('');
   const [branches, setBranches] = useState<any[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
@@ -221,9 +221,9 @@ export function BulkImport() {
           if (match) {
             if (importStrategy === 'create') {
               skips++;
-            } else if (importStrategy === 'update') {
+            } else if (importStrategy === 'update' || importStrategy === 'stock_only_overwrite') {
               updates++;
-            } else if (importStrategy === 'merge') {
+            } else if (importStrategy === 'merge' || importStrategy === 'stock_only_add') {
               merges++;
             }
           } else {
@@ -694,44 +694,52 @@ export function BulkImport() {
 
           // Update/Merge details of existing product
           prodId = existingProd.id;
-          priorStateUpdated.push({
-            id: existingProd.id,
-            name: existingProd.name,
-            retail_price: existingProd.retail_price,
-            wholesale_price: existingProd.wholesale_price,
-            cost_price: existingProd.cost_price,
-            barcode: existingProd.barcode
-          });
 
-          const { error: updateErr } = await supabase.from('products').update({
-            name: item.name.trim(),
-            barcode: item.barcode.trim() || null,
-            category_id: finalCategoryId,
-            retail_price: rPrice,
-            wholesale_price: wPrice,
-            cost_price: cPrice,
-            is_active: true
-          }).eq('id', prodId);
+          const isStockOnly = importStrategy === 'stock_only_overwrite' || importStrategy === 'stock_only_add';
 
-          if (updateErr) {
-            console.error(`Failed to update product "${item.name}":`, updateErr);
-            continue;
+          if (!isStockOnly) {
+            priorStateUpdated.push({
+              id: existingProd.id,
+              name: existingProd.name,
+              retail_price: existingProd.retail_price,
+              wholesale_price: existingProd.wholesale_price,
+              cost_price: existingProd.cost_price,
+              barcode: existingProd.barcode
+            });
+
+            const { error: updateErr } = await supabase.from('products').update({
+              name: item.name.trim(),
+              barcode: item.barcode.trim() || null,
+              category_id: finalCategoryId,
+              retail_price: rPrice,
+              wholesale_price: wPrice,
+              cost_price: cPrice,
+              is_active: true
+            }).eq('id', prodId);
+
+            if (updateErr) {
+              console.error(`Failed to update product "${item.name}":`, updateErr);
+              continue;
+            }
+            productsUpdatedCount++;
+
+            // Update local maps so duplicates in the SAME batch merge properly!
+            const updatedRecord = {
+              ...existingProd,
+              name: item.name.trim(),
+              barcode: item.barcode.trim() || null,
+              category_id: finalCategoryId,
+              retail_price: rPrice,
+              wholesale_price: wPrice,
+              cost_price: cPrice
+            };
+            if (updatedRecord.sku) skuToProductMap.set(updatedRecord.sku.trim().toUpperCase(), updatedRecord);
+            if (updatedRecord.barcode) barcodeToProductMap.set(updatedRecord.barcode.trim().toUpperCase(), updatedRecord);
+            if (updatedRecord.name) nameToProductMap.set(updatedRecord.name.trim().toLowerCase(), updatedRecord);
+          } else {
+            // For stock-only strategies, we leave product metadata completely untouched!
+            productsUpdatedCount++;
           }
-          productsUpdatedCount++;
-
-          // Update local maps so duplicates in the SAME batch merge properly!
-          const updatedRecord = {
-            ...existingProd,
-            name: item.name.trim(),
-            barcode: item.barcode.trim() || null,
-            category_id: finalCategoryId,
-            retail_price: rPrice,
-            wholesale_price: wPrice,
-            cost_price: cPrice
-          };
-          if (updatedRecord.sku) skuToProductMap.set(updatedRecord.sku.trim().toUpperCase(), updatedRecord);
-          if (updatedRecord.barcode) barcodeToProductMap.set(updatedRecord.barcode.trim().toUpperCase(), updatedRecord);
-          if (updatedRecord.name) nameToProductMap.set(updatedRecord.name.trim().toLowerCase(), updatedRecord);
         } else {
           // Insert new product
           prodId = crypto.randomUUID();
@@ -770,7 +778,7 @@ export function BulkImport() {
 
         if (existingInv) {
           let newQty = stockQty;
-          if (importStrategy === 'merge') {
+          if (importStrategy === 'merge' || importStrategy === 'stock_only_add') {
             newQty = (existingInv.quantity || 0) + stockQty;
           }
 
@@ -804,7 +812,7 @@ export function BulkImport() {
                 product_id: prodId,
                 branch_id: selectedBranchId,
                 quantity: diff,
-                type: importStrategy === 'merge' ? 'STOCK_ADJUSTMENT' : 'STOCK_CONSOLIDATION',
+                type: (importStrategy === 'merge' || importStrategy === 'stock_only_add') ? 'STOCK_ADJUSTMENT' : 'STOCK_CONSOLIDATION',
                 created_at: new Date().toISOString()
               });
             }
@@ -955,7 +963,7 @@ export function BulkImport() {
         
         <div className="space-y-2">
           <Label className="text-xs text-zinc-500 uppercase font-bold tracking-wider">Import Action & Duplicate SKU Strategy</Label>
-          <div className="grid grid-cols-3 gap-2 mt-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mt-1">
             <button
               type="button"
               onClick={() => setImportStrategy('create')}
@@ -994,6 +1002,32 @@ export function BulkImport() {
               <span className="text-xs font-semibold">Merge details</span>
               <span className="text-[9px] text-zinc-400 mt-0.5">Add stock</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setImportStrategy('stock_only_overwrite')}
+              className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all cursor-pointer h-16 ${
+                importStrategy === 'stock_only_overwrite'
+                  ? 'border-indigo-650 bg-indigo-50/50 ring-1 ring-indigo-500 text-indigo-950 font-bold'
+                  : 'bg-white border-zinc-200 hover:bg-zinc-50/50 text-zinc-650'
+              }`}
+            >
+              <span className="text-xs font-semibold leading-tight">Stock Only (Overwrite)</span>
+              <span className="text-[9px] text-zinc-400 mt-0.5">Keep details, replace stock</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setImportStrategy('stock_only_add')}
+              className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all cursor-pointer h-16 ${
+                importStrategy === 'stock_only_add'
+                  ? 'border-indigo-650 bg-indigo-50/50 ring-1 ring-indigo-500 text-indigo-950 font-bold'
+                  : 'bg-white border-zinc-200 hover:bg-zinc-50/50 text-zinc-650'
+              }`}
+            >
+              <span className="text-xs font-semibold leading-tight">Stock Only (Add)</span>
+              <span className="text-[9px] text-zinc-400 mt-0.5">Keep details, add stock</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1015,6 +1049,16 @@ export function BulkImport() {
           {importStrategy === 'merge' && (
             <p>
               <strong>Merge Details & Add Stock Strategy:</strong> Updates product details for matching SKUs, and <strong>adds/integrates</strong> the imported stock quantity directly into your existing store levels.
+            </p>
+          )}
+          {importStrategy === 'stock_only_overwrite' && (
+            <p>
+              <strong>Stock Only (Overwrite) Strategy:</strong> Keeps all existing product details (prices, name, barcode, categories) perfectly intact. Replaces/overwrites the inventory stock level with the imported quantity for matching SKUs.
+            </p>
+          )}
+          {importStrategy === 'stock_only_add' && (
+            <p>
+              <strong>Stock Only (Add) Strategy:</strong> Keeps all existing product details (prices, name, barcode, categories) perfectly intact. Adds/integrates the imported stock quantity directly into your current store levels for matching SKUs.
             </p>
           )}
         </div>
