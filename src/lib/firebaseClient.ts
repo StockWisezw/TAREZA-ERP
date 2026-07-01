@@ -120,7 +120,8 @@ function createFirestoreInstance() {
       return initializeFirestore(app, {
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager()
-        })
+        }),
+        experimentalForceLongPolling: true
       }, resolvedConfig.firestoreDatabaseId);
     } catch (err: any) {
       console.warn('[Firebase] Fallback to memoryLocalCache due to IndexedDb or container restriction: ', err);
@@ -130,11 +131,13 @@ function createFirestoreInstance() {
   // Fallback to memoryLocalCache to guarantee 100% stability against IndexedDb transaction restrictions in sandboxed iframes
   try {
     return initializeFirestore(app, {
-      localCache: memoryLocalCache()
+      localCache: memoryLocalCache(),
+      experimentalForceLongPolling: true
     }, resolvedConfig.firestoreDatabaseId);
   } catch (err: any) {
     console.warn('[Firebase] Fallback to standard initializeFirestore: ', err);
     return initializeFirestore(app, {
+      experimentalForceLongPolling: true
     }, resolvedConfig.firestoreDatabaseId);
   }
 }
