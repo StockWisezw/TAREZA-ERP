@@ -69,7 +69,10 @@ export const TransactionHistoryManager: React.FC<TransactionHistoryManagerProps>
   const branchId = activeSession?.branch_id || '';
 
   const fetchSalesHistory = async () => {
-    if (!businessId) return;
+    if (!businessId || !activeSession || activeSession.status === 'CLOSED') {
+      setSales([]);
+      return;
+    }
     setIsLoading(true);
     try {
       let queryBuilder = supabase
@@ -80,6 +83,10 @@ export const TransactionHistoryManager: React.FC<TransactionHistoryManagerProps>
 
       if (branchId) {
         queryBuilder = queryBuilder.eq('branch_id', branchId);
+      }
+
+      if (activeSession.opened_at) {
+        queryBuilder = queryBuilder.gte('created_at', activeSession.opened_at);
       }
 
       const { data, error } = await queryBuilder.limit(60);
@@ -98,8 +105,10 @@ export const TransactionHistoryManager: React.FC<TransactionHistoryManagerProps>
   useEffect(() => {
     if (isOpen && businessId) {
       fetchSalesHistory();
+    } else if (!activeSession || activeSession.status === 'CLOSED') {
+      setSales([]);
     }
-  }, [isOpen, businessId, branchId]);
+  }, [isOpen, businessId, branchId, activeSession?.id, activeSession?.opened_at, activeSession?.status]);
 
   const handleOpenRefundDialog = (sale: any, e: React.MouseEvent) => {
     e.stopPropagation();
