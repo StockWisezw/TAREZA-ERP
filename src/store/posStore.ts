@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
+import { indexedDbService } from '../services/indexedDbService';
 
 export type ProductBundle = {
   name: string;
@@ -125,6 +126,7 @@ interface POSState {
   getTotals: () => { subtotal: number; vat: number; discount: number; total: number; amountPaid: number; balance: number };
   removeSaleFromOfflineQueue: (saleId: string) => void;
   clearOfflineQueue: () => void;
+  loadOfflineQueueFromIndexedDb: () => Promise<void>;
 }
 
 // Fixed 15% VAT for standard items in Zimbabwe if enabled in settings (default off)
@@ -435,6 +437,17 @@ export const usePOSStore = create<POSState>()(
           customerName: state.currentCustomer?.name || 'Walk-In Customer',
         };
 
+        if (isOffline) {
+          indexedDbService.addQueuedTransaction({
+            id: newSale.id,
+            type: 'sale',
+            data: newSale,
+            timestamp: Date.now(),
+            status: 'pending',
+            retryCount: 0
+          }).catch(err => console.error('[IndexedDB] Error queuing transaction:', err));
+        }
+
         set((state) => ({
           offlineQueue: isOffline ? [...state.offlineQueue, newSale] : state.offlineQueue,
           localSales: [newSale, ...(state.localSales || [])].slice(0, 100),
@@ -447,11 +460,37 @@ export const usePOSStore = create<POSState>()(
         return newSale;
       },
 
-      removeSaleFromOfflineQueue: (saleId) => set((state) => ({
-        offlineQueue: state.offlineQueue.filter((sale) => sale.id !== saleId)
-      })),
+      removeSaleFromOfflineQueue: (saleId) => {
+        indexedDbService.removeQueuedTransaction(saleId)
+          .catch(err => console.error('[IndexedDB] Error removing transaction:', err));
+        set((state) => ({
+          offlineQueue: state.offlineQueue.filter((sale) => sale.id !== saleId)
+        }));
+      },
 
-      clearOfflineQueue: () => set({ offlineQueue: [] })
+      clearOfflineQueue: () => {
+        const queue = get().offlineQueue;
+        queue.forEach(sale => {
+          indexedDbService.removeQueuedTransaction(sale.id).catch(() => {});
+        });
+        set({ offlineQueue: [] });
+      },
+
+      loadOfflineQueueFromIndexedDb: async () => {
+        try {
+          const queued = await indexedDbService.getQueuedTransactions();
+          const sales = queued
+            .filter((item: any) => item.type === 'sale' && (item.status === 'pending' || item.status === 'failed'))
+            .map((item: any) => item.data as SaleRecord);
+          
+          if (sales.length > 0) {
+            set({ offlineQueue: sales });
+            console.log(`[Store] Synchronized ${sales.length} transactions from local IndexedDB.`);
+          }
+        } catch (err) {
+          console.error('[Store] Failed to sync offline queue from IndexedDB:', err);
+        }
+      }
     }),
     {
       name: 'tareza-pos-storage',

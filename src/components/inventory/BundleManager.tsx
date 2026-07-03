@@ -553,7 +553,7 @@ export function BundleManager() {
               <div>
                 <CardTitle className="text-base font-bold">Constituent Component Low-Stock Warning Panel</CardTitle>
                 <CardDescription className="text-red-600 text-xs mt-0.5">
-                  The single units below have run dry or fallen below their reorder threshold, limiting the maximum buildable virtual kits.
+                  The constituent components below have run dry or fallen below their reorder threshold, limiting the maximum buildable virtual kits.
                 </CardDescription>
               </div>
             </div>
@@ -1176,7 +1176,7 @@ export function BundleManager() {
           <DialogHeader>
             <DialogTitle className="text-sm font-bold text-zinc-850 flex items-center gap-1.5">
               <RefreshCw className="h-4 w-4 text-indigo-500 animate-spin" />
-              Restock Single Units
+              Restock Component Units
             </DialogTitle>
             <DialogDescription className="text-zinc-500 text-[11px] leading-normal">
               Log instant restock movement for component item: <span className="font-bold text-zinc-700">{restockComponent?.name}</span> ({restockComponent?.sku}).

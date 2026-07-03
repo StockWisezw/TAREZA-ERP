@@ -13,7 +13,7 @@ export interface ActiveTransactionState {
 
 class IndexedDbService {
   private dbName = 'tareza_pos_indexed_db';
-  private dbVersion = 1;
+  private dbVersion = 2;
 
   private getDB(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
@@ -41,6 +41,10 @@ class IndexedDbService {
         // Create store for transactions/carts
         if (!db.objectStoreNames.contains('transactions')) {
           db.createObjectStore('transactions', { keyPath: 'id' });
+        }
+        // Create store for offline queue
+        if (!db.objectStoreNames.contains('offline_queue')) {
+          db.createObjectStore('offline_queue', { keyPath: 'id' });
         }
       };
     });
@@ -141,6 +145,69 @@ class IndexedDbService {
       });
     } catch (e) {
       console.error('IndexedDB clearActiveTransaction error:', e);
+    }
+  }
+
+  // Offline Queue Persistence for full offline capability
+  async addQueuedTransaction(queuedTx: any): Promise<void> {
+    try {
+      const db = await this.getDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction('offline_queue', 'readwrite');
+        const store = transaction.objectStore('offline_queue');
+        const request = store.put(queuedTx);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    } catch (e) {
+      console.error('IndexedDB addQueuedTransaction error:', e);
+      throw e;
+    }
+  }
+
+  async getQueuedTransactions(): Promise<any[]> {
+    try {
+      const db = await this.getDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction('offline_queue', 'readonly');
+        const store = transaction.objectStore('offline_queue');
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+      });
+    } catch (e) {
+      console.error('IndexedDB getQueuedTransactions error:', e);
+      return [];
+    }
+  }
+
+  async removeQueuedTransaction(id: string): Promise<void> {
+    try {
+      const db = await this.getDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction('offline_queue', 'readwrite');
+        const store = transaction.objectStore('offline_queue');
+        const request = store.delete(id);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    } catch (e) {
+      console.error('IndexedDB removeQueuedTransaction error:', e);
+    }
+  }
+
+  async updateQueuedTransaction(queuedTx: any): Promise<void> {
+    try {
+      const db = await this.getDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction('offline_queue', 'readwrite');
+        const store = transaction.objectStore('offline_queue');
+        const request = store.put(queuedTx);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    } catch (e) {
+      console.error('IndexedDB updateQueuedTransaction error:', e);
     }
   }
 }

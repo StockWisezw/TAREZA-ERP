@@ -96,6 +96,10 @@ export default function POS() {
   useEffect(() => {
     const resumeStoredActiveTransaction = async () => {
       try {
+        // First restore any pending offline transactions queue
+        await usePOSStore.getState().loadOfflineQueueFromIndexedDb();
+        
+        // Then restore active transaction state
         const storedTx = await indexedDbService.getActiveTransaction();
         if (storedTx && usePOSStore.getState().cart.length === 0) {
           usePOSStore.setState({
@@ -1077,11 +1081,16 @@ export default function POS() {
                       // Retrieve component product cost price from existing products list
                       const compProd = products.find(p => p.id === comp.product_id || p.sku === comp.sku);
                       const compCostPrice = compProd?.costPrice || 0;
+                      const compProductId = compProd?.id || comp.product_id || comp.productId;
+
+                      if (!compProductId) {
+                        throw new Error(`Unable to resolve product ID for constituent item ${comp.sku || 'Component'}`);
+                      }
                       
                       const result = await recordStockMovement(
                         businessId,
                         branchId,
-                        comp.product_id,
+                        compProductId,
                         -(item.quantity * comp.quantity),
                         'POS_SALE',
                         userData?.user?.id || 'unknown',

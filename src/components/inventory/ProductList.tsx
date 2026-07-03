@@ -1396,7 +1396,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
                       {/* Add component inline form */}
                       <div className="flex gap-2 items-end">
                         <div className="flex-1 space-y-1">
-                          <Label className="text-[10px] font-semibold text-zinc-650">Select Component Single</Label>
+                          <Label className="text-[10px] font-semibold text-zinc-650">Select Component Product</Label>
                           <select
                             value={tempComponentId}
                             onChange={e => setTempComponentId(e.target.value)}
@@ -2046,7 +2046,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
                   {/* Add component inline form */}
                   <div className="flex gap-2 items-end">
                     <div className="flex-1 space-y-1">
-                      <Label className="text-[10px] font-semibold text-zinc-650">Select Component Single</Label>
+                      <Label className="text-[10px] font-semibold text-zinc-650">Select Component Product</Label>
                       <select
                         value={editTempComponentId}
                         onChange={e => setEditTempComponentId(e.target.value)}

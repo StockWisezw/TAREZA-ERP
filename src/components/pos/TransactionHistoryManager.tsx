@@ -198,18 +198,39 @@ export const TransactionHistoryManager: React.FC<TransactionHistoryManagerProps>
         for (const item of saleItems) {
           if (!item.product?.id) continue;
           try {
-            const multiplier = getItemPackSize(item);
-            await recordStockMovement(
-              businessId,
-              branchId,
-              item.product.id,
-              Number(item.quantity || 1) * multiplier, // Positive adds items back to inventory stock
-              'POS_RETURN',
-              userId,
-              receiptNumber,
-              undefined,
-              `POS Return Restock [Reason: ${finalReason}]`
-            );
+            const bomBundle = item.product.bundles?.find((b: any) => b.is_bom);
+            if (bomBundle && bomBundle.bom_composition && bomBundle.bom_composition.length > 0) {
+              // Explode BOM for virtual kits to restock their constituent items
+              for (const comp of bomBundle.bom_composition) {
+                const compProductId = comp.product_id || comp.productId;
+                if (!compProductId) continue;
+                await recordStockMovement(
+                  businessId,
+                  branchId,
+                  compProductId,
+                  Number(item.quantity || 1) * comp.quantity, // Positive adds component items back to inventory stock
+                  'POS_RETURN',
+                  userId,
+                  receiptNumber,
+                  undefined,
+                  `POS Return Restock BOM Component [Reason: ${finalReason}]`
+                );
+              }
+            } else {
+              // Standard item or pack
+              const multiplier = getItemPackSize(item);
+              await recordStockMovement(
+                businessId,
+                branchId,
+                item.product.id,
+                Number(item.quantity || 1) * multiplier, // Positive adds items back to inventory stock
+                'POS_RETURN',
+                userId,
+                receiptNumber,
+                undefined,
+                `POS Return Restock [Reason: ${finalReason}]`
+              );
+            }
           } catch (itemErr: any) {
             console.error(`[Refund] Failed to restock item ${item.product?.name}:`, itemErr);
           }

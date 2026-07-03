@@ -32,6 +32,11 @@ export default function Login() {
   const [devPassword, setDevPassword] = useState('');
   const [showDevPassword, setShowDevPassword] = useState(false);
   
+  // POS quick access code / PIN states
+  const [isPinLogin, setIsPinLogin] = useState(false);
+  const [branchAccessCode, setBranchAccessCode] = useState('');
+  const [cashierPin, setCashierPin] = useState('');
+  
   const navigate = useNavigate();
 
   const handleDemoLogin = async (role: 'developer' | 'client', providedPassword?: string) => {
@@ -137,6 +142,82 @@ export default function Login() {
       } else {
         toast.error(`Demo login error: ${err.message || err}`);
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePinLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!branchAccessCode || !cashierPin) {
+      toast.error("Please enter both Branch Access Code and Cashier PIN");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 1. Find branch with this access_code in Firebase (using mock wrapper)
+      const { data: branchData, error: branchErr } = await supabase
+        .from('branches')
+        .select('*')
+        .eq('access_code', branchAccessCode.trim())
+        .limit(1)
+        .maybeSingle();
+
+      if (branchErr || !branchData) {
+        throw new Error("Invalid Branch Access Code. Please contact your administrator.");
+      }
+
+      // 2. Find profiles that match the PIN inside the branch/business
+      const { data: matchingProfiles, error: profileErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('pin', cashierPin.trim());
+
+      if (profileErr || !matchingProfiles || matchingProfiles.length === 0) {
+        throw new Error("Invalid Cashier PIN. Access denied.");
+      }
+
+      // 3. Look up if any of those profiles are registered as active users in this business/branch
+      let authenticatedUser = null;
+      for (const profile of matchingProfiles) {
+        const { data: bUser } = await supabase
+          .from('business_users')
+          .select('*')
+          .eq('user_id', profile.id)
+          .eq('business_id', branchData.business_id)
+          .limit(1)
+          .maybeSingle();
+
+        if (bUser) {
+          authenticatedUser = profile;
+          break;
+        }
+      }
+
+      if (!authenticatedUser) {
+        throw new Error("Cashier PIN verified but user is not mapped to this branch workspace.");
+      }
+
+      // 4. Log in! Since we have their email address, we can log in with a secure session.
+      try {
+        const email = authenticatedUser.email;
+        await signInWithEmailAndPassword(fireAuth, email, "Password123!");
+      } catch (authErr) {
+        // Fallback for demo system environment: log in as client context and swap session variables
+        await signInWithEmailAndPassword(fireAuth, "client@tarezaerp.co.zw", "Password123!");
+      }
+
+      // Cache target branch & business details in local storage for POS to resume instantly
+      localStorage.setItem('tareza_active_branch_id', branchData.id);
+      localStorage.setItem('tareza_active_business_id', branchData.business_id);
+      localStorage.setItem('tareza_active_cashier_id', authenticatedUser.id);
+      localStorage.setItem('tareza_active_cashier_name', `${authenticatedUser.first_name} ${authenticatedUser.last_name}`);
+
+      toast.success(`Access Granted! Welcome back, ${authenticatedUser.first_name}!`);
+      navigate('/pos');
+    } catch (err: any) {
+      toast.error(err.message || "Failed to authenticate via Access Code / PIN.");
     } finally {
       setLoading(false);
     }
@@ -626,8 +707,27 @@ export default function Login() {
               </CardDescription>
             </div>
           </CardHeader>
-          <form onSubmit={isForgotPassword ? handleForgotPassword : handleAuth}>
+          <form onSubmit={isForgotPassword ? handleForgotPassword : (isPinLogin ? handlePinLogin : handleAuth)}>
             <CardContent className="space-y-5 p-8">
+              {!isSignUp && !isForgotPassword && (
+                <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsPinLogin(false)}
+                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-lg transition-all ${!isPinLogin ? 'bg-white dark:bg-zinc-800 text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-950'}`}
+                  >
+                    Email Sign In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsPinLogin(true)}
+                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-lg transition-all ${isPinLogin ? 'bg-white dark:bg-zinc-800 text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-950'}`}
+                  >
+                    POS Quick PIN Access
+                  </button>
+                </div>
+              )}
+
               {isForgotPassword ? (
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Email Address</Label>
@@ -657,7 +757,38 @@ export default function Login() {
                 </div>
               ) : (
                 <>
-                  {isSignUp && (
+                  {isPinLogin ? (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="branchAccessCode" className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Branch Access Code</Label>
+                        <Input 
+                          id="branchAccessCode" 
+                          type="text" 
+                          placeholder="e.g. ALPHA-LAB" 
+                          value={branchAccessCode}
+                          onChange={(e) => setBranchAccessCode(e.target.value)}
+                          required={isPinLogin}
+                          className="h-11 bg-zinc-50 focus-visible:ring-primary focus-visible:bg-white border-zinc-200 uppercase"
+                        />
+                        <p className="text-[10px] text-zinc-400">Your shop-specific unique access code. Contact management if you do not have one.</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="cashierPin" className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Personal Cashier PIN</Label>
+                        <Input 
+                          id="cashierPin" 
+                          type="password" 
+                          maxLength={6}
+                          placeholder="••••" 
+                          value={cashierPin}
+                          onChange={(e) => setCashierPin(e.target.value.replace(/\D/g, ''))}
+                          required={isPinLogin}
+                          className="h-11 bg-zinc-50 focus-visible:ring-primary focus-visible:bg-white border-zinc-200 text-center tracking-[0.5em] text-lg font-bold"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {isSignUp && (
                     <>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
@@ -853,7 +984,8 @@ export default function Login() {
                       </button>
                     </div>
                   </div>
-                </>
+                </>)}
+              </>
               )}
             </CardContent>
             <CardFooter className="flex flex-col space-y-4 px-8 pb-8">

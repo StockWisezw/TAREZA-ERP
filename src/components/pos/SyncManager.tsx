@@ -157,13 +157,33 @@ export function SyncManager() {
       if (isNewSale) {
         // Step C: Trigger secondary accounting and warehouse routines (wrapped safely in catches)
       
-        // 1. Stock Movements
+        // 1. Stock Movements with BOM explosion support
         try {
           if (sale.items && sale.items.length > 0) {
-            await Promise.all(
-              sale.items.map((item) => {
+            for (const item of sale.items) {
+              const bomBundle = item.product.bundles?.find((b: any) => b.is_bom);
+              if (bomBundle && bomBundle.bom_composition && bomBundle.bom_composition.length > 0) {
+                // Explode BOM for virtual kits
+                await Promise.all(
+                  bomBundle.bom_composition.map((comp: any) => {
+                    const compProductId = comp.product_id || comp.productId;
+                    if (!compProductId) return Promise.resolve(null);
+                    return recordStockMovement(
+                      businessId,
+                      branchId,
+                      compProductId,
+                      -Math.abs(item.quantity * comp.quantity),
+                      'POS_SALE',
+                      userId,
+                      sale.receiptNumber,
+                      0 // Fallback cost price
+                    );
+                  })
+                );
+              } else {
+                // Standard item or simple pack
                 const multiplier = getItemPackSize(item);
-                return recordStockMovement(
+                await recordStockMovement(
                   businessId,
                   branchId,
                   item.product.id,
@@ -173,8 +193,8 @@ export function SyncManager() {
                   sale.receiptNumber,
                   item.product.costPrice || 0
                 );
-              })
-            );
+              }
+            }
           }
         } catch (e) {
           console.warn('[SyncManager] Stock movements registration error:', e);

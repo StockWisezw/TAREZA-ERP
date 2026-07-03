@@ -179,14 +179,8 @@ async function testConnection() {
     console.warn('[Firebase] Device reports offline. Caching engines active. App remains completely operational.');
     return;
   }
-  try {
-    const connectionPromise = getDocFromServer(fireDoc(db, 'test_connection', 'ping'));
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
-    await Promise.race([connectionPromise, timeoutPromise]);
-    console.log('[Firebase] Connection validated successfully.');
-  } catch (error) {
-    console.warn('[Firebase] Connection validation completed (offline-ready caching is active). App remains completely operational.');
-  }
+  // Disabled connection test to prevent getDocFromServer from triggering 10s timeout warnings in sandboxed iframes
+  console.log('[Firebase] Connection validation bypassed. Offline-ready cache active.');
 }
 setTimeout(() => {
   testConnection();

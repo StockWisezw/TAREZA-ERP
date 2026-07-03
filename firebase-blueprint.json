@@ -31,6 +31,7 @@
         "address": { "type": "string" },
         "phone": { "type": "string" },
         "type": { "type": "string" },
+        "access_code": { "type": "string", "description": "Shop-specific unique access code for quick login, e.g. DOWNTOWN-ALPHA" },
         "is_active": { "type": "boolean" },
         "created_at": { "type": "string" }
       },
@@ -46,6 +47,7 @@
         "last_name": { "type": "string" },
         "phone": { "type": "string" },
         "email": { "type": "string" },
+        "pin": { "type": "string", "description": "Numeric personal login PIN code, e.g. 1234" },
         "created_at": { "type": "string" }
       },
       "required": ["id", "email"]

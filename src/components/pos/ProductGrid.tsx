@@ -103,23 +103,6 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
 
       // ONLY generate sub-products for packs and bundles if there is an active search term AND it is not a virtual BOM kit
       if (searchTerm.trim() !== '' && !isBOM) {
-        // 1. Single Unit Sub-Product (for explicit search context)
-        items.push({
-          id: `${product.id}-single`,
-          originalProduct: product,
-          name: `${product.name} (Single)`,
-          sku: `${product.sku}-SG`,
-          price: product.retailPrice,
-          wholesalePrice: product.wholesalePrice,
-          tier: 'retail',
-          stockDisplay: product.stock !== undefined ? `${product.stock} units` : undefined,
-          isSubProduct: true,
-          subType: 'single',
-          pSize: 1,
-          taxClass: product.taxClass,
-          category: product.category,
-        });
-
         // 2. Pack Sub-Product
         if (hasPack) {
           const packStock = product.stock !== undefined 
@@ -530,10 +513,10 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
 
             return (
               <div className="space-y-3 mt-4">
-                {/* 1. Single Unit Option */}
+                {/* 1. Standard Unit Option */}
                 <div className="flex items-center justify-between p-3.5 bg-zinc-50/50 hover:bg-zinc-50 border border-zinc-150 rounded-xl transition-all">
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold text-zinc-800">Single Unit</span>
+                    <span className="text-xs font-bold text-zinc-800">Standard Unit</span>
                     <span className="text-[10px] text-zinc-400 font-mono mt-0.5">
                       SKU: {product.sku} • Stock: {product.stock !== undefined ? `${product.stock} units` : 'unlimited'}
                     </span>
