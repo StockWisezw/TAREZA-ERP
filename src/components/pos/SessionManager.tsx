@@ -42,7 +42,7 @@ interface SessionManagerProps {
   setShowCloseShift?: (val: boolean) => void;
   showShiftDetails?: boolean;
   setShowShiftDetails?: (val: boolean) => void;
-  handleStartShift: (branchId?: string, cashierId?: string, userId?: string) => Promise<boolean>;
+  handleStartShift: (branchId?: string, cashierId?: string, userId?: string, shiftDate?: string) => Promise<boolean>;
   handleEndShift?: () => Promise<boolean>;
 }
 
@@ -68,6 +68,13 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   const [selectedCashierId, setSelectedCashierId] = useState<string>('');
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [loadingForm, setLoadingForm] = useState(false);
+  const [shiftDate, setShiftDate] = useState<string>(() => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  });
 
   // Load and cache active database entities for shift management mapping (like Tareza POS)
   useEffect(() => {
@@ -93,9 +100,21 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           .select('*')
           .eq('business_id', bid);
         
-        // 2. Load active profiles (Employees & Cashiers)
-        const { data: profilesRes } = await supabase.from('profiles')
-          .select('*');
+        // 2. Fetch business users to filter profiles by business tenancy
+        const { data: businessUsersRes } = await supabase.from('business_users')
+          .select('user_id')
+          .eq('business_id', bid);
+
+        const validUserIds = businessUsersRes ? businessUsersRes.map(bu => bu.user_id) : [];
+
+        // 3. Load active profiles (Employees & Cashiers) belonging to this business
+        let profilesRes = null;
+        if (validUserIds.length > 0) {
+          const { data } = await supabase.from('profiles')
+            .select('*')
+            .in('id', validUserIds);
+          profilesRes = data;
+        }
 
         if (branchesRes && branchesRes.length > 0) {
           setBranches(branchesRes);
@@ -137,10 +156,40 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     if (!activeSession) return;
     const loadLabels = async () => {
       try {
-        const { data: branchesRes } = await supabase.from('branches').select('*');
-        const { data: profilesRes } = await supabase.from('profiles').select('*');
-        if (branchesRes) setBranches(branchesRes);
-        if (profilesRes) setProfiles(profilesRes);
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData?.user) return;
+
+        let bid = activeSession.business_id;
+        if (!bid) {
+          const { data: bData } = await supabase.from('business_users')
+            .select('business_id')
+            .eq('user_id', userData.user.id)
+            .limit(1)
+            .maybeSingle();
+          bid = bData?.business_id;
+        }
+
+        if (bid) {
+          const { data: branchesRes } = await supabase.from('branches')
+            .select('*')
+            .eq('business_id', bid);
+            
+          const { data: businessUsersRes } = await supabase.from('business_users')
+            .select('user_id')
+            .eq('business_id', bid);
+            
+          const validUserIds = businessUsersRes ? businessUsersRes.map(bu => bu.user_id) : [];
+          let profilesRes = null;
+          if (validUserIds.length > 0) {
+            const { data } = await supabase.from('profiles')
+              .select('*')
+              .in('id', validUserIds);
+            profilesRes = data;
+          }
+
+          if (branchesRes) setBranches(branchesRes);
+          if (profilesRes) setProfiles(profilesRes);
+        }
       } catch (err) {
         console.warn('Failed to resolve view session labels:', err);
       }
@@ -267,6 +316,22 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                   />
                 </div>
 
+                {/* Business Day / Shift Date Selection */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-zinc-500" /> Business Day / Shift Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={shiftDate}
+                    onChange={(e) => setShiftDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-medium cursor-pointer"
+                  />
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block leading-normal">
+                    Select a custom date if you missed recording sales for a previous business day.
+                  </span>
+                </div>
+
               </div>
             )}
             
@@ -301,7 +366,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                   <div className="flex justify-between">
                     <span>Stock Source Warehouse:</span>
                     <strong className="text-zinc-900 dark:text-white">
-                      {branches.find(b => b.id === selectedBranchId)?.name || 'Selected Location'}
+                       {branches.find(b => b.id === selectedBranchId)?.name || 'Selected Location'}
                     </strong>
                   </div>
                   <div className="flex justify-between">
@@ -316,6 +381,12 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                       {getProfileName(selectedUserId)}
                     </strong>
                   </div>
+                  <div className="flex justify-between">
+                    <span>Business Day / Date:</span>
+                    <strong className="text-indigo-650 dark:text-indigo-400">
+                      {shiftDate ? new Date(shiftDate).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Today'}
+                    </strong>
+                  </div>
                   <div className="flex justify-between border-t border-indigo-100/40 dark:border-indigo-900/40 pt-1.5 font-semibold text-zinc-950 dark:text-white">
                     <span>Opening Safe Currency Reserves:</span>
                     <span className="font-mono text-indigo-700 dark:text-indigo-400">${(parseFloat(openingFloat) || 0).toFixed(2)}</span>
@@ -327,7 +398,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
 
           <DialogFooter className="p-6 bg-zinc-50 dark:bg-zinc-900 border-t border-zinc-100 dark:border-zinc-800 flex flex-col gap-2">
             <Button 
-              onClick={() => handleStartShift(selectedBranchId, selectedCashierId, selectedUserId)} 
+              onClick={() => handleStartShift(selectedBranchId, selectedCashierId, selectedUserId, shiftDate)} 
               className="w-full bg-zinc-900 hover:bg-zinc-800 dark:bg-indigo-600 dark:hover:bg-indigo-705 text-white py-5 font-black text-sm select-none cursor-pointer rounded-xl flex items-center justify-center gap-2"
             >
               <Play className="w-4 h-4 fill-current shrink-0" />

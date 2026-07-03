@@ -250,6 +250,7 @@ export default function POS() {
   // Fetch initial products and customers with local resolution
   useEffect(() => {
     let unsubscribeProducts: any = null;
+    let debounceTimeout: any = null;
     
     const loadData = async () => {
       try {
@@ -374,14 +375,26 @@ export default function POS() {
           });
         };
 
+        const debouncedRefreshPOSProducts = () => {
+          if (debounceTimeout) {
+            clearTimeout(debounceTimeout);
+          }
+          debounceTimeout = setTimeout(() => {
+            refreshPOSProducts();
+          }, 1500); // 1.5-second debounce to handle multi-item offline syncing without network congestion
+        };
+
         // Setup real-time postgres subscriptions
         const channel = supabase.channel('public:pos_sync')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, refreshPOSProducts)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, refreshPOSProducts)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, debouncedRefreshPOSProducts)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, debouncedRefreshPOSProducts)
           .subscribe();
           
         unsubscribeProducts = () => {
            supabase.removeChannel(channel);
+           if (debounceTimeout) {
+             clearTimeout(debounceTimeout);
+           }
         };
 
         let initProductsQuery = supabase.from('products').select('*');
@@ -896,9 +909,19 @@ export default function POS() {
 
     const isOffline = !navigator.onLine || localStorage.getItem('tareza_offline_mode') === 'true';
 
+    // Calculate a sale timestamp matching the active shift business day date with current wall-clock time
+    const getSaleTimestamp = () => {
+      if (!activeSession || !activeSession.opened_at) return new Date().toISOString();
+      const sessionDate = new Date(activeSession.opened_at);
+      const now = new Date();
+      sessionDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+      return sessionDate.toISOString();
+    };
+    const saleTimestamp = getSaleTimestamp();
+
     let sale = null;
     try {
-      sale = completeSale({ isOffline, allProducts: products });
+      sale = completeSale({ isOffline, allProducts: products, customTimestamp: saleTimestamp });
     } catch (err: any) {
       toast.error(err.message || 'Failed to complete checkout');
       return;
@@ -1037,7 +1060,7 @@ export default function POS() {
              payments: sale.payments,
              items: sale.items,
              status: 'COMPLETED',
-             created_at: new Date().toISOString()
+             created_at: sale.timestamp || new Date().toISOString()
           };
           if (businessId) salePayload.business_id = businessId;
           if (branchId) salePayload.branch_id = branchId;
@@ -1214,7 +1237,7 @@ export default function POS() {
                   notes: `Sale ${sale.receiptNumber} - ${payment.method}`,
                   linked_document_id: saleDoc.id,
                   linked_document_type: 'sale',
-                  created_at: new Date().toISOString()
+                  created_at: sale.timestamp || new Date().toISOString()
                 }]);
                 
                 if (error) {
@@ -1247,7 +1270,7 @@ export default function POS() {
                 cash_amount: cashTotal,
                 card_amount: cardTotal,
                 credit_amount: creditTotal,
-                created_at: new Date().toISOString(),
+                created_at: sale.timestamp || new Date().toISOString(),
                 created_by: userData?.user?.id || 'unknown'
               }]);
             } catch (err: any) {

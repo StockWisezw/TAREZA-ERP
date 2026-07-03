@@ -255,7 +255,7 @@ export function usePOSSession() {
     }
   }, []);
 
-  const handleStartShift = async (customBranchId?: string, customCashierId?: string, customUserId?: string) => {
+  const handleStartShift = async (customBranchId?: string, customCashierId?: string, customUserId?: string, customShiftDate?: string) => {
     try {
       const floatVal = parseFloat(openingFloat) || 0;
       if (requireFloat && (!openingFloat || floatVal <= 0)) {
@@ -269,6 +269,17 @@ export function usePOSSession() {
       const { data: userData } = await supabase.auth.getUser();
       
       const isCurrentlyOffline = getIsOffline();
+      
+      let openedAtStr = new Date().toISOString();
+      if (customShiftDate) {
+        const customDate = new Date(customShiftDate);
+        const now = new Date();
+        customDate.setHours(now.getHours());
+        customDate.setMinutes(now.getMinutes());
+        customDate.setSeconds(now.getSeconds());
+        customDate.setMilliseconds(now.getMilliseconds());
+        openedAtStr = customDate.toISOString();
+      }
 
       // Implement offline shift startup if offline mode is triggered
       if (isCurrentlyOffline) {
@@ -279,7 +290,7 @@ export function usePOSSession() {
           branch_id: customBranchId || 'offline_branch_id',
           cashier_id: customCashierId || userData?.user?.id || 'offline_cashier_id',
           user_id: customUserId || userData?.user?.id || 'offline_user_id',
-          opened_at: new Date().toISOString(),
+          opened_at: openedAtStr,
           opening_balance: floatVal,
           expected_balance: floatVal,
           closed_at: null,
@@ -348,7 +359,8 @@ export function usePOSSession() {
         brid || '00000000-0000-0000-0000-000000000000', 
         customUserId || userData.user.id, 
         floatVal,
-        customCashierId || customUserId || userData.user.id
+        customCashierId || customUserId || userData.user.id,
+        openedAtStr
       );
       if (res.success) {
         setActiveSession(res.session);

@@ -678,6 +678,7 @@ class SupabaseQueryBuilder {
   eqFilters: { col: string; val: any }[] = [];
   gteFilters: { col: string; val: any }[] = [];
   lteFilters: { col: string; val: any }[] = [];
+  inFilters: { col: string; val: any[] }[] = [];
 
   constructor(table: string) {
     this.table = table;
@@ -693,6 +694,11 @@ class SupabaseQueryBuilder {
     } else {
       this.eqFilters.push({ col, val });
     }
+    return this;
+  }
+
+  in(col: string, val: any[]) {
+    this.inFilters.push({ col, val });
     return this;
   }
 
@@ -967,6 +973,16 @@ class SupabaseQueryBuilder {
           constraints.push(fireWhere(documentId(), '<=', filter.val));
         } else {
           constraints.push(fireWhere(filter.col, '<=', filter.val));
+        }
+      }
+    }
+    for (const filter of this.inFilters) {
+      if (filter.val !== undefined && Array.isArray(filter.val)) {
+        const valToUse = filter.val.length > 0 ? filter.val : ['__empty_list_fallback__'];
+        if (filter.col === 'id' || filter.col === '$id') {
+          constraints.push(fireWhere(documentId(), 'in', valToUse));
+        } else {
+          constraints.push(fireWhere(filter.col, 'in', valToUse));
         }
       }
     }

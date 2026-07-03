@@ -266,6 +266,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
   useEffect(() => {
     let isMounted = true;
     let subscriptionChannel: any = null;
+    let refreshTimeout: any = null;
 
     const setupSubscription = async () => {
       try {
@@ -279,13 +280,15 @@ export function ProductList({ onImportClick }: ProductListProps) {
           .channel(`inventory_${Date.now()}`)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
             if (isMounted) {
-              setTimeout(() => { if (isMounted) fetchProducts(); }, 500);
+              if (refreshTimeout) clearTimeout(refreshTimeout);
+              refreshTimeout = setTimeout(() => { if (isMounted) fetchProducts(); }, 1500);
             }
           })
           .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => {
             if (isMounted) {
-              console.log('[Inventory] Stock changed - refreshing');
-              setTimeout(() => { if (isMounted) fetchProducts(); }, 300);
+              console.log('[Inventory] Stock changed - debouncing refresh');
+              if (refreshTimeout) clearTimeout(refreshTimeout);
+              refreshTimeout = setTimeout(() => { if (isMounted) fetchProducts(); }, 1500);
             }
           })
           .subscribe();
@@ -307,6 +310,9 @@ export function ProductList({ onImportClick }: ProductListProps) {
       isMounted = false;
       if (subscriptionChannel) {
         supabase.removeChannel(subscriptionChannel);
+      }
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout);
       }
       window.removeEventListener('inventory-update-needed', handleInventoryUpdate);
     };

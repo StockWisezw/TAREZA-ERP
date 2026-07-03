@@ -18,6 +18,10 @@ export function InventoryDashboard() {
   const [lowStockCount, setLowStockCount] = useState(0);
   const [outOfStockCount, setOutOfStockCount] = useState(0);
   const [expiringSoonCount, setExpiringSoonCount] = useState(0);
+  const [bomKitsCount, setBomKitsCount] = useState(0);
+  const [bomKitsList, setBomKitsList] = useState<any[]>([]);
+  const [originalProducts, setOriginalProducts] = useState<any[]>([]);
+  const [originalInventory, setOriginalInventory] = useState<any[]>([]);
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [businessName, setBusinessName] = useState('Tareza Retail');
   
@@ -88,6 +92,14 @@ export function InventoryDashboard() {
         const inventory = inventoryRes.data || [];
         const movements = movementsRes.data || [];
         const categories = categoriesRes.data || [];
+
+        setOriginalProducts(products);
+        setOriginalInventory(inventory);
+
+        // Track and isolate virtual kits / BOM bundles
+        const kits = products.filter((p: any) => p.bundles && p.bundles.some((b: any) => b.is_bom));
+        setBomKitsCount(kits.length);
+        setBomKitsList(kits);
 
         // Build Category mapping cache
         const catMap = new Map<string, string>();
@@ -317,6 +329,28 @@ export function InventoryDashboard() {
     );
   }
 
+  const getKitVirtualStock = (kit: any) => {
+    const bomBundle = kit.bundles?.find((b: any) => b.is_bom);
+    if (!bomBundle || !bomBundle.bom_composition || bomBundle.bom_composition.length === 0) {
+      return 0;
+    }
+
+    let minStock = Infinity;
+    for (const comp of bomBundle.bom_composition) {
+      const compProd = originalProducts.find(p => p.id === comp.product_id || p.sku === comp.sku);
+      if (!compProd) return 0;
+      
+      const invItem = originalInventory.find(i => i.product_id === compProd.id);
+      const stock = invItem ? Number(invItem.quantity || 0) : 0;
+      
+      const possibleKits = Math.floor(stock / Math.max(1, Number(comp.quantity || 1)));
+      if (possibleKits < minStock) {
+        minStock = possibleKits;
+      }
+    }
+    return minStock === Infinity ? 0 : minStock;
+  };
+
   const filteredTurnover = turnoverProducts
     .filter((p: any) => selectedTurnoverCategory === 'all' || p.category_name === selectedTurnoverCategory)
     .sort((a, b) => b.turnoverRate - a.turnoverRate);
@@ -325,7 +359,7 @@ export function InventoryDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Total Inventory Value */}
         <Card className="border-emerald-100 bg-emerald-50/30">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -366,6 +400,20 @@ export function InventoryDashboard() {
             <div className="text-2xl font-bold font-mono text-red-900">{outOfStockCount}</div>
             <p className="text-xs text-red-600 mt-1 font-medium flex items-center">
               Active lines flagged as 0
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Active BOM Kits */}
+        <Card className="border-indigo-100 bg-indigo-50/30">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-semibold text-indigo-800 uppercase tracking-wider">Tracked BOM Kits</CardTitle>
+            <Sparkles className="h-4 w-4 text-indigo-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono text-indigo-900">{bomKitsCount}</div>
+            <p className="text-xs text-indigo-600 mt-1 font-medium">
+              Multi-item virtual packs
             </p>
           </CardContent>
         </Card>
@@ -416,28 +464,73 @@ export function InventoryDashboard() {
         </Card>
 
         <Card className="border-zinc-200">
-          <CardHeader>
-            <CardTitle className="text-zinc-900 font-bold uppercase tracking-wider text-xs">Real-time Stock Control Panel</CardTitle>
-            <CardDescription className="text-zinc-500">Manual review of inventory states</CardDescription>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="h-4 w-4 text-indigo-600 shrink-0" />
+              <CardTitle className="text-zinc-900 font-black uppercase tracking-wider text-xs">BOM Kits & Bundles Monitor</CardTitle>
+            </div>
+            <CardDescription className="text-zinc-500 text-[11px]">Real-time tracking of virtual kit formulations</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="p-4 bg-zinc-50/50 border border-zinc-100 rounded-xl">
-              <h4 className="font-bold text-zinc-900 text-sm mb-1">Verify Stock Records</h4>
-              <p className="text-xs text-zinc-650 leading-relaxed">
-                Physical counts are invaluable to reconcile discrepancies and spot leakages. Access cycle counts in **Stocktake** tab.
-              </p>
-            </div>
-            <div className="p-4 bg-zinc-50/50 border border-zinc-100 rounded-xl">
-              <h4 className="font-bold text-zinc-900 text-sm mb-1">Active Catalog Coverage</h4>
-              <p className="text-xs text-zinc-650 leading-relaxed">
-                Your profile is connected to <span className="font-bold">{businessName}</span>. Multi-currency price conversion is enabled automatically for POS checkouts.
-              </p>
-            </div>
-            <div className="p-4 bg-zinc-50/50 border border-zinc-100 rounded-xl">
-              <h4 className="font-bold text-zinc-900 text-sm mb-1">Corporate Support Helpline</h4>
-              <p className="text-xs text-zinc-650 leading-relaxed font-semibold text-primary">
-                Call hands-on consultancy at +263 776699950 for inventory reconciliation audits and professional guidance.
-              </p>
+            {bomKitsList.length === 0 ? (
+              <div className="text-center py-8 text-zinc-400 text-xs italic border border-dashed rounded-xl p-4 bg-zinc-50/50">
+                No virtual kits / BOM bundles defined yet. Setup kits in the **Bundle Manager** inside the Inventory section.
+              </div>
+            ) : (
+              <div className="space-y-3.5 max-h-[340px] overflow-y-auto pr-1">
+                {bomKitsList.map((kit) => {
+                  const virtualStock = getKitVirtualStock(kit);
+                  const bomBundle = kit.bundles?.find((b: any) => b.is_bom);
+                  return (
+                    <div key={kit.id} className="p-3 bg-zinc-50/70 border border-zinc-200/60 rounded-xl space-y-2">
+                      <div className="flex justify-between items-start gap-1">
+                        <div>
+                          <h4 className="font-bold text-zinc-900 text-xs leading-tight">{kit.name}</h4>
+                          <p className="text-[10px] text-zinc-400 font-mono mt-0.5">{kit.sku || 'No SKU'}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`inline-flex items-center font-bold px-2 py-0.5 rounded text-[10.5px] font-mono ${
+                            virtualStock <= 3
+                              ? 'bg-red-50 text-red-700 border border-red-100'
+                              : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                          }`}>
+                            {virtualStock} available
+                          </span>
+                          <span className="text-[9px] text-zinc-400 block mt-0.5 font-semibold">Virtual Stock</span>
+                        </div>
+                      </div>
+
+                      {/* Composition breakdown */}
+                      {bomBundle?.bom_composition && (
+                        <div className="border-t border-zinc-200/50 pt-2 space-y-1">
+                          <p className="text-[9px] uppercase font-bold tracking-wider text-zinc-400">Constituents (RequiredQty):</p>
+                          <div className="grid grid-cols-1 gap-1 text-[11px]">
+                            {bomBundle.bom_composition.map((comp: any, cidx: number) => {
+                              const compProd = originalProducts.find(p => p.id === comp.product_id || p.sku === comp.sku);
+                              const compInv = originalInventory.find(i => i.product_id === compProd?.id);
+                              const compQty = compInv ? Number(compInv.quantity || 0) : 0;
+                              return (
+                                <div key={cidx} className="flex justify-between text-zinc-650">
+                                  <span className="truncate max-w-[130px] font-medium">
+                                    • {compProd ? compProd.name : (comp.sku || 'Component')}
+                                  </span>
+                                  <span className="font-mono text-[10px]">
+                                    Req: <span className="font-bold text-zinc-800">{comp.quantity}</span> (Holds {compQty})
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="p-3 bg-zinc-50 border border-zinc-100 rounded-xl text-[10.5px] text-zinc-500 leading-relaxed">
+              <span className="font-bold text-zinc-800">Note:</span> Virtual stock of kits is automatically computed based on the <span className="font-semibold text-zinc-700">minimum</span> constituent stock levels. Out-of-stock components will automatically limit the available kit checkouts.
             </div>
           </CardContent>
         </Card>

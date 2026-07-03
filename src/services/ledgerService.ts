@@ -227,7 +227,8 @@ export async function openRegisterSession(
   branchId: string,
   userId: string,
   openingFloat: number,
-  cashierId?: string
+  cashierId?: string,
+  customOpenedAt?: string
 ): Promise<{ success: boolean; session?: any; error?: string }> {
   try {
     const existing = await getOpenRegisterSession(businessId, userId);
@@ -236,6 +237,7 @@ export async function openRegisterSession(
     }
 
     const sessionId = doc(collection(db, 'register_sessions')).id;
+    const openedAt = customOpenedAt || new Date().toISOString();
     const item = {
       id: sessionId,
       business_id: businessId,
@@ -247,13 +249,13 @@ export async function openRegisterSession(
       expected_balance: openingFloat,
       variance: 0,
       status: 'OPEN' as const,
-      opened_at: new Date().toISOString(),
+      opened_at: openedAt,
       closed_at: null,
       sales_count: 0,
       sales_total: 0,
       refunds_total: 0,
       payouts_total: 0,
-      created_at: new Date().toISOString()
+      created_at: openedAt
     };
 
     const { error: insertErr } = await supabase.from('register_sessions').insert(item);

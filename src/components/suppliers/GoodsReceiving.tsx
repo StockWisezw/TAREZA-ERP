@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
-import { Search, Filter, Plus, Package, Check, RefreshCw, Layers, ArrowDownLeft, Trash2, Calendar, WifiOff, CloudLightning, Database, AlertCircle } from 'lucide-react';
+import { Search, Filter, Plus, Package, Check, RefreshCw, Layers, ArrowDownLeft, Trash2, Calendar, WifiOff, CloudLightning, Database, AlertCircle, Printer } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -67,6 +67,10 @@ export default function GoodsReceiving() {
   // History log of received goods
   const [grnHistory, setGrnHistory] = useState<any[]>([]);
   const [offlineGRNs, setOfflineGRNs] = useState<any[]>([]);
+  const [grnBatches, setGrnBatches] = useState<any[]>([]);
+  const [activeSubTab, setActiveSubTab] = useState<'batches' | 'logs'>('batches');
+  const [selectedGrnForPrint, setSelectedGrnForPrint] = useState<any | null>(null);
+  const [isPrintOpen, setIsPrintOpen] = useState(false);
 
   // Check offline flag
   const getIsOffline = () => {
@@ -116,12 +120,23 @@ export default function GoodsReceiving() {
       const cachedGrnsRaw = localStorage.getItem('tareza_offline_grns') || '[]';
       setOfflineGRNs(JSON.parse(cachedGrnsRaw));
 
-      const [poRes, branchRes, prodRes, supRes, movementsRes] = await Promise.all([
+      const fetchGrnBatchesRes = async () => {
+        try {
+          const res = await supabase.from('goods_received_notes').select('*').order('created_at', { ascending: false });
+          return res.data || [];
+        } catch (e) {
+          console.error('[GRN] fetch error:', e);
+          return [];
+        }
+      };
+
+      const [poRes, branchRes, prodRes, supRes, movementsRes, grns] = await Promise.all([
         supabase.from('purchase_orders').select('*').order('created_at', { ascending: false }),
         supabase.from('branches').select('*').order('name'),
         supabase.from('products').select('*').eq('is_active', true).order('name'),
         supabase.from('suppliers').select('*'),
-        supabase.from('stock_movements').select('*').order('created_at', { ascending: false }).limit(100)
+        supabase.from('stock_movements').select('*').order('created_at', { ascending: false }).limit(100),
+        fetchGrnBatchesRes()
       ]);
 
       const pos = poRes.data || [];
@@ -133,6 +148,7 @@ export default function GoodsReceiving() {
       setBranches(brs);
       setProducts(prods);
       setSuppliers(sups);
+      setGrnBatches(grns);
 
       // Select defaults
       if (pos.length > 0 && !selectedPOId) setSelectedPOId(pos[0].id);
@@ -359,6 +375,46 @@ export default function GoodsReceiving() {
         }
       }
 
+      // 2.2. Create cohesive GRN batch document for batch tracking and printable notes
+      let activeSupplierName = 'Cash Supplier';
+      let activeSupplierId = standaloneSupplierId;
+      if (selectedPOId !== 'none') {
+        const poObj = purchaseOrders.find(p => p.id === selectedPOId);
+        activeSupplierId = poObj?.supplier_id || '';
+        const supObj = suppliers.find(s => s.id === activeSupplierId);
+        activeSupplierName = poObj?.supplier_name || supObj?.name || 'PO Supplier';
+      } else if (standaloneSupplierId !== 'cash-supplier') {
+        const supObj = suppliers.find(s => s.id === standaloneSupplierId);
+        activeSupplierName = supObj?.name || 'Cash Supplier';
+      }
+
+      const totalProjectedBillValue = itemsToProcess.reduce((sum, item) => sum + ((item.quantityReceived || 0) * (item.costPrice || 0)), 0);
+      const totalReceivedUnits = itemsToProcess.reduce((sum, item) => sum + (item.quantityReceived || 0), 0);
+
+      const grnId = 'grn-' + Math.random().toString(36).substring(2, 11) + '-' + Date.now().toString().slice(-4);
+      const grnPayload = {
+        id: grnId,
+        grn_number: associatedTxRef,
+        purchase_order_id: selectedPOId !== 'none' ? selectedPOId : null,
+        purchase_order_number: selectedPOId !== 'none' ? (purchaseOrders.find(p => p.id === selectedPOId)?.po_number || '') : null,
+        supplier_id: activeSupplierId,
+        supplier_name: activeSupplierName,
+        branch_id: selectedBranchId,
+        branch_name: branches.find(b => b.id === selectedBranchId)?.name || 'Local Warehouse',
+        received_date: selectedDate,
+        created_at: new Date().toISOString(),
+        created_by: userData?.user?.id || 'system',
+        notes: grnNotes,
+        items: itemsToProcess,
+        total_units: totalReceivedUnits,
+        total_value: totalProjectedBillValue
+      };
+
+      const { error: grnInsertErr } = await supabase.from('goods_received_notes').insert([grnPayload]);
+      if (grnInsertErr) {
+        console.error('[GRN] Consolidated write failed:', grnInsertErr);
+      }
+
       // 3. Mark matching PO as RECEIVED if applicable
       if (selectedPOId && selectedPOId !== 'none') {
         const { error: poError } = await supabase
@@ -486,6 +542,33 @@ export default function GoodsReceiving() {
         if (!result.success) {
           throw new Error(result.error || `Failed to record stock movement for product: ${item.product_name}`);
         }
+      }
+
+      // 2.2. Save cohesive GRN batch document for batch tracking and printable notes
+      const totalProjectedBillValue = offGrn.items.reduce((sum: number, item: any) => sum + ((item.quantityReceived || 0) * (item.costPrice || 0)), 0);
+      const totalReceivedUnits = offGrn.items.reduce((sum: number, item: any) => sum + (item.quantityReceived || 0), 0);
+      
+      const grnPayload = {
+        id: offGrn.id,
+        grn_number: associatedTxRef,
+        purchase_order_id: offGrn.po_id !== 'none' ? offGrn.po_id : null,
+        purchase_order_number: offGrn.po_number || null,
+        supplier_id: offGrn.supplier_id,
+        supplier_name: offGrn.supplier_name,
+        branch_id: offGrn.branch_id,
+        branch_name: offGrn.branch_name,
+        received_date: selectedDate,
+        created_at: new Date().toISOString(),
+        created_by: userData?.user?.id || 'system',
+        notes: offGrn.notes,
+        items: offGrn.items,
+        total_units: totalReceivedUnits,
+        total_value: totalProjectedBillValue
+      };
+
+      const { error: grnInsertErr } = await supabase.from('goods_received_notes').insert([grnPayload]);
+      if (grnInsertErr) {
+        console.error('[GRN] Consolidated offline-sync write failed:', grnInsertErr);
       }
 
       // Sync PO status
@@ -619,87 +702,167 @@ export default function GoodsReceiving() {
         </CardContent>
       </Card>
 
-      {/* Recent Bulk Receipts (GRN Audit Logs) Section in Full screen / Full width */}
-      <Card className="w-full border-zinc-200">
-        <CardHeader>
-          <CardTitle className="text-base text-zinc-805">Recent Bulk Receipts (GRN Audit Logs)</CardTitle>
-          <CardDescription>Verified log entries showing historical stock arrivals of product batches.</CardDescription>
+      {/* Cohesive track of received goods and printable notes per user request */}
+      <Card className="w-full border-zinc-200 print:hidden">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3">
+          <div>
+            <CardTitle className="text-base text-zinc-805">Track of Received Goods (GRN Batches)</CardTitle>
+            <CardDescription>Track complete incoming product batches and print Goods Received Notes.</CardDescription>
+          </div>
+          <div className="flex bg-zinc-100 p-0.5 rounded-lg border border-zinc-200/50 self-start sm:self-auto">
+            <button
+              onClick={() => setActiveSubTab('batches')}
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                activeSubTab === 'batches'
+                  ? 'bg-white text-zinc-900 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-950'
+              }`}
+            >
+              GRN Batches Tracker
+            </button>
+            <button
+              onClick={() => setActiveSubTab('logs')}
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                activeSubTab === 'logs'
+                  ? 'bg-white text-zinc-900 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-950'
+              }`}
+            >
+              Individual Items Audit Log
+            </button>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto w-full">
-            <Table className="min-w-full">
-              <TableHeader className="bg-zinc-100 dark:bg-zinc-900/40">
-                <TableRow>
-                  <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Time Received</TableHead>
-                  <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Product SKU / Name</TableHead>
-                  <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Linked Supplier / Cost</TableHead>
-                  <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Storage Location</TableHead>
-                  <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300 text-right">Received Count</TableHead>
-                  <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300 text-center w-[160px]">Action / Reversal</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {grnHistory.length === 0 ? (
+          {activeSubTab === 'batches' ? (
+            <div className="overflow-x-auto w-full">
+              <Table className="min-w-full">
+                <TableHeader className="bg-zinc-100 dark:bg-zinc-900/40">
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-zinc-400 text-sm">
-                      No recent receiving logs. Press the button above to initiate a bulk stock arrival.
-                    </TableCell>
+                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">GRN Number</TableHead>
+                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Date Received</TableHead>
+                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Supplier</TableHead>
+                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Warehouse Branch</TableHead>
+                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300 text-center">Items (Qty)</TableHead>
+                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300 text-right">Total Cost</TableHead>
+                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300 text-center w-[160px]">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  grnHistory.map((log) => {
-                    const isReversed = log.notes && log.notes.startsWith('[REVERSED]');
-                    return (
-                      <TableRow key={log.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
-                        <TableCell className="text-xs text-zinc-500">{new Date(log.created_at).toLocaleString()}</TableCell>
-                        <TableCell>
-                          <p className="font-semibold text-xs text-zinc-900 dark:text-zinc-100">{log.product_name}</p>
-                          <p className="font-mono text-[10px] text-zinc-400">{log.sku || '-'}</p>
-                          {log.notes && (
-                            <p className={`text-[10px] px-1.5 py-0.5 rounded italic mt-1 inline-block whitespace-nowrap overflow-hidden text-ellipsis max-w-xs ${
-                              isReversed ? 'bg-red-50 text-red-600 dark:bg-red-955' : 'bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400'
-                            }`}>
-                              {log.notes}
-                            </p>
-                          )}
+                </TableHeader>
+                <TableBody>
+                  {grnBatches.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-12 text-zinc-400 text-sm">
+                        No goods received batches recorded yet. Complete a new GRN above to start tracking.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    grnBatches.map((batch) => (
+                      <TableRow key={batch.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
+                        <TableCell className="font-mono text-xs font-bold text-blue-600">{batch.grn_number}</TableCell>
+                        <TableCell className="text-xs text-zinc-650">{new Date(batch.received_date).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-xs font-semibold text-zinc-800">{batch.supplier_name || 'Cash Supplier'}</TableCell>
+                        <TableCell className="text-xs text-zinc-500">{batch.branch_name}</TableCell>
+                        <TableCell className="text-center text-xs">
+                          <span className="font-semibold">{batch.items?.length || 0} items</span>
+                          <span className="text-zinc-400 text-[11px] block">({batch.total_units || 0} units total)</span>
                         </TableCell>
-                        <TableCell>
-                          <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                            {log.supplier_name || 'Cash Supplier'}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-xs text-zinc-650 dark:text-zinc-400">{log.branch_name}</TableCell>
-                        <TableCell className={`text-right font-mono font-bold ${log.quantity < 0 ? 'text-rose-650' : 'text-emerald-600'}`}>
-                          {log.quantity > 0 ? `+${log.quantity}` : log.quantity} units
+                        <TableCell className="text-right font-mono font-bold text-zinc-900">
+                          ${(batch.total_value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell className="text-center">
-                          {isReversed ? (
-                            <Badge className="bg-red-50 text-red-600 border border-red-200 select-none text-[10.5px]">
-                              Reversed Correction
-                            </Badge>
-                          ) : (
-                            <div className="flex gap-1.5 justify-center">
-                              <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-202 select-none">
-                                <Check className="h-3 w-3 text-emerald-600 mr-1" /> Checked
-                              </Badge>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleReverseGRN(log)}
-                                disabled={submitting}
-                                className="text-red-650 border-red-200 hover:bg-rose-50 text-[10.5px] font-bold h-6 py-0 px-2 rounded cursor-pointer select-none"
-                              >
-                                Reverse
-                              </Button>
-                            </div>
-                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedGrnForPrint(batch);
+                              setIsPrintOpen(true);
+                            }}
+                            className="bg-zinc-900 hover:bg-zinc-850 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 font-bold h-7 py-0 px-2.5 rounded cursor-pointer select-none text-[11px] inline-flex items-center gap-1"
+                          >
+                            <Printer className="h-3 w-3" /> View & Print Note
+                          </Button>
                         </TableCell>
                       </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="overflow-x-auto w-full">
+              <Table className="min-w-full">
+                <TableHeader className="bg-zinc-100 dark:bg-zinc-900/40">
+                  <TableRow>
+                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Time Received</TableHead>
+                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Product SKU / Name</TableHead>
+                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Linked Supplier / Cost</TableHead>
+                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300">Storage Location</TableHead>
+                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300 text-right">Received Count</TableHead>
+                    <TableHead className="font-semibold text-zinc-700 dark:text-zinc-300 text-center w-[160px]">Action / Reversal</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {grnHistory.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-12 text-zinc-400 text-sm">
+                        No recent receiving logs. Press the button above to initiate a bulk stock arrival.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    grnHistory.map((log) => {
+                      const isReversed = log.notes && log.notes.startsWith('[REVERSED]');
+                      return (
+                        <TableRow key={log.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
+                          <TableCell className="text-xs text-zinc-500">{new Date(log.created_at).toLocaleString()}</TableCell>
+                          <TableCell>
+                            <p className="font-semibold text-xs text-zinc-900 dark:text-zinc-100">{log.product_name}</p>
+                            <p className="font-mono text-[10px] text-zinc-400">{log.sku || '-'}</p>
+                            {log.notes && (
+                              <p className={`text-[10px] px-1.5 py-0.5 rounded italic mt-1 inline-block whitespace-nowrap overflow-hidden text-ellipsis max-w-xs ${
+                                isReversed ? 'bg-red-50 text-red-600 dark:bg-red-955' : 'bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400'
+                              }`}>
+                                {log.notes}
+                              </p>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                              {log.supplier_name || 'Cash Supplier'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs text-zinc-650 dark:text-zinc-400">{log.branch_name}</TableCell>
+                          <TableCell className={`text-right font-mono font-bold ${log.quantity < 0 ? 'text-rose-650' : 'text-emerald-600'}`}>
+                            {log.quantity > 0 ? `+${log.quantity}` : log.quantity} units
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {isReversed ? (
+                              <Badge className="bg-red-50 text-red-600 border border-red-200 select-none text-[10.5px]">
+                                Reversed Correction
+                              </Badge>
+                            ) : (
+                              <div className="flex gap-1.5 justify-center">
+                                <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-202 select-none">
+                                  <Check className="h-3 w-3 text-emerald-600 mr-1" /> Checked
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleReverseGRN(log)}
+                                  disabled={submitting}
+                                  className="text-red-650 border-red-200 hover:bg-rose-50 text-[10.5px] font-bold h-6 py-0 px-2 rounded cursor-pointer select-none"
+                                >
+                                  Reverse
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1088,6 +1251,154 @@ export default function GoodsReceiving() {
               </form>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Printable GRN Note Dialog per user request */}
+      <Dialog open={isPrintOpen} onOpenChange={setIsPrintOpen}>
+        <DialogContent className="max-w-[95vw] md:max-w-4xl max-h-[92vh] overflow-y-auto bg-white p-6 md:p-8 rounded-2xl">
+          <div className="flex justify-between items-center border-b pb-4 mb-6 print:hidden">
+            <h3 className="text-lg font-black text-zinc-900">Print Goods Received Note (GRN) Batch</h3>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => window.print()}
+                className="bg-zinc-950 hover:bg-zinc-900 text-white font-bold text-xs h-9 px-4 rounded-xl flex items-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="h-4 w-4" /> Print GRN Sheet
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSelectedGrnForPrint(null);
+                  setIsPrintOpen(false);
+                }}
+                className="border-zinc-300 text-zinc-700 hover:bg-zinc-50 font-bold text-xs h-9 px-4 rounded-xl"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+
+          {selectedGrnForPrint && (
+            <div className="bg-white text-zinc-900 p-2 md:p-6 rounded-lg font-sans border border-zinc-200/50 print:border-none print:p-0 print:shadow-none">
+              {/* Header section */}
+              <div className="flex flex-col md:flex-row justify-between items-start border-b border-zinc-200 pb-6 mb-6">
+                <div>
+                  <h1 className="text-2xl font-black tracking-tight text-zinc-900">TAREZA ERP SOLUTIONS</h1>
+                  <p className="text-xs text-zinc-500 font-mono mt-1">Regulated Goods Shipment Receiving Ledger</p>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">Harare, Zimbabwe</p>
+                </div>
+                <div className="text-left md:text-right mt-4 md:mt-0">
+                  <div className="inline-block bg-zinc-100 text-zinc-800 font-bold px-3 py-1.5 rounded-lg text-xs tracking-wider mb-2 uppercase">
+                    Goods Received Note (GRN)
+                  </div>
+                  <p className="text-sm font-mono font-bold text-blue-600">Ref No: {selectedGrnForPrint.grn_number}</p>
+                  <p className="text-xs text-zinc-500 mt-1">Date: {new Date(selectedGrnForPrint.received_date || selectedGrnForPrint.created_at).toLocaleString()}</p>
+                </div>
+              </div>
+
+              {/* Info grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-zinc-50/50 rounded-xl p-4 border border-zinc-100 mb-6 text-xs">
+                <div className="space-y-1.5">
+                  <p className="text-zinc-400 font-bold uppercase tracking-wider text-[10px]">Supplier / Originator Source</p>
+                  <p className="text-sm font-black text-zinc-900">{selectedGrnForPrint.supplier_name || 'Standalone Cash Supplier'}</p>
+                  <p className="text-zinc-500">ID Ref: <span className="font-mono text-zinc-700">{selectedGrnForPrint.supplier_id || 'N/A'}</span></p>
+                  {selectedGrnForPrint.purchase_order_number && (
+                    <p className="text-zinc-500">Linked PO Reference: <span className="font-mono font-bold text-zinc-800">{selectedGrnForPrint.purchase_order_number}</span></p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-zinc-400 font-bold uppercase tracking-wider text-[10px]">Destination Storehouse</p>
+                  <p className="text-sm font-black text-zinc-900">{selectedGrnForPrint.branch_name || 'Local Warehouse'}</p>
+                  <p className="text-zinc-500">Branch Code: <span className="font-mono text-zinc-700">{selectedGrnForPrint.branch_id || 'default'}</span></p>
+                  <p className="text-zinc-500">Logged By User: <span className="font-sans font-bold text-zinc-800">{selectedGrnForPrint.created_by || 'system-clerk'}</span></p>
+                </div>
+              </div>
+
+              {/* Item Table */}
+              <div className="border border-zinc-200 rounded-xl overflow-hidden mb-6">
+                <table className="min-w-full divide-y divide-zinc-200 text-xs">
+                  <thead className="bg-zinc-50">
+                    <tr>
+                      <th scope="col" className="px-4 py-3 text-left font-bold text-zinc-650 uppercase tracking-wider w-[5%]">#</th>
+                      <th scope="col" className="px-4 py-3 text-left font-bold text-zinc-650 uppercase tracking-wider">Item Name / Specification</th>
+                      <th scope="col" className="px-4 py-3 text-left font-bold text-zinc-650 uppercase tracking-wider">Batch No.</th>
+                      <th scope="col" className="px-4 py-3 text-left font-bold text-zinc-650 uppercase tracking-wider">Expiry Date</th>
+                      <th scope="col" className="px-4 py-3 text-right font-bold text-zinc-650 uppercase tracking-wider">Qty Ordered</th>
+                      <th scope="col" className="px-4 py-3 text-right font-bold text-zinc-650 uppercase tracking-wider">Qty Received</th>
+                      <th scope="col" className="px-4 py-3 text-right font-bold text-zinc-650 uppercase tracking-wider">Unit Cost</th>
+                      <th scope="col" className="px-4 py-3 text-right font-bold text-zinc-650 uppercase tracking-wider">Total Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-zinc-200">
+                    {(selectedGrnForPrint.items || []).map((item: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-zinc-50/30">
+                        <td className="px-4 py-3 whitespace-nowrap text-zinc-500 font-mono">{idx + 1}</td>
+                        <td className="px-4 py-3">
+                          <p className="font-black text-zinc-900">{item.product_name}</p>
+                          <p className="text-[10px] text-zinc-400 font-mono">SKU: {item.sku || 'N/A'}</p>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-zinc-700">{item.batchNumber || 'N/A'}</td>
+                        <td className="px-4 py-3 text-zinc-600 font-mono">{item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : 'N/A'}</td>
+                        <td className="px-4 py-3 text-right text-zinc-500 font-mono">{item.quantityOrdered || '-'}</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-zinc-900">{item.quantityReceived}</td>
+                        <td className="px-4 py-3 text-right text-zinc-650 font-mono">${Number(item.costPrice || 0).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-zinc-900">${(Number(item.quantityReceived || 0) * Number(item.costPrice || 0)).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Total Summary Block */}
+              <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-8">
+                <div className="w-full md:w-3/5 text-xs text-zinc-600">
+                  <p className="font-bold text-zinc-800 uppercase tracking-wider text-[9px] mb-1">Receiving Remarks & Clerk Discrepancy Note</p>
+                  <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3 italic">
+                    "{selectedGrnForPrint.notes || 'No remarks or discrepancy notes recorded by receiving clerk.'}"
+                  </div>
+                </div>
+                <div className="w-full md:w-1/3 text-xs space-y-2 border border-zinc-200/60 rounded-xl p-4 bg-zinc-50/30 ml-auto font-sans">
+                  <div className="flex justify-between text-zinc-500">
+                    <span>Total Line Items:</span>
+                    <span className="font-bold text-zinc-800 font-mono">{selectedGrnForPrint.items?.length || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-500">
+                    <span>Total Units Received:</span>
+                    <span className="font-bold text-zinc-800 font-mono">{selectedGrnForPrint.total_units || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-800 pt-2 border-t font-bold text-sm">
+                    <span>Total Shipment Cost:</span>
+                    <span className="font-mono text-zinc-950">${(selectedGrnForPrint.total_value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Signature section */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-10 border-t border-zinc-200 text-xs">
+                <div className="space-y-4">
+                  <p className="text-zinc-500">Received By (Receiving Clerk):</p>
+                  <div className="border-b border-zinc-300 w-full pt-4"></div>
+                  <p className="text-[10px] text-zinc-400">Signature & Date</p>
+                </div>
+                <div className="space-y-4">
+                  <p className="text-zinc-500">Verified By (Warehouse Lead):</p>
+                  <div className="border-b border-zinc-300 w-full pt-4"></div>
+                  <p className="text-[10px] text-zinc-400">Signature & Date</p>
+                </div>
+                <div className="space-y-4">
+                  <p className="text-zinc-500">Authorized Signatory (Manager):</p>
+                  <div className="border-b border-zinc-300 w-full pt-4"></div>
+                  <p className="text-[10px] text-zinc-400">Signature & Date</p>
+                </div>
+              </div>
+
+              {/* Print notice footer */}
+              <div className="hidden print:block text-center text-[10px] text-zinc-400 mt-16 pt-4 border-t border-dashed">
+                Printed on {new Date().toLocaleString()} from Tareza ERP. This is an official audit cargo shipment receipt.
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

@@ -122,7 +122,7 @@ interface POSState {
   clearCart: () => void;
   parkSale: () => void;
   resumeSale: (saleId: string) => void;
-  completeSale: (options?: { isOffline?: boolean; allProducts?: Product[] }) => SaleRecord | null;
+  completeSale: (options?: { isOffline?: boolean; allProducts?: Product[]; customTimestamp?: string }) => SaleRecord | null;
   getTotals: () => { subtotal: number; vat: number; discount: number; total: number; amountPaid: number; balance: number };
   removeSaleFromOfflineQueue: (saleId: string) => void;
   clearOfflineQueue: () => void;
@@ -430,7 +430,7 @@ export const usePOSStore = create<POSState>()(
           vatTotal: totals.vat,
           discountTotal: totals.discount,
           total: totals.total,
-          timestamp: new Date().toISOString(),
+          timestamp: options?.customTimestamp || new Date().toISOString(),
           status: isOffline ? 'offline_pending' : 'synced',
           receiptNumber: `RCPT-${Math.floor(Date.now() / 1000).toString(16).toUpperCase()}`,
           customerId: state.currentCustomer?.id,
