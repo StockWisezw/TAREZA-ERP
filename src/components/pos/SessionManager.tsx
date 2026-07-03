@@ -28,6 +28,7 @@ import {
 } from '../ui/dialog';
 import { toast } from 'sonner';
 import { supabase } from '../../lib/firebaseClient';
+import { usePOSStore } from '../../store/posStore';
 
 interface SessionManagerProps {
   activeSession?: any;
@@ -75,6 +76,112 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     const dd = String(today.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   });
+
+  const [realtimeTotals, setRealtimeTotals] = useState({
+    cash: 0,
+    credit: 0,
+    mobile: 0,
+    total: 0
+  });
+  const [loadingTotals, setLoadingTotals] = useState(false);
+
+  // Real-time calculation of drawer reconciliation split totals
+  useEffect(() => {
+    if (!showShiftDetails || !activeSession) return;
+
+    const fetchRealtimeTotals = async () => {
+      try {
+        setLoadingTotals(true);
+        const { data: dbSales, error } = await supabase
+          .from('sales')
+          .select('*')
+          .eq('business_id', activeSession.business_id)
+          .gte('created_at', activeSession.opened_at);
+
+        if (error) throw error;
+
+        let salesInShift = [...(dbSales || [])];
+
+        // Merge local/offline sales from POS store
+        try {
+          const localSales = usePOSStore.getState()?.localSales || [];
+          localSales.forEach((localSale: any) => {
+            const localTime = new Date(localSale.timestamp || localSale.created_at || new Date()).toISOString();
+            if (localTime >= activeSession.opened_at) {
+              const exists = salesInShift.some(
+                s => s.receiptNumber === localSale.receiptNumber || 
+                     s.id === localSale.id || 
+                     s.receipt_number === localSale.receiptNumber
+              );
+              if (!exists) {
+                salesInShift.push({
+                  ...localSale,
+                  created_at: localSale.timestamp || localSale.created_at,
+                  status: localSale.status || 'COMPLETED'
+                });
+              }
+            }
+          });
+        } catch (storeErr) {
+          console.warn('Could not read local POS store for realtime totals:', storeErr);
+        }
+
+        // Aggregate payments
+        let cashTotal = 0;
+        let creditTotal = 0;
+        let mobileTotal = 0;
+
+        salesInShift.forEach((sale: any) => {
+          const sStatus = String(sale.status || '').toUpperCase();
+          const allowedStatuses = ['COMPLETED', 'PAID', 'SYNCED', 'OFFLINE_PENDING'];
+          if (sale.status && !allowedStatuses.includes(sStatus)) return;
+
+          if (Array.isArray(sale.payments) && sale.payments.length > 0) {
+            sale.payments.forEach((payment: any) => {
+              const method = payment.method;
+              const amt = Number(payment.amount || 0);
+              if (method === 'usd_cash' || method === 'cash') {
+                cashTotal += amt;
+              } else if (method === 'credit' || method === 'card') {
+                creditTotal += amt;
+              } else if (method === 'ecocash') {
+                mobileTotal += amt;
+              } else {
+                cashTotal += amt;
+              }
+            });
+          } else if (sale.payment_method) {
+            const method = sale.payment_method;
+            const amt = Number(sale.total || sale.total_amount || 0);
+            if (method === 'usd_cash' || method === 'cash') {
+              cashTotal += amt;
+            } else if (method === 'credit' || method === 'card') {
+              creditTotal += amt;
+            } else if (method === 'ecocash') {
+              mobileTotal += amt;
+            } else {
+              cashTotal += amt;
+            }
+          } else {
+            cashTotal += Number(sale.total || sale.total_amount || 0);
+          }
+        });
+
+        setRealtimeTotals({
+          cash: cashTotal,
+          credit: creditTotal,
+          mobile: mobileTotal,
+          total: cashTotal + creditTotal + mobileTotal
+        });
+      } catch (err) {
+        console.warn('Failed to compile realtime totals:', err);
+      } finally {
+        setLoadingTotals(false);
+      }
+    };
+
+    fetchRealtimeTotals();
+  }, [showShiftDetails, activeSession?.id, activeSession?.opened_at]);
 
   // Load and cache active database entities for shift management mapping (like Tareza POS)
   useEffect(() => {
@@ -475,6 +582,46 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                   <span className="text-zinc-400 font-semibold block mb-0.5">Sale Counter</span>
                   <span className="font-bold text-zinc-800 dark:text-zinc-200">
                     {activeSession.sales_count || 0} Transactions
+                  </span>
+                </div>
+              </div>
+
+              {/* Real-time Drawer Reconciliation Summary */}
+              <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex justify-between items-center pb-1.5 border-b border-zinc-150 dark:border-zinc-800">
+                  <span className="text-[10px] uppercase font-black text-indigo-700 dark:text-indigo-400 tracking-wider">Real-time Drawer Reconciliation</span>
+                  {loadingTotals ? (
+                    <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+                  ) : (
+                    <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-500">Live summary</span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
+                    <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Cash</span>
+                    <span className="font-mono text-xs font-black text-emerald-650 dark:text-emerald-400">
+                      ${realtimeTotals.cash.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
+                    <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Credit</span>
+                    <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400">
+                      ${realtimeTotals.credit.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
+                    <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Mobile</span>
+                    <span className="font-mono text-xs font-black text-amber-600 dark:text-amber-500">
+                      ${realtimeTotals.mobile.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center pt-2 border-t border-dashed border-zinc-200 dark:border-zinc-800">
+                  <span className="text-xs font-bold text-zinc-650 dark:text-zinc-350">Total Shift Revenue:</span>
+                  <span className="font-mono text-sm font-black text-zinc-900 dark:text-white">
+                    ${realtimeTotals.total.toFixed(2)}
                   </span>
                 </div>
               </div>
