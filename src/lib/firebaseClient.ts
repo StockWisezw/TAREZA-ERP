@@ -36,6 +36,8 @@ import {
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 import firebaseConfigPlaceholder from '../../firebase-applet-config.json';
+import { db as dexieDb } from './dexieDb';
+import { offlineSyncEngine } from '../services/offlineSyncEngine';
 
 // Use environment variables if present (especially useful for deploying and linking with Vercel),
 // otherwise fall back seamlessly to the local firebase-applet-config.json
@@ -52,7 +54,7 @@ function isPlaceholderOrEmpty(val: string | undefined): boolean {
   );
 }
 
-const resolvedConfig = { ...firebaseConfigPlaceholder };
+const resolvedConfig = { ...firebaseConfigPlaceholder } as any;
 
 if (import.meta.env.VITE_FIREBASE_API_KEY && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_API_KEY)) {
   resolvedConfig.apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
@@ -85,7 +87,7 @@ if (
     resolvedConfig.firestoreDatabaseId.includes('firebaseio')
   )
 ) {
-  resolvedConfig.firestoreDatabaseId = firebaseConfigPlaceholder.firestoreDatabaseId;
+  resolvedConfig.firestoreDatabaseId = (firebaseConfigPlaceholder as any).firestoreDatabaseId;
 }
 if (import.meta.env.VITE_FIREBASE_STORAGE_BUCKET && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET)) {
   resolvedConfig.storageBucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET;
@@ -541,6 +543,11 @@ let activeBusinessIdPromise: Promise<string | null> | null = null;
 export function setActiveBusinessId(id: string | null) {
   cachedBusinessId = id;
   safeSetLocalStorage('tareza_active_business_id', id);
+  if (id && id !== 'default_business') {
+    offlineSyncEngine.hydrateLocalDatabase(id).catch(err => {
+      console.warn('[OfflineSyncEngine] Initial hydration failed:', err);
+    });
+  }
 }
 
 export async function getActiveBusinessId(): Promise<string | null> {
@@ -762,6 +769,9 @@ class SupabaseQueryBuilder {
       const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id') && this.table !== 'business_users';
       const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
 
+      const dexieTable = (dexieDb as any)[this.table];
+
+      // Handle Insert/Upsert
       if (this.isInsert) {
         const itemsToInsert = this.payload.map((item: any) => {
           let docId = item.id || item.$id;
@@ -782,112 +792,58 @@ class SupabaseQueryBuilder {
 
         const insertedItems: any[] = [];
         for (const item of itemsToInsert) {
-          const docRef = fireDoc(db, this.table, item.id);
-          await fireSetDoc(docRef, item);
-          insertedItems.push(item);
+          // Save to local IndexedDB and queue for background sync
+          const savedLocal = await offlineSyncEngine.save(this.table, item);
+          insertedItems.push(savedLocal);
         }
 
         return { data: insertedItems.map(d => normalizeOutput(d.id, d, this.table)), count: itemsToInsert.length, error: null };
       } 
       
+      // Handle Update
       if (this.isUpdate) {
+        const cleanItem = normalizeInput(this.payload, this.table);
+        if (requiresBusinessScope && activeBizId) {
+          if (!(isDevAdminTable && cleanItem.business_id)) {
+            cleanItem.business_id = activeBizId;
+          }
+        }
+
         if (this.targetId) {
-          if (this.table === 'businesses' && !isSystemDev) {
-            const currentUser = fireAuth.currentUser;
-            if (currentUser) {
-              const directDocRef = fireDoc(db, 'business_users', currentUser.uid);
-              const directSnap = await fireGetDoc(directDocRef);
-              const userBizId = directSnap.exists() ? directSnap.data()?.business_id : null;
-              if (userBizId && this.targetId !== userBizId) {
-                throw new Error(`Permission denied: Cannot update other business profile (Target: ${this.targetId}, User Business: ${userBizId})`);
-              }
-            }
-          }
-          const docRef = fireDoc(db, this.table, this.targetId);
-          const cleanItem = normalizeInput(this.payload, this.table);
-          if (requiresBusinessScope && activeBizId) {
-            if (!(isDevAdminTable && cleanItem.business_id)) {
-              cleanItem.business_id = activeBizId;
-            }
-          }
-          await fireUpdateDoc(docRef, cleanItem);
-          const updatedDoc = { id: this.targetId, ...cleanItem };
-          return { data: [normalizeOutput(this.targetId, updatedDoc, this.table)], count: 1, error: null };
+          const existing = dexieTable ? await dexieTable.get(this.targetId) : null;
+          const updated = { ...(existing || {}), ...cleanItem, id: this.targetId };
+          await offlineSyncEngine.save(this.table, updated);
+          return { data: [normalizeOutput(this.targetId, updated, this.table)], count: 1, error: null };
         } else {
-          const results = await this.getFilteredDocs();
-          const cleanItem = normalizeInput(this.payload, this.table);
-          if (requiresBusinessScope && activeBizId) {
-            if (!(isDevAdminTable && cleanItem.business_id)) {
-              cleanItem.business_id = activeBizId;
-            }
-          }
-          for (const docSnap of results) {
-            const docRef = fireDoc(db, this.table, docSnap.id);
-            await fireUpdateDoc(docRef, cleanItem);
+          const results = await this.getFilteredLocalDocs();
+          for (const item of results) {
+            const updated = { ...item, ...cleanItem };
+            await offlineSyncEngine.save(this.table, updated);
           }
           return { data: [], count: results.length, error: null };
         }
       }
 
+      // Handle Delete
       if (this.isDelete) {
         if (this.targetId) {
-          if (requiresBusinessScope && !isSystemDev && activeBizId) {
-            const docRef = fireDoc(db, this.table, this.targetId);
-            const snap = await fireGetDoc(docRef);
-            if (snap.exists() && snap.data()?.business_id !== activeBizId) {
-              throw new Error(`Permission denied: Cannot delete document belonging to another business.`);
-            }
-          }
-          const docRef = fireDoc(db, this.table, this.targetId);
-          await fireDeleteDoc(docRef);
+          await offlineSyncEngine.delete(this.table, this.targetId);
         } else {
-          const results = await this.getFilteredDocs();
-          for (const docSnap of results) {
-            const docRef = fireDoc(db, this.table, docSnap.id);
-            await fireDeleteDoc(docRef);
+          const results = await this.getFilteredLocalDocs();
+          for (const item of results) {
+            await offlineSyncEngine.delete(this.table, item.id);
           }
         }
         return { data: null, count: 0, error: null };
       }
 
-      // SELECT
+      // SELECT single record
       if (this.targetId) {
-        const docRef = fireDoc(db, this.table, this.targetId);
-        let snap;
-        let loadedFromCache = false;
-
-        // Try cache-first read to optimize startup latency and provide immediate optimistic UI state
-        try {
-          const { getDocFromCache } = await import('firebase/firestore');
-          snap = await getDocFromCache(docRef);
-          if (snap && snap.exists()) {
-            loadedFromCache = true;
-            // Background update to keep cache synchronized with remote server
-            setTimeout(async () => {
-              try {
-                await fireGetDoc(docRef);
-              } catch (bgErr) {}
-            }, 50);
-          }
-        } catch (cacheErr) {}
-
-        if (!loadedFromCache) {
-          try {
-            snap = await fireGetDoc(docRef);
-          } catch (err: any) {
-            if (checkIsOfflineError(err)) {
-              const { getDocFromCache } = await import('firebase/firestore');
-              snap = await getDocFromCache(docRef);
-            } else {
-              throw err;
-            }
-          }
-        }
+        const snap = dexieTable ? await dexieTable.get(this.targetId) : null;
         let mappedData = [];
-        if (snap.exists()) {
-          const data = snap.data();
-          if (!requiresBusinessScope || isSystemDev || data?.business_id === activeBizId || this.table === 'businesses') {
-            mappedData = [normalizeOutput(snap.id, data, this.table)];
+        if (snap && snap.deleted !== true) {
+          if (!requiresBusinessScope || isSystemDev || snap.business_id === activeBizId || this.table === 'businesses') {
+            mappedData = [normalizeOutput(snap.id, snap, this.table)];
           }
         }
         return { 
@@ -897,146 +853,115 @@ class SupabaseQueryBuilder {
         };
       }
 
-      const results = await this.getFilteredDocs();
-      const mappedData = results.map(docSnap => normalizeOutput(docSnap.id, docSnap.data(), this.table));
+      // SELECT multiple records
+      const results = await this.getFilteredLocalDocs();
+      const mappedData = results.map(item => normalizeOutput(item.id, item, this.table));
       return { 
         data: mappedData, 
         count: mappedData.length, 
         error: null 
       };
     } catch (error) {
-      console.error(`Firebase query failed on ${this.table}:`, error);
+      console.error(`Local IndexedDB query failed on ${this.table}:`, error);
       return { data: null, count: null, error };
     }
   }
 
-  async getFilteredDocs() {
-     const colRef = fireCollection(db, this.table);
-     let q: any = colRef;
- 
-     const email = fireAuth.currentUser?.email?.toLowerCase();
-     const isSystemDev = email && (
-       email === 'admin@tarezaerp.co.zw' ||
-       email === 'sales@tarezaerp.co.zw' ||
-       email === 'tapsforex@gmail.com' ||
-       email === 'tapiwagahadza54@gmail.com'
-     );
-     
-     const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
-     const isDevAdminTable = isSystemDev && adminTables.includes(this.table);
- 
-     const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id') && this.table !== 'business_users';
-     const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
- 
-     if (requiresBusinessScope && activeBizId && !isDevAdminTable) {
-       const hasBizIdFilter = this.eqFilters.some(f => f.col === 'business_id');
-       if (!hasBizIdFilter) {
-         this.eqFilters.push({ col: 'business_id', val: activeBizId });
-       } else {
-         this.eqFilters = this.eqFilters.map(f => f.col === 'business_id' ? { col: 'business_id', val: activeBizId } : f);
-       }
-     } else if (this.table === 'businesses' && activeBizId && !isDevAdminTable) {
-       if (this.targetId) {
-         this.targetId = activeBizId;
-       } else {
-         const hasIdFilter = this.eqFilters.some(f => f.col === 'id');
-         if (!hasIdFilter) {
-           this.eqFilters.push({ col: 'id', val: activeBizId });
-         } else {
-           this.eqFilters = this.eqFilters.map(f => f.col === 'id' ? { col: 'id', val: activeBizId } : f);
-         }
-       }
-     }
+  async getFilteredLocalDocs() {
+    const dexieTable = (dexieDb as any)[this.table];
+    if (!dexieTable) {
+      return [];
+    }
 
-    const constraints: any[] = [];
-    for (const filter of this.eqFilters) {
-      if (filter.val !== undefined) {
-        if (filter.col === 'id' || filter.col === '$id') {
-          constraints.push(fireWhere(documentId(), '==', filter.val));
-        } else {
-          constraints.push(fireWhere(filter.col, '==', filter.val));
-        }
-      }
-    }
-    for (const filter of this.gteFilters) {
-      if (filter.val !== undefined) {
-        if (filter.col === 'id' || filter.col === '$id') {
-          constraints.push(fireWhere(documentId(), '>=', filter.val));
-        } else {
-          constraints.push(fireWhere(filter.col, '>=', filter.val));
-        }
-      }
-    }
-    for (const filter of this.lteFilters) {
-      if (filter.val !== undefined) {
-        if (filter.col === 'id' || filter.col === '$id') {
-          constraints.push(fireWhere(documentId(), '<=', filter.val));
-        } else {
-          constraints.push(fireWhere(filter.col, '<=', filter.val));
-        }
-      }
-    }
-    for (const filter of this.inFilters) {
-      if (filter.val !== undefined && Array.isArray(filter.val)) {
-        const valToUse = filter.val.length > 0 ? filter.val : ['__empty_list_fallback__'];
-        if (filter.col === 'id' || filter.col === '$id') {
-          constraints.push(fireWhere(documentId(), 'in', valToUse));
-        } else {
-          constraints.push(fireWhere(filter.col, 'in', valToUse));
-        }
-      }
-    }
-    if (this.orderCol) {
-      if (this.orderCol === 'id' || this.orderCol === '$id') {
-        constraints.push(fireOrderBy(documentId(), this.orderAscending ? 'asc' : 'desc'));
+    let results = await dexieTable.toArray();
+
+    // Soft deletion filter
+    results = results.filter((item: any) => item.deleted !== true);
+
+    const email = fireAuth.currentUser?.email?.toLowerCase();
+    const isSystemDev = email && (
+      email === 'admin@tarezaerp.co.zw' ||
+      email === 'sales@tarezaerp.co.zw' ||
+      email === 'tapsforex@gmail.com' ||
+      email === 'tapiwagahadza54@gmail.com'
+    );
+    
+    const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
+    const isDevAdminTable = isSystemDev && adminTables.includes(this.table);
+
+    const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id') && this.table !== 'business_users';
+    const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
+
+    if (requiresBusinessScope && activeBizId && !isDevAdminTable) {
+      const hasBizIdFilter = this.eqFilters.some(f => f.col === 'business_id');
+      if (!hasBizIdFilter) {
+        this.eqFilters.push({ col: 'business_id', val: activeBizId });
       } else {
-        constraints.push(fireOrderBy(this.orderCol, this.orderAscending ? 'asc' : 'desc'));
+        this.eqFilters = this.eqFilters.map(f => f.col === 'business_id' ? { col: 'business_id', val: activeBizId } : f);
       }
-    }
-    if (this.limitNum !== undefined) {
-      constraints.push(fireLimit(this.limitNum));
-    }
-
-    if (constraints.length > 0) {
-      q = fireQuery(colRef, ...constraints);
-    }
-
-    let querySnap;
-    let loadedFromCache = false;
-
-    // Try cache-first query execution to achieve near-instantaneous load speeds for the dashboard and UI
-    try {
-      const { getDocsFromCache } = await import('firebase/firestore');
-      querySnap = await getDocsFromCache(q);
-      if (querySnap && !querySnap.empty) {
-        loadedFromCache = true;
-        // Background refresh to keep the local database synchronized with any external remote edits
-        setTimeout(async () => {
-          try {
-            await fireGetDocs(q);
-          } catch (bgErr) {}
-        }, 50);
-      }
-    } catch (cacheErr) {}
-
-    if (!loadedFromCache) {
-      try {
-        querySnap = await fireGetDocs(q);
-      } catch (err: any) {
-        if (checkIsOfflineError(err)) {
-          try {
-            console.warn(`[Firebase] Client offline, loading query on ${this.table} from cache...`);
-            const { getDocsFromCache } = await import('firebase/firestore');
-            querySnap = await getDocsFromCache(q);
-          } catch (cacheErr) {
-            throw err;
-          }
+    } else if (this.table === 'businesses' && activeBizId && !isDevAdminTable) {
+      if (this.targetId) {
+        this.targetId = activeBizId;
+      } else {
+        const hasIdFilter = this.eqFilters.some(f => f.col === 'id');
+        if (!hasIdFilter) {
+          this.eqFilters.push({ col: 'id', val: activeBizId });
         } else {
-          throw err;
+          this.eqFilters = this.eqFilters.map(f => f.col === 'id' ? { col: 'id', val: activeBizId } : f);
         }
       }
     }
-    return querySnap.docs;
+
+    // Apply eqFilters
+    for (const filter of this.eqFilters) {
+      results = results.filter((item: any) => {
+        const itemVal = item[filter.col];
+        return String(itemVal) === String(filter.val);
+      });
+    }
+
+    // Apply gteFilters
+    for (const filter of this.gteFilters) {
+      results = results.filter((item: any) => {
+        return item[filter.col] >= filter.val;
+      });
+    }
+
+    // Apply lteFilters
+    for (const filter of this.lteFilters) {
+      results = results.filter((item: any) => {
+        return item[filter.col] <= filter.val;
+      });
+    }
+
+    // Apply inFilters
+    for (const filter of this.inFilters) {
+      results = results.filter((item: any) => {
+        return Array.isArray(filter.val) && filter.val.includes(item[filter.col]);
+      });
+    }
+
+    // Apply orderCol sorting
+    if (this.orderCol) {
+      const col = this.orderCol;
+      const asc = this.orderAscending;
+      results.sort((a: any, b: any) => {
+        const valA = a[col];
+        const valB = b[col];
+        if (valA === undefined || valA === null) return 1;
+        if (valB === undefined || valB === null) return -1;
+        if (valA < valB) return asc ? -1 : 1;
+        if (valA > valB) return asc ? 1 : -1;
+        return 0;
+      });
+    }
+
+    // Apply limitNum pagination
+    if (this.limitNum !== undefined) {
+      results = results.slice(0, this.limitNum);
+    }
+
+    return results;
   }
 
   async maybeSingle() {
