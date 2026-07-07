@@ -921,7 +921,13 @@ export default function POS() {
 
     let sale = null;
     try {
-      sale = completeSale({ isOffline, allProducts: products, customTimestamp: saleTimestamp });
+      sale = completeSale({ 
+        isOffline, 
+        allProducts: products, 
+        customTimestamp: saleTimestamp,
+        businessId: activeSession?.business_id,
+        branchId: activeSession?.branch_id
+      });
     } catch (err: any) {
       toast.error(err.message || 'Failed to complete checkout');
       return;

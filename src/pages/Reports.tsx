@@ -21,7 +21,8 @@ import {
   SlidersHorizontal,
   CheckCircle2,
   FileText,
-  Database
+  Database,
+  PackageOpen
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import { supabase } from '../lib/firebaseClient';
@@ -37,6 +38,8 @@ interface ProductStat {
   name: string;
   quantity: number;
   revenue: number;
+  sku?: string;
+  category?: string;
 }
 
 interface Branch {
@@ -127,7 +130,30 @@ export default function Reports() {
             }
           }
         }
-        costOfGoodsSold += qty * cost;
+
+        // Determine pack size multiplier for costing
+        const productId = it.product?.id || it.product_id || it.productId;
+        const matchedProd = productId ? products?.find((p: any) => p.id === productId) : null;
+        const sku = it.product?.sku || it.sku || matchedProd?.sku || '';
+        let packSize = 1;
+        const match = sku.match(/\|PK:(\d+)/i);
+        if (match) {
+          packSize = parseInt(match[1], 10);
+        } else if (it.tier === 'wholesale' || String(it.tier || '').toLowerCase().includes('wholesale')) {
+          const prodObj = it.product || matchedProd;
+          if (prodObj?.pack_size) {
+            packSize = Number(prodObj.pack_size);
+          } else if (prodObj?.packSize) {
+            packSize = Number(prodObj.packSize);
+          } else if (prodObj?.bundles && Array.isArray(prodObj.bundles)) {
+            const b = prodObj.bundles.find((bx: any) => bx.name === 'wholesale' || bx.name?.toLowerCase().includes('wholesale'));
+            if (b && b.pack_size) {
+              packSize = Number(b.pack_size);
+            }
+          }
+        }
+
+        costOfGoodsSold += qty * (cost * packSize);
       });
     });
 
@@ -353,7 +379,30 @@ export default function Reports() {
               }
             }
           }
-          saleCogs += qty * cost;
+
+          // Determine pack size multiplier for costing
+          const productId = it.product?.id || it.product_id || it.productId;
+          const matchedProd = productId ? products?.find((p: any) => p.id === productId) : null;
+          const sku = it.product?.sku || it.sku || matchedProd?.sku || '';
+          let packSize = 1;
+          const match = sku.match(/\|PK:(\d+)/i);
+          if (match) {
+            packSize = parseInt(match[1], 10);
+          } else if (it.tier === 'wholesale' || String(it.tier || '').toLowerCase().includes('wholesale')) {
+            const prodObj = it.product || matchedProd;
+            if (prodObj?.pack_size) {
+              packSize = Number(prodObj.pack_size);
+            } else if (prodObj?.packSize) {
+              packSize = Number(prodObj.packSize);
+            } else if (prodObj?.bundles && Array.isArray(prodObj.bundles)) {
+              const b = prodObj.bundles.find((bx: any) => bx.name === 'wholesale' || bx.name?.toLowerCase().includes('wholesale'));
+              if (b && b.pack_size) {
+                packSize = Number(b.pack_size);
+              }
+            }
+          }
+
+          saleCogs += qty * (cost * packSize);
         });
 
         dailyMap.set(dateKey, {
@@ -536,7 +585,7 @@ export default function Reports() {
       setBranchSalesData(formattedBranch.length ? formattedBranch : [{ name: 'Default Main Branch', revenue: dynamicTotalRevenue }]);
 
       // Sold Products aggregation details helper (Top Performing items)
-      const prodMap = new Map<string, { name: string; qty: number; revenue: number }>();
+      const prodMap = new Map<string, { name: string; qty: number; revenue: number; sku: string; category: string }>();
       salesList.forEach((sale: any) => {
         const items = sale.items || [];
         if (Array.isArray(items)) {
@@ -545,15 +594,28 @@ export default function Reports() {
             const pName = it.product?.name || it.name || 'Miscellaneous Ticket';
             const qty = Number(it.quantity || 0);
             const amt = Number(it.subtotal || it.line_total || (qty * (it.unitPrice || it.price || 0)));
+            const matchedProd = products?.find((p: any) => p.id === pId);
+            const pSku = it.product?.sku || it.sku || matchedProd?.sku || '';
+            const rawCategory = it.product?.category || matchedProd?.category || '';
+            
+            const hasPackSku = pSku.match(/\|PK:(\d+)/i);
+            const isWholesaleOrPack = hasPackSku || 
+                                      pName.toLowerCase().includes('wholesale') || 
+                                      pName.toLowerCase().includes('pack') || 
+                                      rawCategory.toLowerCase().includes('wholesale') || 
+                                      rawCategory.toLowerCase().includes('pack');
+            const category = isWholesaleOrPack ? 'Packs' : (rawCategory || 'General');
 
             if (!prodMap.has(pId)) {
-              prodMap.set(pId, { name: pName, qty: 0, revenue: 0 });
+              prodMap.set(pId, { name: pName, qty: 0, revenue: 0, sku: pSku, category });
             }
             const cur = prodMap.get(pId)!;
             prodMap.set(pId, {
               name: pName,
               qty: cur.qty + qty,
-              revenue: cur.revenue + amt
+              revenue: cur.revenue + amt,
+              sku: pSku,
+              category
             });
           });
         }
@@ -563,7 +625,9 @@ export default function Reports() {
         id,
         name: val.name,
         quantity: val.qty,
-        revenue: val.revenue
+        revenue: val.revenue,
+        sku: val.sku,
+        category: val.category
       })).sort((a, b) => b.revenue - a.revenue);
 
       setProductSalesData(sortedProducts);
@@ -1160,6 +1224,13 @@ export default function Reports() {
                     <ShoppingBag className="w-3.5 h-3.5 text-zinc-400" />
                   </button>
                   <button 
+                    onClick={() => setSalesIntervalTab('wholesale_packs')} 
+                    className={`text-left text-xs px-3 py-2.5 rounded-lg font-semibold flex items-center justify-between transition-colors ${salesIntervalTab === 'wholesale_packs' ? 'bg-zinc-900 text-white' : 'text-zinc-750 hover:bg-zinc-50'}`}
+                  >
+                    <span>Wholesale Packs Sales</span>
+                    <PackageOpen className="w-3.5 h-3.5 text-zinc-400" />
+                  </button>
+                  <button 
                     onClick={() => setSalesIntervalTab('custom')} 
                     className={`text-left text-xs px-3 py-2.5 rounded-lg font-semibold flex items-center justify-between transition-colors ${salesIntervalTab === 'custom' ? 'bg-zinc-900 text-white' : 'text-zinc-750 hover:bg-zinc-50'}`}
                   >
@@ -1374,6 +1445,62 @@ export default function Reports() {
                                 </tr>
                               );
                             })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Sales by Wholesale Packs & Bundles */}
+              {salesIntervalTab === 'wholesale_packs' && (
+                <Card className="border bg-white rounded-xl overflow-hidden shadow-sm">
+                  <CardHeader className="bg-zinc-50/55 border-b">
+                    <div className="flex justify-between items-center flex-col sm:flex-row gap-2">
+                      <div>
+                        <CardTitle className="text-base font-bold flex items-center gap-1.5"><PackageOpen className="w-5 h-5 text-indigo-600" /> Wholesale Packs Performance</CardTitle>
+                        <CardDescription>Quantities and revenues specifically generated from wholesale bulk packs and boxes.</CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="border border-zinc-150 rounded-lg overflow-hidden">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-zinc-50 text-zinc-505 border-b font-mono">
+                          <tr>
+                            <th className="p-3">Rank #</th>
+                            <th className="p-3">Wholesale Pack Catalog Item</th>
+                            <th className="p-3 text-center">Packs Sold</th>
+                            <th className="p-3 text-right">Revenue Contribution (USD)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y font-mono">
+                          {productSalesData
+                            .filter(p => p.category === 'Packs' || p.name.toLowerCase().includes('wholesale') || p.name.toLowerCase().includes('pack'))
+                            .map((p, idx) => {
+                              const percentage = plSummary.grossRevenue ? (p.revenue / plSummary.grossRevenue) * 100 : 0;
+                              return (
+                                <tr key={p.id} className="hover:bg-zinc-50/40">
+                                  <td className="p-3 text-zinc-400 font-sans">{idx + 1}</td>
+                                  <td className="p-3 font-sans font-semibold text-zinc-800">
+                                    <div>{p.name}</div>
+                                    {p.sku && <div className="text-[10px] text-zinc-400 mt-0.5">SKU: {p.sku}</div>}
+                                  </td>
+                                  <td className="p-3 text-center text-zinc-600 font-bold">{p.quantity} packs</td>
+                                  <td className="p-3 text-right">
+                                    <div className="font-extrabold text-zinc-950">${p.revenue.toFixed(2)}</div>
+                                    <div className="text-[10px] text-zinc-403 font-sans">{percentage.toFixed(1)}% weight</div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          {productSalesData.filter(p => p.category === 'Packs' || p.name.toLowerCase().includes('wholesale') || p.name.toLowerCase().includes('pack')).length === 0 && (
+                            <tr>
+                              <td colSpan={4} className="p-8 text-center text-zinc-400 font-sans">
+                                No wholesale pack sales recorded in this period.
+                              </td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>

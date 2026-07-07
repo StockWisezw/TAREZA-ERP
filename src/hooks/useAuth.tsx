@@ -2,6 +2,8 @@ import * as React from 'react';
 import { useState, useEffect, createContext, useContext } from 'react';
 import { rawSupabase } from '../lib/firebaseClient';
 import { db } from '../lib/dexieDb';
+import { indexedDbService } from '../services/indexedDbService';
+import { usePOSStore } from '../store/posStore';
 
 type AuthUser = {
   $id: string;
@@ -107,7 +109,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error('Sign out error', e);
     }
     setUser(null);
-    await db.settings.delete('current_user_session');
+    try {
+      await db.settings.delete('current_user_session');
+      await indexedDbService.clearAllPOSCache();
+      usePOSStore.getState().resetStore();
+    } catch (err) {
+      console.error('Error clearing local cache on signout:', err);
+    }
   };
 
   return (

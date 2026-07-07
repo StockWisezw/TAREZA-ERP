@@ -22,7 +22,8 @@ import {
   Trash2,
   Check,
   Compass,
-  HelpCircle
+  HelpCircle,
+  Mail
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useBusinessStore } from '../store';
@@ -58,6 +59,7 @@ const navigation = [
   { name: 'Suppliers', href: '/suppliers', icon: Truck },
   { name: 'Reports', href: '/reports', icon: FileText },
   { name: 'Staff Messenger', href: '/messenger', icon: MessageSquare },
+  { name: 'Gmail Inbox', href: '/gmail', icon: Mail },
   { name: 'Settings', href: '/settings', icon: Settings },
   { name: 'Support Hub', href: '/support', icon: HelpCircle },
 ];
@@ -86,7 +88,7 @@ export default function Layout() {
   const isDeveloper = user?.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(user.email.toLowerCase());
   // Screen lock removed per user request
   const isLocked = false;
-  const { setBranches, activeBranch, setActiveBranch, branches } = useBusinessStore();
+  const { setBranches, activeBranch, setActiveBranch, branches, setCurrentBusiness } = useBusinessStore();
   const [businessName, setBusinessName] = React.useState<string>('');
   const [businessLogo, setBusinessLogo] = React.useState<string>('');
   const [subStatus, setSubStatus] = React.useState<string>('ACTIVE');
@@ -110,7 +112,7 @@ export default function Layout() {
         if (businessData?.business_id) {
           const { data: bData } = await supabase
             .from('businesses')
-            .select('name, subscription_status, subscription_end_date, logo_url')
+            .select('name, subscription_status, subscription_end_date, logo_url, tax_number')
             .eq('id', businessData.business_id)
             .limit(1)
             .maybeSingle();
@@ -127,6 +129,11 @@ export default function Layout() {
             if (bData.logo_url) {
               setBusinessLogo(bData.logo_url);
             }
+            setCurrentBusiness({
+              id: businessData.business_id,
+              name: bData.name || 'Tareza Business',
+              tax_number: bData.tax_number || null,
+            });
           }
 
           // Fetch branches for branch-wise displays

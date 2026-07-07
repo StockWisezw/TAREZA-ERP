@@ -79,6 +79,7 @@ export type SaleRecord = {
   customerName?: string;
   branchName?: string;
   branch_id?: string;
+  business_id?: string;
 };
 
 export const getPackSize = (sku: string | undefined): number => {
@@ -122,11 +123,12 @@ interface POSState {
   clearCart: () => void;
   parkSale: () => void;
   resumeSale: (saleId: string) => void;
-  completeSale: (options?: { isOffline?: boolean; allProducts?: Product[]; customTimestamp?: string }) => SaleRecord | null;
+  completeSale: (options?: { isOffline?: boolean; allProducts?: Product[]; customTimestamp?: string; businessId?: string; branchId?: string }) => SaleRecord | null;
   getTotals: () => { subtotal: number; vat: number; discount: number; total: number; amountPaid: number; balance: number };
   removeSaleFromOfflineQueue: (saleId: string) => void;
   clearOfflineQueue: () => void;
   loadOfflineQueueFromIndexedDb: () => Promise<void>;
+  resetStore: () => void;
 }
 
 // Fixed 15% VAT for standard items in Zimbabwe if enabled in settings (default off)
@@ -150,7 +152,8 @@ export const usePOSStore = create<POSState>()(
 
       addToCart: (product, quantity = 1, forcedTier) => set((state) => {
         const qtyToAdd = (quantity === undefined || quantity === null || quantity <= 0) ? 1 : quantity;
-        const activeTier = forcedTier || state.pricingTier || 'retail';
+        const hasPacks = getPackSize(product.sku) > 1 || (product.bundles && product.bundles.length > 0);
+        const activeTier = hasPacks ? (forcedTier || state.pricingTier || 'retail') : 'retail';
         const existingItem = state.cart.find((item) => item.product.id === product.id && item.tier === activeTier);
         
         let unitPrice = product.retailPrice;
@@ -233,7 +236,9 @@ export const usePOSStore = create<POSState>()(
 
       setPricingTier: (tier) => set((state) => {
         const updatedCart = state.cart.map(item => {
-          const unitPrice = tier === 'wholesale' ? item.product.wholesalePrice : item.product.retailPrice;
+          const hasPacks = getPackSize(item.product.sku) > 1 || (item.product.bundles && item.product.bundles.length > 0);
+          const activeTier = hasPacks ? tier : 'retail';
+          const unitPrice = activeTier === 'wholesale' ? item.product.wholesalePrice : item.product.retailPrice;
           const subtotal = item.quantity * unitPrice;
           let itemDiscountValue = 0;
           if (item.discount) {
@@ -242,7 +247,7 @@ export const usePOSStore = create<POSState>()(
               : item.discount.value;
           }
           const vatAmount = item.product.taxClass === 'standard' ? (subtotal - itemDiscountValue) * getVatRate() : 0;
-          return { ...item, tier, unitPrice, subtotal, vatAmount };
+          return { ...item, tier: activeTier, unitPrice, subtotal, vatAmount };
         });
         return { pricingTier: tier, cart: updatedCart };
       }),
@@ -250,11 +255,13 @@ export const usePOSStore = create<POSState>()(
       setItemPricingTier: (itemId, tier) => set((state) => {
         const updatedCart = state.cart.map(item => {
           if (item.id === itemId) {
+            const hasPacks = getPackSize(item.product.sku) > 1 || (item.product.bundles && item.product.bundles.length > 0);
+            const activeTier = hasPacks ? tier : 'retail';
             let unitPrice = item.product.retailPrice;
-            if (tier === 'wholesale') {
+            if (activeTier === 'wholesale') {
               unitPrice = item.product.wholesalePrice;
-            } else if (tier && tier !== 'retail' && item.product.bundles && item.product.bundles.length > 0) {
-              const b = item.product.bundles.find((x: any) => x.name === tier);
+            } else if (activeTier && activeTier !== 'retail' && item.product.bundles && item.product.bundles.length > 0) {
+              const b = item.product.bundles.find((x: any) => x.name === activeTier);
               if (b) {
                 unitPrice = Number(b.price || 0);
               }
@@ -267,7 +274,7 @@ export const usePOSStore = create<POSState>()(
                 : item.discount.value;
             }
             const vatAmount = item.product.taxClass === 'standard' ? (subtotal - itemDiscountValue) * getVatRate() : 0;
-            return { ...item, tier, unitPrice, subtotal, vatAmount };
+            return { ...item, tier: activeTier, unitPrice, subtotal, vatAmount };
           }
           return item;
         });
@@ -435,6 +442,8 @@ export const usePOSStore = create<POSState>()(
           receiptNumber: `RCPT-${Math.floor(Date.now() / 1000).toString(16).toUpperCase()}`,
           customerId: state.currentCustomer?.id,
           customerName: state.currentCustomer?.name || 'Walk-In Customer',
+          business_id: options?.businessId,
+          branch_id: options?.branchId,
         };
 
         if (isOffline) {
@@ -489,6 +498,22 @@ export const usePOSStore = create<POSState>()(
           }
         } catch (err) {
           console.error('[Store] Failed to sync offline queue from IndexedDB:', err);
+        }
+      },
+
+      resetStore: () => {
+        set({
+          cart: [],
+          payments: [],
+          pricingTier: 'retail',
+          currentCustomer: null,
+          globalDiscount: undefined,
+          offlineQueue: [],
+          localSales: [],
+          parkedSales: [],
+        });
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('tareza-pos-storage');
         }
       }
     }),

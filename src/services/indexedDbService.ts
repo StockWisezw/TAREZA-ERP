@@ -210,6 +210,22 @@ class IndexedDbService {
       console.error('IndexedDB updateQueuedTransaction error:', e);
     }
   }
+
+  async clearAllPOSCache(): Promise<void> {
+    try {
+      const db = await this.getDB();
+      return new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(['shifts', 'transactions', 'offline_queue'], 'readwrite');
+        transaction.objectStore('shifts').clear();
+        transaction.objectStore('transactions').clear();
+        transaction.objectStore('offline_queue').clear();
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+      });
+    } catch (e) {
+      console.error('IndexedDB clearAllPOSCache error:', e);
+    }
+  }
 }
 
 export const indexedDbService = new IndexedDbService();

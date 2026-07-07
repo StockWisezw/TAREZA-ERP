@@ -84,12 +84,25 @@ export function RegulatoryComplianceExports({
           const mapped = batchData.map((b: any) => {
             const prod = prodData.find((p: any) => p.id === b.product_id);
             const cost = Number(b.cost_price || prod?.cost_price || 0);
+            
+            // Determine pack size multiplier for costing
+            const sku = prod?.sku || '';
+            let packSize = 1;
+            const match = sku.match(/\|PK:(\d+)/i);
+            if (match) {
+              packSize = parseInt(match[1], 10);
+            } else if (prod?.pack_size) {
+              packSize = Number(prod.pack_size);
+            } else if (prod?.packSize) {
+              packSize = Number(prod.packSize);
+            }
+
             return {
               ...b,
               product_name: prod ? prod.name : 'Unknown Product',
               sku: prod ? prod.sku : '-',
-              unit_cost: cost,
-              total_valuation: Number(b.quantity || 0) * cost
+              unit_cost: cost * packSize,
+              total_valuation: Number(b.quantity || 0) * (cost * packSize)
             };
           }).filter(item => item.quantity > 0);
           setInventoryStats(mapped);

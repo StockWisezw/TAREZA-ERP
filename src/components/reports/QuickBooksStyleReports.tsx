@@ -224,8 +224,29 @@ export default function QuickBooksStyleReports() {
         }
         items.forEach((it: any) => {
           const qty = Number(it.quantity || 0);
-          const cost = Number(it.product?.cost_price || it.product?.costPrice || 0);
-          cogs += qty * cost;
+          const cost = Number(it.product?.cost_price || it.product?.costPrice || it.cost_price || it.costPrice || 0);
+          
+          // Determine pack size multiplier for costing
+          const sku = it.product?.sku || it.sku || '';
+          let packSize = 1;
+          const match = sku.match(/\|PK:(\d+)/i);
+          if (match) {
+            packSize = parseInt(match[1], 10);
+          } else if (it.tier === 'wholesale' || String(it.tier || '').toLowerCase().includes('wholesale')) {
+            const prodObj = it.product || (dbData?.products?.find((p: any) => p.id === (it.product_id || it.productId || it.product?.id)));
+            if (prodObj?.pack_size) {
+              packSize = Number(prodObj.pack_size);
+            } else if (prodObj?.packSize) {
+              packSize = Number(prodObj.packSize);
+            } else if (prodObj?.bundles && Array.isArray(prodObj.bundles)) {
+              const b = prodObj.bundles.find((bx: any) => bx.name === 'wholesale' || bx.name?.toLowerCase().includes('wholesale'));
+              if (b && b.pack_size) {
+                packSize = Number(b.pack_size);
+              }
+            }
+          }
+
+          cogs += qty * (cost * packSize);
         });
       });
 
@@ -520,7 +541,8 @@ export default function QuickBooksStyleReports() {
         reportTitle = 'Merchandise Valuation and Turnover Analysis';
         headers = ['Catalog Description (SKU)', 'Count Units on Hand', 'Unit Cost Price', 'Current Valuation', 'Threshold alerts'];
 
-        const calculatedRows: RowItem[] = [];
+        const standardRows: RowItem[] = [];
+        const packRows: RowItem[] = [];
         let totalQty = 0;
         let totalValuationValue = 0;
 
@@ -531,24 +553,56 @@ export default function QuickBooksStyleReports() {
 
           const matchedCost = Number(p.cost_price || p.wholesale_price || 0);
           
-          const currentValDetail = rawQty * matchedCost;
+          // Determine pack size multiplier for inventory costing
+          const sku = p.sku || '';
+          let packSize = 1;
+          const match = sku.match(/\|PK:(\d+)/i);
+          if (match) {
+            packSize = parseInt(match[1], 10);
+          } else if (p.pack_size) {
+            packSize = Number(p.pack_size);
+          } else if (p.packSize) {
+            packSize = Number(p.packSize);
+          } else if (p.name?.toLowerCase().includes('wholesale') || p.name?.toLowerCase().includes('pack')) {
+            if (p.bundles && Array.isArray(p.bundles)) {
+              const b = p.bundles.find((bx: any) => bx.name === 'wholesale' || bx.name?.toLowerCase().includes('wholesale'));
+              if (b && b.pack_size) {
+                packSize = Number(b.pack_size);
+              }
+            }
+          }
+
+          const currentValDetail = rawQty * (matchedCost * packSize);
           totalValuationValue += currentValDetail;
 
-          calculatedRows.push({
+          const rowItem: RowItem = {
             id: `prod_${idx}`,
             label: `${p.name} (${p.sku || 'N/A'})`,
             current: rawQty,
-            prior: matchedCost,
+            prior: matchedCost * packSize,
             variance: currentValDetail,
             percent: invMatch && rawQty < Number(invMatch.reorder_level || 10) ? 1 : 0, // 1 to trigger warning highlight
             indent: 1,
             type: 'detail'
-          });
+          };
+
+          const isWholesaleOrPack = packSize > 1 || 
+                                    sku.match(/\|PK:(\d+)/i) || 
+                                    p.name?.toLowerCase().includes('wholesale') || 
+                                    p.name?.toLowerCase().includes('pack');
+
+          if (isWholesaleOrPack) {
+            packRows.push(rowItem);
+          } else {
+            standardRows.push(rowItem);
+          }
         });
 
         rows = [
-          mapRow('inv_head', 'Merchandise stock units inventory matching', 0, 0, 0, 'header'),
-          ...calculatedRows,
+          mapRow('inv_head_std', 'Standard Retail Items Valuation', 0, 0, 0, 'header'),
+          ...standardRows,
+          mapRow('inv_head_packs', 'Wholesale Packs Valuation', 0, 0, 0, 'header'),
+          ...packRows,
           {
             id: 'inv_tot',
             label: 'TOTAL CORPORATE INVENTORY BOOK CAPITAL',
@@ -566,7 +620,7 @@ export default function QuickBooksStyleReports() {
           { label: 'Total Stock Units', current: `${totalQty} items`, comparison: 'Physical storage capacity' },
           { label: 'Portfolio Valuation', current: formatCurrency(totalValuationValue), comparison: `Framework: ${config.inventoryValuation}` },
           { label: 'COGS Turnover Rate', current: `${(currPL.cogs / (totalValuationValue || 1) * 4).toFixed(2)}x`, comparison: 'Annualized velocity metric' },
-          { label: 'Low-Stock Indicators', current: `${calculatedRows.filter(r => r.percent === 1).length} items`, comparison: 'Below threshold margin', alert: calculatedRows.filter(r => r.percent === 1).length > 0 },
+          { label: 'Low-Stock Indicators', current: `${(standardRows.filter(r => r.percent === 1).length + packRows.filter(r => r.percent === 1).length)} items`, comparison: 'Below threshold margin', alert: (standardRows.filter(r => r.percent === 1).length + packRows.filter(r => r.percent === 1).length) > 0 },
           { label: 'Capital lockup ratio', current: '35.4%', comparison: 'Balanced asset liquidity' }
         ];
 

@@ -180,38 +180,6 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
         </CardContent>
       </Card>
 
-      {/* Global Pricing Tier Switcher */}
-      {(() => {
-        const isPricingToggleEnabled = typeof window !== 'undefined' ? localStorage.getItem('tareza_pricing_toggle') !== 'false' : true;
-        if (!isPricingToggleEnabled) return null;
-        return (
-          <div className="bg-zinc-100 p-1 rounded-xl border border-zinc-205 flex gap-1 text-[11px] font-bold shrink-0 shadow-sm">
-            <button
-              onClick={() => setPricingTier('retail')}
-              className={cn(
-                "flex-grow flex-1 py-1 px-3 rounded-lg text-center transition-all duration-150 cursor-pointer h-7 flex items-center justify-center",
-                pricingTier === 'retail' 
-                  ? "bg-white text-zinc-950 shadow-sm border border-zinc-200" 
-                  : "text-zinc-500 hover:text-zinc-800"
-              )}
-            >
-              Retail Sales Price
-            </button>
-            <button
-              onClick={() => setPricingTier('wholesale')}
-              className={cn(
-                "flex-grow flex-1 py-1 px-3 rounded-lg text-center transition-all duration-150 cursor-pointer h-7 flex items-center justify-center",
-                pricingTier === 'wholesale' 
-                  ? "bg-purple-600 text-white shadow-sm font-bold border-0" 
-                  : "text-zinc-500 hover:text-zinc-805"
-              )}
-            >
-              Wholesale / Pack Price
-            </button>
-          </div>
-        );
-      })()}
-
       {/* Dynamic Interactive Shopping Cart items list container */}
       <Card className="border-zinc-200 shadow-sm flex-1 min-h-[120px] h-full flex flex-col pt-1.5 bg-white pb-1.5 rounded-xl overflow-hidden">
         {cart.length === 0 ? (

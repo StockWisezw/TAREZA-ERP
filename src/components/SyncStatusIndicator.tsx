@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { usePOSStore } from '../store/posStore';
+import { useBusinessStore } from '../store';
 import { Cloud, CloudOff, RefreshCw } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger, PopoverHeader, PopoverTitle, PopoverDescription } from './ui/popover';
 import { ScrollArea } from './ui/scroll-area';
@@ -8,6 +9,9 @@ import { toast } from 'sonner';
 
 export function SyncStatusIndicator() {
   const { offlineQueue } = usePOSStore();
+  const { currentBusiness } = useBusinessStore();
+  const currentBusinessId = currentBusiness?.id;
+
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : true);
   const [isManualSyncing, setIsManualSyncing] = useState(false);
 
@@ -24,7 +28,13 @@ export function SyncStatusIndicator() {
     };
   }, []);
 
-  const pendingCount = offlineQueue.length;
+  // Filter queue by active business ID to prevent cross-workspace data leaks
+  const filteredQueue = React.useMemo(() => {
+    if (!currentBusinessId) return [];
+    return offlineQueue.filter((sale) => sale.business_id === currentBusinessId);
+  }, [offlineQueue, currentBusinessId]);
+
+  const pendingCount = filteredQueue.length;
 
   const handleManualSyncClick = async () => {
     if (!navigator.onLine) {
@@ -92,7 +102,7 @@ export function SyncStatusIndicator() {
         {pendingCount > 0 ? (
           <ScrollArea className="h-64">
             <div className="p-2 space-y-1">
-              {offlineQueue.map((sale) => (
+              {filteredQueue.map((sale) => (
                 <div key={sale.id} className="text-sm p-3 rounded-md hover:bg-zinc-150 dark:hover:bg-zinc-800 flex justify-between items-start transition-colors">
                   <div className="flex flex-col overflow-hidden">
                     <span className="font-medium text-zinc-900 dark:text-zinc-100">{sale.receiptNumber}</span>
