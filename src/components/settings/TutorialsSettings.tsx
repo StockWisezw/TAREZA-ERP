@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -22,8 +22,13 @@ import {
   AlertTriangle,
   ArrowDownLeft,
   HeartHandshake,
-  Play
+  Play,
+  ExternalLink,
+  Film
 } from 'lucide-react';
+import { db } from '../../lib/firebaseClient';
+import { collection, getDocs } from 'firebase/firestore';
+import offlineDb from '../../lib/dexieDb';
 
 interface TutorialTopic {
   id: string;
@@ -44,6 +49,106 @@ export function TutorialsSettings() {
   const [simCostPrice, setSimCostPrice] = useState<number>(100);
   const [simQty, setSimQty] = useState<number>(50);
   const [simAccountType, setSimAccountType] = useState<'cash' | 'payable'>('payable');
+
+  // 🎥 Load dynamic video walkthroughs from Firestore / Offline IndexedDB backup
+  const [videoTutorials, setVideoTutorials] = useState<any[]>([]);
+  const [loadingVideos, setLoadingVideos] = useState(false);
+
+  const DEFAULT_BACKUP_VIDEOS = [
+    {
+      id: '1',
+      title: "1. User Sign In & Workspace Activation",
+      description: "Learn how to securely log into the Tareza ERP portal, select your designated retail outlet or warehouse, and open your daily cashier register float session.",
+      video_url: "https://www.youtube.com/watch?v=A_auth_signin",
+      duration: "2:45",
+      platform: "YouTube Guide"
+    },
+    {
+      id: '2',
+      title: "2. High-Contrast Dashboard & Live Metrics",
+      description: "Take a complete tour of the executive dashboard. Understand live sales telemetry, real-time sync states, performance index charts, and multi-branch ledger alerts.",
+      video_url: "https://www.youtube.com/watch?v=B_dashboard_tour",
+      duration: "3:10",
+      platform: "YouTube Guide"
+    },
+    {
+      id: '3',
+      title: "3. High-Speed POS & Dual-Currency Recalculation",
+      description: "Learn how to process multi-currency transactions in both USD and ZiG, adjust real-time exchange rates, print receipts, and accept payments via EcoCash, InnBucks, or cash.",
+      video_url: "https://www.youtube.com/watch?v=C_pos_checkout",
+      duration: "4:30",
+      platform: "YouTube Guide"
+    },
+    {
+      id: '4',
+      title: "4. Register Sessions & Float Audit Controls",
+      description: "Discover how to eliminate cash drawer discrepancies. Master opening drawer floats, recording petty cash payouts, requesting supervisor PIN overrides, and running closing variance audits.",
+      video_url: "https://www.youtube.com/watch?v=D_register_sessions",
+      duration: "3:15",
+      platform: "YouTube Guide"
+    },
+    {
+      id: '5',
+      title: "5. Inventory Thresholds & Bundle Packaging",
+      description: "Set up and manage stock thresholds, configure product six-packs or bulk packaging crates, define wholesale vs retail pricing lists, and coordinate stock transfers between branch locations.",
+      video_url: "https://www.youtube.com/watch?v=E_inventory_controls",
+      duration: "3:50",
+      platform: "YouTube Guide"
+    },
+    {
+      id: '6',
+      title: "6. Real-Time Financial Reports & PDF Export",
+      description: "Learn how to automatically generate and audit balanced Profit & Loss statements, Accrual Balance Sheets, and product contributions, then instantly export them as CSV or PDF.",
+      video_url: "https://www.youtube.com/watch?v=F_financial_reports",
+      duration: "4:05",
+      platform: "YouTube Guide"
+    }
+  ];
+
+  useEffect(() => {
+    const loadTutorialVideos = async () => {
+      setLoadingVideos(true);
+      try {
+        const colRef = collection(db, 'tutorial_videos');
+        const snap = await getDocs(colRef);
+        const list: any[] = [];
+        snap.forEach((docSnapshot) => {
+          list.push({ id: docSnapshot.id, ...docSnapshot.data() });
+        });
+
+        if (list.length > 0) {
+          list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+          setVideoTutorials(list);
+          
+          // Cache locally
+          if (offlineDb) {
+            await offlineDb.tutorial_videos.clear();
+            await offlineDb.tutorial_videos.bulkPut(list);
+          }
+        } else {
+          // Empty, fallback to default seed array
+          setVideoTutorials(DEFAULT_BACKUP_VIDEOS);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch Firestore video tutorials, trying cached IndexedDB:", err);
+        if (offlineDb) {
+          const cached = await offlineDb.tutorial_videos.toArray();
+          if (cached.length > 0) {
+            cached.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+            setVideoTutorials(cached);
+          } else {
+            setVideoTutorials(DEFAULT_BACKUP_VIDEOS);
+          }
+        } else {
+          setVideoTutorials(DEFAULT_BACKUP_VIDEOS);
+        }
+      } finally {
+        setLoadingVideos(false);
+      }
+    };
+
+    loadTutorialVideos();
+  }, []);
 
   const topics: TutorialTopic[] = [
     {
@@ -539,6 +644,64 @@ export function TutorialsSettings() {
 
         </div>
 
+      </div>
+
+      {/* 🎥 Interactive Video Walkthrough series (Dynamic list from Firestore) */}
+      <div className="space-y-4">
+        <div className="flex justify-between items-center pb-2 border-b border-zinc-250 dark:border-zinc-800">
+          <div>
+            <h4 className="text-base font-black text-zinc-900 dark:text-white flex items-center gap-2">
+              <Film className="w-5 h-5 text-indigo-500" />
+              Video Walkthrough Series & Staff Training Courses
+            </h4>
+            <p className="text-xs text-zinc-400">
+              Interactive 1-on-1 walk-throughs of system capabilities, recorded directly on operational modules
+            </p>
+          </div>
+          <Badge variant="outline" className="text-[10px] font-mono border-indigo-500/30 text-indigo-500 bg-indigo-500/5 font-bold">
+            {videoTutorials.length} WALKTHROUGHS AVAILABLE
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {videoTutorials.map((video, idx) => (
+            <Card key={video.id || idx} className="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden rounded-2xl group">
+              <div className="p-5 space-y-3 flex-1">
+                <div className="flex justify-between items-center">
+                  <Badge className="bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/15 border border-indigo-500/20 text-[9.5px] font-mono font-bold px-2 py-0.5">
+                    {video.platform || "YouTube Guide"}
+                  </Badge>
+                  <span className="text-[10px] font-mono font-bold text-zinc-400">
+                    ⏱️ {video.duration || "2:30"}
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <h5 className="font-bold text-sm text-zinc-900 dark:text-white leading-snug group-hover:text-indigo-500 transition-colors">
+                    {video.title}
+                  </h5>
+                  <p className="text-xs text-zinc-550 dark:text-zinc-400 leading-relaxed line-clamp-3 font-sans">
+                    {video.description || "Learn how to operate this module on the Tareza ERP platform with our step-by-step training course."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-zinc-50/50 dark:bg-zinc-950/40 border-t border-zinc-150 dark:border-zinc-850 flex items-center justify-between gap-4">
+                <span className="text-[10px] text-zinc-400 truncate font-mono select-all block flex-1">
+                  {video.video_url}
+                </span>
+                <Button
+                  size="xs"
+                  onClick={() => window.open(video.video_url, '_blank')}
+                  className="bg-zinc-900 hover:bg-indigo-600 text-white dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-indigo-600 dark:hover:text-white font-bold text-[10.5px] rounded-lg shrink-0 h-7 flex items-center gap-1 shadow-sm transition-all"
+                >
+                  <Play className="w-2.5 h-2.5 fill-current" />
+                  Play Video
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
       </div>
 
       {/* FOOTER CALL FOR SUPPORT AND LIVE TRAININGS */}

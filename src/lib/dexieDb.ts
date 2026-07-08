@@ -67,6 +67,7 @@ class TarezaOfflineDatabase extends Dexie {
   offlineQueue!: Table<OfflineQueueRecord, string>;
   syncLogs!: Table<SyncLogRecord, string>;
   settings!: Table<any, string>;
+  tutorial_videos!: Table<any, string>;
 
   constructor() {
     super('TarezaEnterpriseOfflineDB');
@@ -104,7 +105,8 @@ class TarezaOfflineDatabase extends Dexie {
       exchange_rate_history: 'id, currency_id, syncStatus',
       offlineQueue: 'id, type, recordId, timestamp, status, priority',
       syncLogs: 'id, timestamp, status, syncStatus',
-      settings: 'id, key, syncStatus'
+      settings: 'id, key, syncStatus',
+      tutorial_videos: 'id, title, syncStatus'
     });
   }
 }

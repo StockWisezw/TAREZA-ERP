@@ -42,7 +42,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from '../components/ui/badge';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
-import { supabase, firebaseConfig } from '../lib/firebaseClient';
+import { supabase, firebaseConfig, db } from '../lib/firebaseClient';
+import offlineDb from '../lib/dexieDb';
+import { collection, getDocs, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { Trash2, Edit3, Plus, RotateCcw, Play, ExternalLink, Film } from 'lucide-react';
 import { toast } from 'sonner';
 import { MarketingAssets } from '../components/settings/MarketingAssets';
 
@@ -60,6 +63,206 @@ export default function DeveloperPanel() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [businessUsers, setBusinessUsers] = useState<any[]>([]);
   const [userSearch, setUserSearch] = useState('');
+
+  // 🎥 Video Walkthrough Tutorials Admin State
+  const [tutorialVideos, setTutorialVideos] = useState<any[]>([]);
+  const [loadingVideos, setLoadingVideos] = useState(false);
+  const [showVideoManager, setShowVideoManager] = useState(false);
+  const [videoForm, setVideoForm] = useState({
+    id: '',
+    title: '',
+    description: '',
+    video_url: '',
+    duration: '',
+    platform: 'YouTube Guide'
+  });
+  const [isEditingVideo, setIsEditingVideo] = useState(false);
+
+  // Default values to seed
+  const DEFAULT_VIDEO_TUTORIALS = [
+    {
+      title: "1. User Sign In & Workspace Activation",
+      description: "Learn how to securely log into the Tareza ERP portal, select your designated retail outlet or warehouse, and open your daily cashier register float session.",
+      video_url: "https://www.youtube.com/watch?v=A_auth_signin",
+      duration: "2:45",
+      platform: "YouTube Guide"
+    },
+    {
+      title: "2. High-Contrast Dashboard & Live Metrics",
+      description: "Take a complete tour of the executive dashboard. Understand live sales telemetry, real-time sync states, performance index charts, and multi-branch ledger alerts.",
+      video_url: "https://www.youtube.com/watch?v=B_dashboard_tour",
+      duration: "3:10",
+      platform: "YouTube Guide"
+    },
+    {
+      title: "3. High-Speed POS & Dual-Currency Recalculation",
+      description: "Learn how to process multi-currency transactions in both USD and ZiG, adjust real-time exchange rates, print receipts, and accept payments via EcoCash, InnBucks, or cash.",
+      video_url: "https://www.youtube.com/watch?v=C_pos_checkout",
+      duration: "4:30",
+      platform: "YouTube Guide"
+    },
+    {
+      title: "4. Register Sessions & Float Audit Controls",
+      description: "Discover how to eliminate cash drawer discrepancies. Master opening drawer floats, recording petty cash payouts, requesting supervisor PIN overrides, and running closing variance audits.",
+      video_url: "https://www.youtube.com/watch?v=D_register_sessions",
+      duration: "3:15",
+      platform: "YouTube Guide"
+    },
+    {
+      title: "5. Inventory Thresholds & Bundle Packaging",
+      description: "Set up and manage stock thresholds, configure product six-packs or bulk packaging crates, define wholesale vs retail pricing lists, and coordinate stock transfers between branch locations.",
+      video_url: "https://www.youtube.com/watch?v=E_inventory_controls",
+      duration: "3:50",
+      platform: "YouTube Guide"
+    },
+    {
+      title: "6. Real-Time Financial Reports & PDF Export",
+      description: "Learn how to automatically generate and audit balanced Profit & Loss statements, Accrual Balance Sheets, and product contributions, then instantly export them as CSV or PDF.",
+      video_url: "https://www.youtube.com/watch?v=F_financial_reports",
+      duration: "4:05",
+      platform: "YouTube Guide"
+    }
+  ];
+
+  const fetchTutorialVideos = async () => {
+    setLoadingVideos(true);
+    try {
+      const colRef = collection(db, 'tutorial_videos');
+      const snap = await getDocs(colRef);
+      const list: any[] = [];
+      snap.forEach((docSnapshot) => {
+        list.push({ id: docSnapshot.id, ...docSnapshot.data() });
+      });
+
+      if (list.length === 0) {
+        // Automatically seed default tutorials if none exist
+        const seededList: any[] = [];
+        for (const item of DEFAULT_VIDEO_TUTORIALS) {
+          const docRef = doc(collection(db, 'tutorial_videos'));
+          const itemWithTime = { ...item, created_at: new Date().toISOString() };
+          await setDoc(docRef, itemWithTime);
+          seededList.push({ id: docRef.id, ...itemWithTime });
+        }
+        seededList.sort((a, b) => a.title.localeCompare(b.title));
+        setTutorialVideos(seededList);
+        
+        // Cache in offline DB
+        if (offlineDb) {
+          await offlineDb.tutorial_videos.clear();
+          await offlineDb.tutorial_videos.bulkPut(seededList);
+        }
+      } else {
+        list.sort((a, b) => a.title.localeCompare(b.title));
+        setTutorialVideos(list);
+
+        // Cache in offline DB
+        if (offlineDb) {
+          await offlineDb.tutorial_videos.clear();
+          await offlineDb.tutorial_videos.bulkPut(list);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load tutorial videos:", err);
+      // Fallback to IndexedDB
+      if (offlineDb) {
+        const cached = await offlineDb.tutorial_videos.toArray();
+        if (cached.length > 0) {
+          cached.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+          setTutorialVideos(cached);
+          toast.success("Loaded tutorials from offline backup store.");
+        }
+      }
+    } finally {
+      setLoadingVideos(false);
+    }
+  };
+
+  const handleSaveVideo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!videoForm.title || !videoForm.video_url) {
+      toast.error("Please fill in the title and video URL.");
+      return;
+    }
+
+    try {
+      setLoadingVideos(true);
+      const payload = {
+        title: videoForm.title,
+        description: videoForm.description,
+        video_url: videoForm.video_url,
+        duration: videoForm.duration || "2:00",
+        platform: videoForm.platform || "YouTube Guide",
+        updated_at: new Date().toISOString()
+      };
+
+      if (isEditingVideo && videoForm.id) {
+        const docRef = doc(db, 'tutorial_videos', videoForm.id);
+        await updateDoc(docRef, payload);
+        toast.success("Tutorial video updated successfully!");
+      } else {
+        const docRef = doc(collection(db, 'tutorial_videos'));
+        const newPayload = { ...payload, created_at: new Date().toISOString() };
+        await setDoc(docRef, newPayload);
+        toast.success("New tutorial video registered successfully!");
+      }
+
+      setVideoForm({ id: '', title: '', description: '', video_url: '', duration: '', platform: 'YouTube Guide' });
+      setIsEditingVideo(false);
+      await fetchTutorialVideos();
+    } catch (err) {
+      console.error("Failed to save tutorial video:", err);
+      toast.error("An error occurred while saving the tutorial video.");
+    } finally {
+      setLoadingVideos(false);
+    }
+  };
+
+  const handleDeleteVideo = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this tutorial video?")) return;
+
+    try {
+      setLoadingVideos(true);
+      const docRef = doc(db, 'tutorial_videos', id);
+      await deleteDoc(docRef);
+      toast.success("Tutorial video deleted.");
+      await fetchTutorialVideos();
+    } catch (err) {
+      console.error("Failed to delete tutorial video:", err);
+      toast.error("An error occurred while deleting.");
+    } finally {
+      setLoadingVideos(false);
+    }
+  };
+
+  const handleResetToDefaultVideos = async () => {
+    if (!window.confirm("Are you sure you want to reset all tutorials to system defaults? This will erase any custom edits!")) return;
+
+    try {
+      setLoadingVideos(true);
+      
+      // Clear existing first
+      const colRef = collection(db, 'tutorial_videos');
+      const snap = await getDocs(colRef);
+      for (const docSnapshot of snap.docs) {
+        await deleteDoc(doc(db, 'tutorial_videos', docSnapshot.id));
+      }
+
+      toast.info("Clearing complete, seeding system default walkthroughs...");
+      await fetchTutorialVideos();
+      toast.success("Successfully restored all walkthrough tutorials to factory defaults.");
+    } catch (err) {
+      console.error("Failed to reset tutorial videos:", err);
+      toast.error("An error occurred during reset.");
+    } finally {
+      setLoadingVideos(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isDeveloper) {
+      fetchTutorialVideos();
+    }
+  }, [isDeveloper]);
 
   // Support tickets state
   const [supportTickets, setSupportTickets] = useState<any[]>([]);
@@ -1561,6 +1764,257 @@ export async function paynowCallback(req, res) {
             </CardContent>
           </Card>
         </div>
+
+        {/* 📽️ Dynamic Tutorial Video Series Manager */}
+        <Card className="border-indigo-150/50 dark:border-zinc-800 shadow-md rounded-2xl overflow-hidden bg-gradient-to-tr from-white to-zinc-50/40 dark:from-zinc-950 dark:to-zinc-900/40">
+          <CardHeader className="p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 cursor-pointer select-none border-b border-zinc-100 dark:border-zinc-850" onClick={() => setShowVideoManager(!showVideoManager)}>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                  <Film className="w-4 h-4" />
+                </div>
+                <CardTitle className="text-base font-black text-zinc-900 dark:text-white">Staff Walkthrough & Video Tutorials Database</CardTitle>
+              </div>
+              <CardDescription className="text-xs">
+                Dynamically update official YouTube URL paths and script metadata served to end-users without touching code
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <Badge variant="outline" className="text-[9.5px] font-mono border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 font-bold px-2 py-0.5">
+                ACTIVE CLOUD METRICS
+              </Badge>
+              <Button size="xs" variant="ghost" className="text-zinc-500 hover:text-zinc-900 h-8 text-[11px] font-bold">
+                {showVideoManager ? "Collapse Manager" : "Expand Manager"}
+              </Button>
+            </div>
+          </CardHeader>
+
+          {showVideoManager && (
+            <CardContent className="p-6 space-y-6 animate-in fade-in duration-300">
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+                
+                {/* Left Side: Form Editor */}
+                <form onSubmit={handleSaveVideo} className="xl:col-span-5 space-y-4 border-r border-zinc-100 dark:border-zinc-850 pr-0 xl:pr-8">
+                  <div className="pb-2 border-b border-zinc-100 dark:border-zinc-850 flex justify-between items-center">
+                    <span className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                      {isEditingVideo ? <Edit3 className="w-3.5 h-3.5 text-indigo-500" /> : <Plus className="w-3.5 h-3.5 text-emerald-500" />}
+                      {isEditingVideo ? "Edit Walkthrough Video" : "Register New Video Guide"}
+                    </span>
+                    {isEditingVideo && (
+                      <Button 
+                        type="button" 
+                        size="xs" 
+                        variant="ghost" 
+                        onClick={() => {
+                          setIsEditingVideo(false);
+                          setVideoForm({ id: '', title: '', description: '', video_url: '', duration: '', platform: 'YouTube Guide' });
+                        }}
+                        className="text-zinc-400 hover:text-zinc-650 h-6 text-[10px]"
+                      >
+                        Cancel Edit
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Video Title Walkthrough</label>
+                    <Input 
+                      type="text" 
+                      placeholder="e.g., 1. User Sign In & Workspace Activation"
+                      value={videoForm.title}
+                      onChange={(e) => setVideoForm({ ...videoForm, title: e.target.value })}
+                      className="h-9 text-xs bg-zinc-50/50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Platform Group</label>
+                      <select 
+                        value={videoForm.platform}
+                        onChange={(e) => setVideoForm({ ...videoForm, platform: e.target.value })}
+                        className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900 h-9 px-2 text-xs text-zinc-850 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      >
+                        <option value="YouTube Guide">YouTube Guide</option>
+                        <option value="Staff Walkthrough">Staff Walkthrough</option>
+                        <option value="Admin Academy">Admin Academy</option>
+                        <option value="Customer Overview">Customer Overview</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Duration (M:S)</label>
+                      <Input 
+                        type="text" 
+                        placeholder="e.g., 3:15"
+                        value={videoForm.duration}
+                        onChange={(e) => setVideoForm({ ...videoForm, duration: e.target.value })}
+                        className="h-9 text-xs bg-zinc-50/50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Video Embed / URL Link</label>
+                    <Input 
+                      type="text" 
+                      placeholder="e.g., https://www.youtube.com/watch?v=..."
+                      value={videoForm.video_url}
+                      onChange={(e) => setVideoForm({ ...videoForm, video_url: e.target.value })}
+                      className="h-9 text-xs bg-zinc-50/50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Walkthrough Module Description</label>
+                    <textarea 
+                      placeholder="Briefly describe what this video teaches cashier or executive staffs..."
+                      rows={3}
+                      value={videoForm.description}
+                      onChange={(e) => setVideoForm({ ...videoForm, description: e.target.value })}
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900 p-2.5 text-xs text-zinc-850 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <Button 
+                    type="submit" 
+                    disabled={loadingVideos}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 h-9 rounded-xl flex items-center justify-center gap-1.5 mt-2 shadow-sm"
+                  >
+                    {isEditingVideo ? <Edit3 className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                    {isEditingVideo ? "Update Walkthrough Details" : "Register Video Tutorial"}
+                  </Button>
+                </form>
+
+                {/* Right Side: Active Database List */}
+                <div className="xl:col-span-7 space-y-4">
+                  <div className="pb-2 border-b border-zinc-100 dark:border-zinc-850 flex justify-between items-center">
+                    <span className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-wider">
+                      Active Walkthrough Library ({tutorialVideos.length})
+                    </span>
+                    <Button 
+                      type="button" 
+                      size="xs" 
+                      variant="outline" 
+                      onClick={fetchTutorialVideos}
+                      disabled={loadingVideos}
+                      className="h-6 text-[10.5px] text-zinc-500 font-semibold rounded-lg flex items-center gap-1"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${loadingVideos ? 'animate-spin' : ''}`} />
+                      Refresh Firestore
+                    </Button>
+                  </div>
+
+                  {loadingVideos && tutorialVideos.length === 0 ? (
+                    <div className="h-48 flex items-center justify-center text-zinc-400 italic text-xs gap-2">
+                      <RefreshCw className="w-4 h-4 animate-spin text-zinc-300" />
+                      Connecting to Firestore database...
+                    </div>
+                  ) : tutorialVideos.length === 0 ? (
+                    <div className="h-48 flex flex-col items-center justify-center border border-dashed rounded-xl text-zinc-400 text-xs italic gap-1.5 bg-zinc-50/30">
+                      <span>No custom videos defined. Click below to restore.</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5 max-h-[420px] overflow-y-auto pr-1.5 custom-scrollbar">
+                      {tutorialVideos.map((video) => (
+                        <div key={video.id} className="p-3.5 border border-zinc-150 dark:border-zinc-850 rounded-xl bg-white dark:bg-zinc-900/40 hover:shadow-sm transition-all space-y-2">
+                          <div className="flex justify-between items-start gap-4">
+                            <div>
+                              <h5 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 font-sans leading-snug">
+                                {video.title}
+                              </h5>
+                              <div className="flex items-center gap-2 mt-1">
+                                <Badge variant="secondary" className="text-[9px] py-0.2 px-1.5 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 font-mono font-semibold">
+                                  {video.platform}
+                                </Badge>
+                                <span className="text-[10px] text-zinc-400 font-mono">Duration: {video.duration || "2:00"}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Button 
+                                size="xs" 
+                                variant="ghost" 
+                                onClick={() => {
+                                  setIsEditingVideo(true);
+                                  setVideoForm({
+                                    id: video.id,
+                                    title: video.title || '',
+                                    description: video.description || '',
+                                    video_url: video.video_url || '',
+                                    duration: video.duration || '',
+                                    platform: video.platform || 'YouTube Guide'
+                                  });
+                                }}
+                                className="h-7 w-7 p-0 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-850"
+                                title="Edit Walkthrough"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button 
+                                size="xs" 
+                                variant="ghost" 
+                                onClick={() => handleDeleteVideo(video.id)}
+                                className="h-7 w-7 p-0 text-zinc-400 hover:text-rose-600 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-850"
+                                title="Delete Walkthrough"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button 
+                                size="xs" 
+                                variant="ghost" 
+                                onClick={() => window.open(video.video_url, '_blank')}
+                                className="h-7 w-7 p-0 text-zinc-400 hover:text-zinc-850 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-850"
+                                title="Visit Video URL Link"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          {video.description && (
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-450 leading-relaxed font-sans">
+                              {video.description}
+                            </p>
+                          )}
+
+                          <div className="bg-zinc-50 dark:bg-zinc-950 p-2 rounded-lg border border-zinc-200/50 dark:border-zinc-850 flex items-center gap-1.5">
+                            <span className="text-[9px] font-mono text-zinc-400 font-bold">URL:</span>
+                            <span className="text-[9.5px] font-mono text-zinc-500 select-all truncate block flex-1">
+                              {video.video_url}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              {/* Bottom bar for resetting */}
+              <div className="pt-4 border-t border-zinc-100 dark:border-zinc-850 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs">
+                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium">
+                  Note: Changes are published to all retail staff training portals instantly in real time.
+                </span>
+                <Button 
+                  type="button" 
+                  size="xs" 
+                  variant="outline" 
+                  onClick={handleResetToDefaultVideos}
+                  disabled={loadingVideos}
+                  className="h-7 text-[10.5px] border-rose-500/20 text-rose-600 hover:bg-rose-500/10 font-bold rounded-lg flex items-center gap-1 shrink-0"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Restore Factory Tutorials
+                </Button>
+              </div>
+
+            </CardContent>
+          )}
+        </Card>
 
         {/* Visual Brand Assets Hub */}
         <div className="p-6 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200/80 dark:border-zinc-800 shadow-sm">

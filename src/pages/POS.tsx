@@ -326,7 +326,7 @@ export default function POS() {
         }
         
         const refreshPOSProducts = () => {
-          let productsQuery = supabase.from('products').select('*');
+          let productsQuery = supabase.from('products').select('*').eq('is_active', true);
           if (userBusinessId) {
             productsQuery = productsQuery.eq('business_id', userBusinessId);
           }
@@ -397,7 +397,7 @@ export default function POS() {
            }
         };
 
-        let initProductsQuery = supabase.from('products').select('*');
+        let initProductsQuery = supabase.from('products').select('*').eq('is_active', true);
         if (userBusinessId) {
           initProductsQuery = initProductsQuery.eq('business_id', userBusinessId);
         }

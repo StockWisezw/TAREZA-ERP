@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 import { 
   LineChart, 
   Line, 
@@ -23,7 +25,8 @@ import {
   Database, 
   CheckCircle2, 
   Info,
-  Calendar
+  Calendar,
+  Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -191,6 +194,144 @@ export function AIForecasting({ salesList, businessName = "Tareza Workspace" }: 
     }
   };
 
+  const exportForecastToPDF = () => {
+    if (!forecastData) {
+      toast.error("No forecast data available to export.");
+      return;
+    }
+
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'pt',
+        format: 'letter'
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 54;
+      const contentWidth = pageWidth - (margin * 2);
+      let y = margin;
+
+      // Header Company Identity
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.setTextColor(79, 70, 229); // Indigo 600
+      doc.text('TAREZA AI FORECASTING', margin, y);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(66, 66, 66);
+      doc.text('Prepared: ' + new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString(), pageWidth - margin - 180, y + 4);
+
+      y += 20;
+      doc.setFontSize(9);
+      doc.setTextColor(110, 110, 110);
+      doc.text('Advanced Strategic Retail Growth Projection & Analytics', margin, y);
+      y += 15;
+      doc.text(`Operating Business context: ${businessName}`, margin, y);
+
+      y += 20;
+      // Divider
+      doc.setDrawColor(224, 224, 224);
+      doc.setLineWidth(1);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 25;
+
+      // Title
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(79, 70, 229);
+      doc.text(`AI SALES FORECAST (${forecastPeriod.toUpperCase()} PROJECTION)`, margin, y);
+
+      y += 18;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(66, 66, 66);
+      doc.text(`Calculation Heuristics: ${forecastData.isOfflineMode ? 'Local Quantitative Regression' : 'Google Gemini AI Engine'}`, margin, y);
+
+      y += 20;
+
+      // Summary
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(31, 41, 55);
+      doc.text('Strategic Summary', margin, y);
+      y += 15;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(55, 65, 81);
+      const splitSummary = doc.splitTextToSize(forecastData.summary, contentWidth);
+      doc.text(splitSummary, margin, y);
+      y += splitSummary.length * 12 + 15;
+
+      // Tables
+      const headers = [['Forecast Period', 'Projected Revenue (USD)', 'Confidence Interval', 'Primary Growth Driver']];
+      const body = forecastData.forecastPoints.map(p => [
+        p.period,
+        `$${p.forecastedRevenue.toFixed(2)}`,
+        `$${p.confidenceIntervalLower.toFixed(2)} - $${p.confidenceIntervalUpper.toFixed(2)}`,
+        p.keyDriver
+      ]);
+
+      (doc as any).autoTable({
+        startY: y,
+        head: headers,
+        body: body,
+        margin: { left: margin, right: margin },
+        theme: 'grid',
+        headStyles: {
+          fillColor: [79, 70, 229],
+          textColor: [255, 255, 255],
+          fontSize: 9,
+          fontStyle: 'bold'
+        },
+        bodyStyles: {
+          fontSize: 9,
+          textColor: [40, 40, 40]
+        },
+        tableWidth: contentWidth
+      });
+
+      y = (doc as any).lastAutoTable.finalY + 25;
+
+      if (y > pageHeight - 150) {
+        doc.addPage();
+        y = margin;
+      }
+
+      // Recommendations
+      if (forecastData.recommendations && forecastData.recommendations.length > 0) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.setTextColor(79, 70, 229);
+        doc.text('Strategic Actionable Recommendations', margin, y);
+        y += 18;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9.5);
+        doc.setTextColor(55, 65, 81);
+
+        forecastData.recommendations.forEach((rec, idx) => {
+          const splitRec = doc.splitTextToSize(`${idx + 1}. ${rec}`, contentWidth);
+          if (y + splitRec.length * 12 > pageHeight - margin) {
+            doc.addPage();
+            y = margin;
+          }
+          doc.text(splitRec, margin, y);
+          y += splitRec.length * 12 + 8;
+        });
+      }
+
+      doc.save(`ai_sales_forecast_${forecastPeriod}_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('AI Forecast PDF exported successfully!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to export Forecast PDF: ' + err.message);
+    }
+  };
+
   // Generate combined visualization array of historical + forecasted segments
   const visualizationData = useMemo(() => {
     if (!forecastData) return [];
@@ -264,6 +405,16 @@ export function AIForecasting({ salesList, businessName = "Tareza Workspace" }: 
             {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <TrendingUp className="w-3.5 h-3.5" />}
             Generate Forecast
           </Button>
+
+          {forecastData && (
+            <Button
+              onClick={exportForecastToPDF}
+              className="h-9 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2 rounded-lg cursor-pointer"
+              id="forecast-export-pdf-btn"
+            >
+              <Download className="w-3.5 h-3.5" /> Export PDF
+            </Button>
+          )}
         </div>
       </div>
 

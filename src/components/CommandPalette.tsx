@@ -78,7 +78,7 @@ export function CommandPalette() {
         const queryTerm = search.trim().toLowerCase();
 
         // Query Products
-        const { data: prodData } = await supabase.from('products').select('*');
+        const { data: prodData } = await supabase.from('products').select('*').eq('is_active', true);
         if (prodData) {
           const filterP = prodData.filter((p: any) =>
             p.name?.toLowerCase().includes(queryTerm) ||

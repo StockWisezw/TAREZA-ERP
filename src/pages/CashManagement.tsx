@@ -856,13 +856,14 @@ export default function CashManagement() {
 
       // Fetch products, categories, stock levels and sales in parallel
       const [prodRes, invRes, catRes] = await Promise.all([
-        supabase.from('products').select('*').eq('business_id', bizId),
+        supabase.from('products').select('*').eq('business_id', bizId).eq('is_active', true),
         supabase.from('inventory').select('*').eq('business_id', bizId),
         supabase.from('categories').select('*').eq('business_id', bizId)
       ]);
 
       dbProducts = prodRes.data || [];
-      dbInventory = invRes.data || [];
+      const activeProductIds = new Set(dbProducts.map(p => p.id));
+      dbInventory = (invRes.data || []).filter((i: any) => activeProductIds.has(i.product_id));
       dbCategories = catRes.data || [];
 
       // Convert arrays to quick lookup maps

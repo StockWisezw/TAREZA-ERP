@@ -32,6 +32,8 @@ import { RegulatoryComplianceExports } from '../components/reports/RegulatoryCom
 import { useBusinessStore } from '../store';
 import { AIForecasting } from '../components/reports/AIForecasting';
 import QuickBooksStyleReports from '../components/reports/QuickBooksStyleReports';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
 interface ProductStat {
   id: string;
@@ -48,7 +50,7 @@ interface Branch {
 }
 
 export default function Reports() {
-  const { activeBranch } = useBusinessStore();
+  const { activeBranch, currentBusiness } = useBusinessStore();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
 
@@ -480,12 +482,14 @@ export default function Reports() {
       setAccounts(accountsList);
 
       // 5. Fetch products for catalog costs
-      const { data: productsData } = await supabase.from('products').select('*').eq('business_id', businessId);
-      setProducts(productsData || []);
+      const { data: productsData } = await supabase.from('products').select('*').eq('business_id', businessId).eq('is_active', true);
+      const activeProducts = productsData || [];
+      const activeProductIds = new Set(activeProducts.map(p => p.id));
+      setProducts(activeProducts);
 
       // 6. Fetch inventory levels
       const { data: inventoryData } = await supabase.from('inventory').select('*').eq('business_id', businessId);
-      let inventoryList = inventoryData || [];
+      let inventoryList = (inventoryData || []).filter(i => activeProductIds.has(i.product_id));
 
       // 7. Fetch purchase orders
       const { data: poData } = await supabase.from('purchase_orders').select('*').eq('business_id', businessId);
@@ -621,14 +625,16 @@ export default function Reports() {
         }
       });
 
-      const sortedProducts: ProductStat[] = Array.from(prodMap.entries()).map(([id, val]) => ({
-        id,
-        name: val.name,
-        quantity: val.qty,
-        revenue: val.revenue,
-        sku: val.sku,
-        category: val.category
-      })).sort((a, b) => b.revenue - a.revenue);
+      const sortedProducts: ProductStat[] = Array.from(prodMap.entries())
+        .filter(([id]) => activeProductIds.has(id))
+        .map(([id, val]) => ({
+          id,
+          name: val.name,
+          quantity: val.qty,
+          revenue: val.revenue,
+          sku: val.sku,
+          category: val.category
+        })).sort((a, b) => b.revenue - a.revenue);
 
       setProductSalesData(sortedProducts);
 
@@ -754,6 +760,136 @@ export default function Reports() {
     toast.success('Financial statements exported successfully!');
   };
 
+  const exportFinancialReportPDF = (type: string) => {
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'pt',
+        format: 'letter'
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 54;
+      const contentWidth = pageWidth - (margin * 2);
+      let y = margin;
+
+      // Header Company Identity
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.setTextColor(13, 71, 161); // Tareza Blue
+      doc.text(currentBusiness?.name ? currentBusiness.name.toUpperCase() : 'TAREZA ERP CLIENT', margin, y);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(66, 66, 66);
+      doc.text('Prepared: ' + new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString(), pageWidth - margin - 180, y + 4);
+
+      y += 20;
+      doc.setFontSize(9);
+      doc.setTextColor(110, 110, 110);
+      doc.text('Trade & Financial Services Audit Ledger System', margin, y);
+      y += 15;
+      doc.text(`Active Branch: ${activeBranch?.name || 'All Branches'} | Business ID: ${currentBusiness?.id || 'N/A'}`, margin, y);
+
+      y += 20;
+      // Divider
+      doc.setDrawColor(224, 224, 224);
+      doc.setLineWidth(1);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 25;
+
+      let reportTitle = '';
+      let headers: string[][] = [];
+      let body: any[][] = [];
+
+      if (type === 'pl') {
+        reportTitle = 'GAAP PROFIT & LOSS STATEMENT (INCOME STATEMENT)';
+        headers = [['Statement Line Item', 'Balance Amount (USD)']];
+        body = [
+          ['Gross Operating Revenue', `$${plSummary.grossRevenue.toFixed(2)}`],
+          ['Cost of Goods Sold (COGS)', `-$${plSummary.costOfGoodsSold.toFixed(2)}`],
+          ['Gross Profit Margin', `$${plSummary.grossProfit.toFixed(2)}`],
+          ['Operating Overhead Expenses', `-$${plSummary.operatingExpenses.toFixed(2)}`],
+          ['Net Current Period Earnings', `$${plSummary.netProfit.toFixed(2)}`]
+        ];
+      } else if (type === 'balance') {
+        reportTitle = 'GAAP BALANCE SHEET (STATEMENT OF FINANCIAL POSITION)';
+        headers = [['Account Classification / Ledger Category', 'Balance (USD)']];
+        body = [
+          ['ASSETS: Cash Till Asset', `$${balanceSheet.cashAsset.toFixed(2)}`],
+          ['ASSETS: Accounts Receivable Asset', `$${balanceSheet.receivableAsset.toFixed(2)}`],
+          ['ASSETS: Merchandise Inventory Asset', `$${balanceSheet.inventoryAsset.toFixed(2)}`],
+          ['TOTAL ASSETS', `$${balanceSheet.totalAssets.toFixed(2)}`],
+          ['LIABILITIES: Accounts Payable Liability', `$${balanceSheet.payableLiability.toFixed(2)}`],
+          ['EQUITY: Retained Shareholder Equity', `$${balanceSheet.retainedEquity.toFixed(2)}`],
+          ['EQUITY: Net Current Period Income', `$${balanceSheet.currentEarningsEquity.toFixed(2)}`],
+          ['TOTAL LIABILITIES & EQUITY', `$${balanceSheet.totalLiabilitiesAndEquity.toFixed(2)}`]
+        ];
+      } else if (type === 'product') {
+        reportTitle = 'SALES CONTRIBUTION BY PRODUCT PERFORMS';
+        headers = [['Product Item Name', 'Quantity Sold', 'Revenue Subtotal (USD)', 'Product SKU', 'Category']];
+        body = productSalesData.map(p => [
+          p.name,
+          p.quantity.toString(),
+          `$${p.revenue.toFixed(2)}`,
+          p.sku || 'N/A',
+          p.category || 'General'
+        ]);
+      }
+
+      // Title Block
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(13, 71, 161);
+      doc.text(reportTitle, margin, y);
+
+      y += 18;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(66, 66, 66);
+      doc.text(`Reporting Cycle: ${startDate} through ${endDate}`, margin, y);
+
+      y += 20;
+
+      // Draw table
+      (doc as any).autoTable({
+        startY: y,
+        head: headers,
+        body: body,
+        margin: { left: margin, right: margin },
+        theme: 'grid',
+        headStyles: {
+          fillColor: [13, 71, 161],
+          textColor: [255, 255, 255],
+          fontSize: 9,
+          fontStyle: 'bold'
+        },
+        bodyStyles: {
+          fontSize: 9,
+          textColor: [40, 40, 40]
+        },
+        columnStyles: type === 'product' ? {
+          0: { cellWidth: 150 },
+          1: { cellWidth: 60, halign: 'right' },
+          2: { cellWidth: 100, halign: 'right' },
+          3: { cellWidth: 100 },
+          4: { cellWidth: 90 }
+        } : {
+          0: { cellWidth: 300 },
+          1: { cellWidth: 200, halign: 'right' }
+        },
+        tableWidth: contentWidth
+      });
+
+      doc.save(`report_${type}_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('PDF report exported successfully!');
+    } catch (e: any) {
+      console.error(e);
+      toast.error('Failed to export PDF report: ' + e.message);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10 px-4 sm:px-6">
       
@@ -841,9 +977,14 @@ export default function Reports() {
                   </CardTitle>
                   <CardDescription className="text-xs">Real-time accrual statement of operating revenues, production cost of goods, and overhead expenses.</CardDescription>
                 </div>
-                <Button size="sm" onClick={() => exportFinancialReport('pl')} className="bg-zinc-900 text-white hover:bg-zinc-805">
-                  <Download className="w-4 h-4 mr-1.5" /> Export P&L (CSV)
-                </Button>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => exportFinancialReport('pl')} className="bg-zinc-900 text-white hover:bg-zinc-805">
+                    <Download className="w-4 h-4 mr-1.5" /> Export (CSV)
+                  </Button>
+                  <Button size="sm" onClick={() => exportFinancialReportPDF('pl')} className="bg-indigo-600 text-white hover:bg-indigo-700">
+                    <FileText className="w-4 h-4 mr-1.5" /> Export (PDF)
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-6 sm:p-8">
@@ -1069,9 +1210,14 @@ export default function Reports() {
                   </CardTitle>
                   <CardDescription className="text-xs">Classified balance sheet reporting of current versus non-current resources, liabilities, and core revaluation reserves.</CardDescription>
                 </div>
-                <Button size="sm" onClick={() => exportFinancialReport('balance')} className="bg-zinc-900 text-white hover:bg-zinc-805">
-                  <Download className="w-4 h-4 mr-1.5" /> Export Sheet (CSV)
-                </Button>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => exportFinancialReport('balance')} className="bg-zinc-900 text-white hover:bg-zinc-805">
+                    <Download className="w-4 h-4 mr-1.5" /> Export (CSV)
+                  </Button>
+                  <Button size="sm" onClick={() => exportFinancialReportPDF('balance')} className="bg-indigo-600 text-white hover:bg-indigo-700">
+                    <FileText className="w-4 h-4 mr-1.5" /> Export (PDF)
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-6 sm:p-8">
@@ -1401,9 +1547,14 @@ export default function Reports() {
                         <CardTitle className="text-base font-bold">Standard Sales contribution by Product</CardTitle>
                         <CardDescription>Quantities sold and contribution margins ranked by highest performing items.</CardDescription>
                       </div>
-                      <Button size="sm" onClick={() => exportFinancialReport('product')} className="bg-zinc-900 text-white hover:bg-zinc-805">
-                        <Download className="w-3.5 h-3.5 mr-1" /> Export CSV
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => exportFinancialReport('product')} className="bg-zinc-900 text-white hover:bg-zinc-805">
+                          <Download className="w-3.5 h-3.5 mr-1" /> Export CSV
+                        </Button>
+                        <Button size="sm" onClick={() => exportFinancialReportPDF('product')} className="bg-indigo-600 text-white hover:bg-indigo-700">
+                          <FileText className="w-3.5 h-3.5 mr-1" /> Export PDF
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="p-6">

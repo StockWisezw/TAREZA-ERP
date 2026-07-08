@@ -56,6 +56,8 @@ import { TarezaLogo } from '../ui/Logo';
 import { db } from '../../lib/firebaseClient';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { useAuth } from '../../hooks/useAuth';
+import offlineDb from '../../lib/dexieDb';
+import { Film } from 'lucide-react';
 
 interface AssetVersion {
   id: string;
@@ -295,6 +297,45 @@ Get Tareza POS: https://tareza-pos.co.zw
 export function MarketingAssets() {
   const { user } = useAuth();
   const [assets, setAssets] = useState<MarketingAsset[]>([]);
+
+  // 🎥 Dynamic video walkthrough states to fetch from database
+  const [customVideoTutorials, setCustomVideoTutorials] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchDynamicTutorials = async () => {
+      try {
+        const colRef = collection(db, 'tutorial_videos');
+        const snap = await getDocs(colRef);
+        const list: any[] = [];
+        snap.forEach((docSnapshot) => {
+          list.push({ id: docSnapshot.id, ...docSnapshot.data() });
+        });
+        if (list.length > 0) {
+          list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+          setCustomVideoTutorials(list);
+        } else {
+          // If empty, try offline cache
+          if (offlineDb) {
+            const cached = await offlineDb.tutorial_videos.toArray();
+            if (cached.length > 0) {
+              cached.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+              setCustomVideoTutorials(cached);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load custom video tutorials in MarketingAssets, checking offline cache:", err);
+        if (offlineDb) {
+          const cached = await offlineDb.tutorial_videos.toArray();
+          if (cached.length > 0) {
+            cached.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+            setCustomVideoTutorials(cached);
+          }
+        }
+      }
+    };
+    fetchDynamicTutorials();
+  }, []);
   
   // Real-Time CSS Poster Customizer States
   const [viewMode, setViewMode] = useState<'live' | 'static'>('live');
@@ -681,7 +722,124 @@ export function MarketingAssets() {
 
   // Brand Manual States
   const [showBrandManual, setShowBrandManual] = useState(false);
-  const [activeManualTab, setActiveManualTab] = useState<'overview' | 'colors' | 'typography' | 'copywriting' | 'guidelines'>('overview');
+  const [activeManualTab, setActiveManualTab] = useState<'overview' | 'colors' | 'typography' | 'copywriting' | 'guidelines' | 'videoscript'>('overview');
+
+  const VIDEO_TUTORIAL_SCENES = (customVideoTutorials && customVideoTutorials.length > 0)
+    ? customVideoTutorials.map((vid, idx) => ({
+        title: vid.title || `Video ${idx + 1}: Walkthrough`,
+        duration: vid.duration || "15 Seconds",
+        screenshot: `Target Workspace Interface showing active module: ${vid.title}`,
+        voiceover: vid.description || `Welcome to Tareza ERP. In this short guide, we will explore the core functions of ${vid.title} and see how it automates your business workflow in real time.`,
+        prompts: `Smoothly transition into the ${vid.title} module screen. Draw attention to interactive buttons and telemetry displays with gentle, high-contrast glow effects and smooth hover simulations. Keep visual aesthetic clean, professional, and corporate-ready.`,
+        overlays: [vid.platform || "YouTube Guide", "Dynamic ERP Integration", "Automated Synchronization"]
+      }))
+    : [
+        {
+          title: "Video 1: Seamless User Authentication & Branch Sign-In",
+          duration: "15 Seconds",
+          screenshot: "Login portal, input credentials, and Branch Selector dropdown.",
+          voiceover: "Welcome to Tareza ERP. Enter your credentials to access your secure, multi-tenant workspace. Instantly select your assigned retail branch or warehouse to begin operations safely.",
+          prompts: "Smoothly fade into the secure login form. Highlight the username and password fields with a gentle glowing accent. Zoom slightly into the branch selector dropdown, highlighting 'Harare Central Depot' in a circular soft spotlight. Clean, executive-ready corporate aesthetic.",
+          overlays: ["Secure Enterprise Entrance", "Multi-Tenant Cloud Sync", "Assigned Outlet Mapping"]
+        },
+        {
+          title: "Video 2: High-Contrast Dashboard & Metrics Telemetry",
+          duration: "15 Seconds",
+          screenshot: "Main executive dashboard, sales chart widgets, and real-time syncing status banner.",
+          voiceover: "Gain total visibility. Monitor live sales volumes, real-time profit analytics, and active cashier registers across all company branches from a single, gorgeous dashboard.",
+          prompts: "Horizontal slow pan across the monthly sales revenue bar charts. Animate a glowing blue growth-trend line running over the charts. Bring focus to the '100% Synced' status indicator badge at the top right with a soft fade-in ring. Vibrant, data-rich environment.",
+          overlays: ["Real-Time Branch Auditing", "Live Revenue & Profit Charts", "Centralized Analytics"]
+        },
+        {
+          title: "Video 3: High-Speed POS Checkout & Dual-Currency Recalculation",
+          duration: "20 Seconds",
+          screenshot: "POS sales screen, active cart item selection, payment currency slider, and multi-currency billing.",
+          voiceover: "Check out customers in seconds. Adjust the real-time exchange rate index dynamically to auto-calculate ZWG or USD totals, and process payments via EcoCash, InnBucks, or Cash seamlessly.",
+          prompts: "Animate cursors clicking on several inventory item icons to construct the shopping cart. Highlight the currency exchange rate adjustment field with an active violet neon border. Zoom in on the final invoice showing both USD and ZWG breakdown, demonstrating a frictionless checkout.",
+          overlays: ["Frictionless Dual-Currency Billing", "Real-Time Exchange Rate Recalculator", "EcoCash & InnBucks Integration"]
+        },
+        {
+          title: "Video 4: Register Sessions & Float Leakage Audits",
+          duration: "15 Seconds",
+          screenshot: "Cash Drawer Logs interface, cash floats management, and cashier session variance summary.",
+          voiceover: "Say goodbye to cash drawer shortages. Audit opening floats, log petty cash expenses, and instantly verify end-of-day balances to keep your retail team 100% accountable.",
+          prompts: "Bring up the 'Cash Management' console. Highlight the 'Petty Cash Payout' button with a subtle hover effect. Stagger the appearance of the cash counting rows, highlighting the closing variance column with green text for balanced drawers and yellow for attention. Secure audit style.",
+          overlays: ["Tamper-Proof Cash Management", "Strict Float Auditing", "Automated Variance Logging"]
+        },
+        {
+          title: "Video 5: Inventory Control & Multi-Bundle Packaging",
+          duration: "15 Seconds",
+          screenshot: "Inventory database, reorder thresholds editor, and product pricing list.",
+          voiceover: "Take absolute control of your stock levels. Set automatic reorder thresholds to prevent shortages, and effortlessly organize items into bulk six-packs or individual retail units.",
+          prompts: "Zoom into the 'Stock Threshold Alert' column. Simulate a stock count update. Pulse a soft orange warning frame around items that have fallen below reorder levels. Smooth, mechanical-slide transitions.",
+          overlays: ["Smart Stock Threshold Alerts", "Wholesale & Retail Pricing Tiers", "Bulk Product Bundle Packing"]
+        },
+        {
+          title: "Video 6: Real-Time Financial Reports & PDF Export",
+          duration: "15 Seconds",
+          screenshot: "Reports interface, Profit and Loss (P&L) statements, and PDF/CSV export buttons.",
+          voiceover: "Run your books with absolute confidence. Instantly generate balanced Profit and Loss statements, review operating costs, and export print-ready PDFs with a single tap.",
+          prompts: "Slide in the accrual Profit and Loss ledger table. Apply a soft glow to the 'Export PDF' button. Show an elegant document icon dropping from the button toward the lower-right corner to indicate file download. Neat, clean, readable finance presentation.",
+          overlays: ["Automated Profit & Loss Accruals", "Instant Balance Sheet Generation", "One-Click PDF/CSV Exports"]
+        },
+        {
+          title: "Video 7: System Diagnostics & Subscription Lifecycles",
+          duration: "15 Seconds",
+          screenshot: "Developer Headquarters panel, REST API diagnostics terminal, and Support Ticket reply form.",
+          voiceover: "Behind the scenes, Tareza operates with absolute reliability. Run instant cloud database diagnostics, schedule secure backups, and manage support tickets in real time.",
+          prompts: "Display the developer terminal window. Simulate lines of diagnostic logs appearing with an energetic typewriter effect. Glow effect around the 'Handshake Success' badge. Highlight the support ticket response form with a sleek violet container.",
+          overlays: ["Active Cloud Handshake Auditing", "Automated Backup Schedulers", "Support Ticket Desk Integration"]
+        }
+      ];
+
+  const handlePrintScript = () => {
+    const printStyle = document.createElement('style');
+    printStyle.id = 'video-script-print-layout-style';
+    printStyle.innerHTML = `
+      @media print {
+        body * {
+          visibility: hidden !important;
+        }
+        #video-script-print-container, #video-script-print-container * {
+          visibility: visible !important;
+        }
+        #video-script-print-container {
+          position: absolute !important;
+          left: 0 !important;
+          top: 0 !important;
+          width: 100% !important;
+          background: white !important;
+          color: #000000 !important;
+          padding: 1.5cm !important;
+          box-shadow: none !important;
+          border: none !important;
+          display: block !important;
+        }
+        @page {
+          size: A4 portrait;
+          margin: 1.5cm;
+        }
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        .page-break {
+          page-break-before: always !important;
+        }
+        .no-print {
+          display: none !important;
+        }
+      }
+    `;
+    document.head.appendChild(printStyle);
+    toast.info('Opening print settings. Choose "Save as PDF" to download the Video Creation Script.');
+    
+    setTimeout(() => {
+      window.print();
+      const el = document.getElementById('video-script-print-layout-style');
+      if (el) el.remove();
+    }, 150);
+  };
 
   // Fetch from Firestore
   const loadAssets = async () => {
@@ -1265,7 +1423,8 @@ export function MarketingAssets() {
                   { id: 'colors', label: '2. Colors & Identity', icon: Palette },
                   { id: 'typography', label: '3. Typography', icon: Type },
                   { id: 'copywriting', label: '4. Ad Copy Snippets', icon: FileText },
-                  { id: 'guidelines', label: '5. Brand Voice Guidelines', icon: Sparkles }
+                  { id: 'guidelines', label: '5. Brand Voice Guidelines', icon: Sparkles },
+                  { id: 'videoscript', label: '6. AI Video Creator Script', icon: Video }
                 ].map((tab) => {
                   const TabIcon = tab.icon;
                   const isActive = activeManualTab === tab.id;
@@ -1503,6 +1662,89 @@ Equip your cashiers for success. Visit: https://www.tarezaerp.co.zw #EcoCash #In
                     </div>
                   </div>
                 )}
+
+                {activeManualTab === 'videoscript' && (
+                  <div className="space-y-4 animate-in fade-in duration-300">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-zinc-150 dark:border-zinc-800">
+                      <div>
+                        <h5 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                          <Video className="w-4 h-4 text-indigo-500 shrink-0" />
+                          AI Video Tutorial Creation Script
+                        </h5>
+                        <p className="text-[10px] text-zinc-400 font-mono">7-PART COMPREHENSIVE VIDEO BLUEPRINT FOR AI PLATFORMS</p>
+                      </div>
+                      <Button
+                        size="xs"
+                        onClick={handlePrintScript}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs py-1 h-7 rounded-lg flex items-center gap-1.5 shadow-sm"
+                      >
+                        <Printer className="w-3 h-3" />
+                        Print Script Only (PDF)
+                      </Button>
+                    </div>
+
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 font-sans leading-relaxed">
+                      This master script is designed to turn your static system screenshots (from login to advanced reporting) into high-converting training and marketing videos. Paste these narration parameters into your favorite AI voice avatar generator (such as HeyGen or Synthesia) or use CapCut templates with auto-typography.
+                    </p>
+
+                    <div className="space-y-5 mt-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                      {VIDEO_TUTORIAL_SCENES.map((scene, index) => (
+                        <div key={index} className="p-4 border border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/40 dark:bg-zinc-950/20 space-y-3">
+                          <div className="flex justify-between items-center pb-2 border-b border-zinc-150/50 dark:border-zinc-800/60">
+                            <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 block" />
+                              {scene.title}
+                            </span>
+                            <span className="text-[10px] font-mono font-bold bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md text-zinc-550 dark:text-zinc-400">
+                              Duration: {scene.duration}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                            <div className="space-y-1">
+                              <span className="text-[10px] uppercase font-bold text-zinc-400 dark:text-zinc-500 tracking-wider block">📸 Screenshot Focus</span>
+                              <p className="text-zinc-700 dark:text-zinc-300 font-sans leading-normal italic">{scene.screenshot}</p>
+                            </div>
+
+                            <div className="space-y-1">
+                              <span className="text-[10px] uppercase font-bold text-zinc-400 dark:text-zinc-500 tracking-wider block">⚙️ AI Prompt Instructions</span>
+                              <p className="text-zinc-650 dark:text-zinc-400 font-sans leading-normal">{scene.prompts}</p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5 pt-2 border-t border-zinc-150/40 dark:border-zinc-850/40">
+                            <span className="text-[10px] uppercase font-bold text-zinc-400 dark:text-zinc-500 tracking-wider block flex items-center gap-1 justify-between">
+                              <span>🎙️ Voiceover (VO) Script</span>
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(scene.voiceover);
+                                  toast.success(`Copied Voiceover Script for Video ${index + 1}!`);
+                                }}
+                                className="h-5 text-[9px] hover:bg-zinc-200 dark:hover:bg-zinc-850 px-1 text-indigo-500 font-semibold"
+                              >
+                                [Copy Script]
+                              </Button>
+                            </span>
+                            <div className="p-3 bg-zinc-100/60 dark:bg-zinc-900/60 border border-zinc-200/40 dark:border-zinc-800/40 rounded-xl text-zinc-800 dark:text-zinc-250 font-serif italic text-[11.5px] leading-relaxed">
+                              &ldquo;{scene.voiceover}&rdquo;
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 flex items-center mr-1">KEY OVERLAYS:</span>
+                            {scene.overlays.map((tag, tIdx) => (
+                              <Badge key={tIdx} variant="outline" className="text-[9px] font-mono py-0.2 px-1.5 border-zinc-200/50 dark:border-zinc-800 text-zinc-400">
+                                &quot;{tag}&quot;
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1638,7 +1880,105 @@ Equip your cashiers for success. Visit: https://www.tarezaerp.co.zw #EcoCash #In
                 </div>
               </div>
             </div>
+
+            {/* Page 4: AI Video Tutorial Creation Script (Appended to Brand Manual PDF) */}
+            <div className="page-break space-y-8 pt-8">
+              <div className="flex justify-between items-center border-b border-zinc-200 pb-4">
+                <div className="flex items-center gap-2">
+                  <span className="font-sans font-black text-lg tracking-wider text-zinc-900">TAREZA</span>
+                </div>
+                <span className="text-zinc-400 text-xs font-mono font-bold uppercase tracking-widest">03. AI Video Tutorial Script Blueprint</span>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-2xl font-black text-zinc-900 mb-2">5. AI Video Tutorial Creation Script</h3>
+                  <p className="text-xs text-zinc-650 leading-relaxed font-sans mb-4">
+                    This comprehensive 7-part script serves as the direct asset configuration and narration guide for constructing official Tareza training videos using digital voice avatars and video animation tools:
+                  </p>
+                </div>
+
+                <div className="space-y-5 font-sans">
+                  {VIDEO_TUTORIAL_SCENES.map((scene, idx) => (
+                    <div key={idx} className="p-4 border border-zinc-200 rounded-xl bg-zinc-50 space-y-2 page-break-inside-avoid">
+                      <div className="flex justify-between items-center border-b border-zinc-200 pb-1">
+                        <span className="text-xs font-bold text-zinc-900">{scene.title}</span>
+                        <span className="text-[10px] font-mono text-zinc-500">Duration: {scene.duration}</span>
+                      </div>
+                      <div className="text-[10px] space-y-1.5 leading-relaxed text-zinc-650">
+                        <p><strong>Screenshot Focus:</strong> {scene.screenshot}</p>
+                        <p><strong>AI Prompt Instructions:</strong> {scene.prompts}</p>
+                        <div className="p-2.5 bg-white border border-zinc-150 rounded-lg italic font-serif text-zinc-800">
+                          &ldquo;{scene.voiceover}&rdquo;
+                        </div>
+                        <p><strong>Key Visual Overlays:</strong> {scene.overlays.join(" • ")}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
           </div>
+        </div>
+      </div>
+
+      {/* 📄 Elegant, Print-Only Video Script (Used ONLY during individual script printing) */}
+      <div id="video-script-print-container" className="hidden font-sans">
+        <div className="space-y-4 pb-4 border-b border-zinc-200 mb-6">
+          <div className="flex justify-between items-center">
+            <span className="font-sans font-black text-xl tracking-wider text-zinc-900">TAREZA</span>
+            <span className="text-[9px] font-mono font-bold uppercase text-zinc-400 border border-zinc-250 px-2 py-0.5 rounded">OFFICIAL INTERNAL USE ONLY</span>
+          </div>
+          <h1 className="text-3xl font-black text-zinc-900 tracking-tight leading-none uppercase mt-2">AI Video Tutorial Creation Script</h1>
+          <p className="text-xs text-zinc-500 max-w-2xl font-sans leading-relaxed">
+            Official 7-part walkthrough script, narration parameters, and screenshot alignment guide for Tareza ERP systems modules training and social marketing channels.
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          {VIDEO_TUTORIAL_SCENES.map((scene, idx) => (
+            <div key={idx} className="p-5 border border-zinc-250 rounded-xl space-y-3 bg-zinc-50/50 page-break-inside-avoid">
+              <div className="flex justify-between items-center border-b border-zinc-200 pb-2">
+                <h3 className="text-xs font-bold text-zinc-900">{scene.title}</h3>
+                <span className="text-[10px] font-mono font-bold bg-zinc-200 px-2.5 py-0.5 rounded text-zinc-650">
+                  Duration: {scene.duration}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-[11px] text-zinc-650 leading-relaxed">
+                <div>
+                  <h4 className="font-bold text-zinc-800 uppercase tracking-wider text-[9px] mb-1">📸 Screenshot Highlight Focus</h4>
+                  <p className="italic">{scene.screenshot}</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-zinc-800 uppercase tracking-wider text-[9px] mb-1">⚙️ AI Animation Prompts</h4>
+                  <p>{scene.prompts}</p>
+                </div>
+              </div>
+
+              <div className="pt-2.5 border-t border-zinc-200 space-y-1">
+                <h4 className="font-bold text-zinc-800 uppercase tracking-wider text-[9px]">🎙️ Narrator Voiceover (VO) Script</h4>
+                <div className="p-3 bg-white border border-zinc-200 rounded-lg italic text-[11px] leading-relaxed font-serif text-zinc-900">
+                  &ldquo;{scene.voiceover}&rdquo;
+                </div>
+              </div>
+
+              <div className="pt-1.5 flex flex-wrap gap-1 items-center">
+                <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider mr-1">On-Screen Text Overlays:</span>
+                {scene.overlays.map((tag, tIdx) => (
+                  <span key={tIdx} className="text-[9.5px] font-mono bg-zinc-200/65 px-2 py-0.2 rounded text-zinc-700 border border-zinc-200 font-semibold">
+                    &ldquo;{tag}&rdquo;
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="pt-8 border-t border-zinc-200 font-mono text-[9px] text-zinc-400 flex justify-between mt-12">
+          <span>© 2026 Tareza ERP Zimbabwe</span>
+          <span>Version 1.0 • Video Walkthrough Blueprint</span>
         </div>
       </div>
 
