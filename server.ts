@@ -360,6 +360,43 @@ Keep the response concise, visually striking, professional, and limited to about
     }
   });
 
+  // Helper for local quantitative regression slope heuristic
+  function calculateHeuristicForecast(historicalData: any[], forecastPeriod: string) {
+    const revenues = historicalData.map(d => Number(d.revenue || Object.values(d)[1] || 0));
+    const avgRevenue = revenues.reduce((a, b) => a + b, 0) / (revenues.length || 1);
+    
+    let trendMultiplier = 1.02; // Default slight positive growth
+    if (revenues.length > 2) {
+      const half = Math.floor(revenues.length / 2);
+      const firstHalf = revenues.slice(0, half);
+      const secondHalf = revenues.slice(half);
+      const avgFirst = firstHalf.reduce((a, b) => a + b, 0) / (firstHalf.length || 1);
+      const avgSecond = secondHalf.reduce((a, b) => a + b, 0) / (secondHalf.length || 1);
+      if (avgFirst > 0) {
+        trendMultiplier = Math.max(0.80, Math.min(1.20, avgSecond / avgFirst));
+      }
+    }
+
+    const forecastPoints = [];
+    const baseVal = revenues[revenues.length - 1] || avgRevenue;
+    
+    for (let i = 1; i <= 4; i++) {
+      const projected = baseVal * Math.pow(trendMultiplier, i / 2);
+      forecastPoints.push({
+        period: `${forecastPeriod === "monthly" ? "Month" : "Week"} +${i}`,
+        forecastedRevenue: Math.round(projected * 100) / 100,
+        confidenceIntervalLower: Math.round(projected * 0.85 * 100) / 100,
+        confidenceIntervalUpper: Math.round(projected * 1.15 * 100) / 100,
+        keyDriver: "Calculated via local baseline historical slope heuristic."
+      });
+    }
+
+    return {
+      trendMultiplier,
+      forecastPoints
+    };
+  }
+
   // AI-Powered Sales Forecasting API
   app.post("/api/ai/forecast", async (req, res) => {
     const { historicalData, forecastPeriod, businessName } = req.body;
@@ -372,35 +409,7 @@ Keep the response concise, visually striking, professional, and limited to about
     // Local heuristic projection engine for Offline Mode or when GEMINI_API_KEY is missing
     if (!geminiApiKey) {
       console.log("Gemini API key is not configured. Running local projection heuristic engine.");
-      
-      const revenues = historicalData.map(d => Number(d.revenue || Object.values(d)[1] || 0));
-      const avgRevenue = revenues.reduce((a, b) => a + b, 0) / (revenues.length || 1);
-      
-      let trendMultiplier = 1.02; // Default slight positive growth
-      if (revenues.length > 2) {
-        const half = Math.floor(revenues.length / 2);
-        const firstHalf = revenues.slice(0, half);
-        const secondHalf = revenues.slice(half);
-        const avgFirst = firstHalf.reduce((a, b) => a + b, 0) / (firstHalf.length || 1);
-        const avgSecond = secondHalf.reduce((a, b) => a + b, 0) / (secondHalf.length || 1);
-        if (avgFirst > 0) {
-          trendMultiplier = Math.max(0.80, Math.min(1.20, avgSecond / avgFirst));
-        }
-      }
-
-      const forecastPoints = [];
-      const baseVal = revenues[revenues.length - 1] || avgRevenue;
-      
-      for (let i = 1; i <= 4; i++) {
-        const projected = baseVal * Math.pow(trendMultiplier, i / 2);
-        forecastPoints.push({
-          period: `${forecastPeriod === "monthly" ? "Month" : "Week"} +${i}`,
-          forecastedRevenue: Math.round(projected * 100) / 100,
-          confidenceIntervalLower: Math.round(projected * 0.85 * 100) / 100,
-          confidenceIntervalUpper: Math.round(projected * 1.15 * 100) / 100,
-          keyDriver: "Calculated via local baseline historical slope heuristic."
-        });
-      }
+      const { trendMultiplier, forecastPoints } = calculateHeuristicForecast(historicalData, forecastPeriod);
 
       return res.json({
         success: false,
@@ -434,7 +443,7 @@ Analyze the following historical sales data for the retail tenant "${businessNam
 Historical Performance Records:
 ${formattedHistory}
 
-Design your predictions and strategic growth recommendations specifically tailored to small-and-medium retail operations in high-growth African retail climates like Zimbabwe (e.g. accounting for dual-currency flowUSD/local, mitigating supplier transport delays, and stabilizing cash-drawer velocity).
+Design your predictions and strategic growth recommendations specifically tailored to small-and-medium retail operations in high-growth African retail climates like Zimbabwe (e.g. accounting for dual-currency flow USD/local, mitigating supplier transport delays, and stabilizing cash-drawer velocity).
 
 Return ONLY the response in a structured JSON schema conforming to the requested type structure. Do not wrap in markdown unless requested (or return clean json).`;
 
@@ -490,7 +499,15 @@ Return ONLY the response in a structured JSON schema conforming to the requested
         }
       });
 
-      const rawText = response.text || "{}";
+      let rawText = response.text || "{}";
+      // Clean up markdown code block wrapper if present
+      if (rawText.includes("```")) {
+        const match = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (match && match[1]) {
+          rawText = match[1];
+        }
+      }
+      rawText = rawText.trim();
       const parsedForecast = JSON.parse(rawText);
 
       return res.json({
@@ -500,11 +517,21 @@ Return ONLY the response in a structured JSON schema conforming to the requested
       });
 
     } catch (err: any) {
-      console.error("Gemini AI Sales Forecasting failed:", err);
-      // Return a structured graceful failure response that doesn't crash the UI
-      return res.status(500).json({ 
-        error: "Failed to generate AI-powered prediction on server.", 
-        details: err.message || String(err) 
+      console.error("Gemini AI Sales Forecasting failed, falling back to local heuristic:", err);
+      
+      const { trendMultiplier, forecastPoints } = calculateHeuristicForecast(historicalData, forecastPeriod);
+      
+      // Graceful fallback response instead of failing the request
+      return res.json({
+        success: false,
+        isOfflineMode: true,
+        forecastPoints,
+        summary: `Using local resilient projection (Gemini interface fell back due to network limits). Estimated trend multiplier: ${((trendMultiplier - 1) * 100).toFixed(1)}% per period. Strategic recommendations fallback active.`,
+        recommendations: [
+          "Review supply chain timelines to safeguard local inventory buffers.",
+          "Adopt high-velocity cash and dual-currency drawer checking protocols.",
+          "Ensure your secret Gemini Key is correctly configured in the Settings menu."
+        ]
       });
     }
   });

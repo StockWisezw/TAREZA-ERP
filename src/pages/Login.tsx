@@ -72,7 +72,7 @@ export default function Login() {
 
           // Build Firestore Profile
           await supabase.from('profiles').insert([
-            { id: user.id, first_name: demoFirstName, last_name: demoLastName, email: user.email }
+            { id: user.id, first_name: demoFirstName, last_name: demoLastName, email: user.email, pin: '1234' }
           ]);
 
           // Pre-generate IDs to avoid race conditions and secure sequence
@@ -116,7 +116,7 @@ export default function Login() {
           ]);
 
           await supabase.from('branches').insert([
-            { id: newBranchId, business_id: newBusinessId, name: role === 'developer' ? 'Testing Lab Alpha' : 'Downtown Branch Store', type: 'retail' }
+            { id: newBranchId, business_id: newBusinessId, name: role === 'developer' ? 'Testing Lab Alpha' : 'Downtown Branch Store', type: 'retail', access_code: role === 'developer' ? 'LAB-ALPHA' : 'DOWNTOWN-HQ' }
           ]);
 
           await supabase.from('categories').insert([
@@ -315,7 +315,7 @@ export default function Login() {
 
         // Setup Firebase Data
         await supabase.from('profiles').insert([
-          { id: user.id, first_name: firstName, last_name: lastName, email: user.email, phone: phone || null }
+          { id: user.id, first_name: firstName, last_name: lastName, email: user.email, phone: phone || null, pin: '1234' }
         ]);
 
         const isSuperAdminEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(email.toLowerCase());
@@ -396,13 +396,13 @@ export default function Login() {
         const branchesToSeed = [];
         if ((planChoice === 'STARTER_TRIAL' || planChoice === 'STARTER_PAID') && !isSuperAdminEmail) {
           branchesToSeed.push(
-            { id: mainBranchId, business_id: newBusinessId, name: 'Main Retail Branch', type: 'retail', address: '100 Samora Machel Ave, Harare' }
+            { id: mainBranchId, business_id: newBusinessId, name: 'Main Retail Branch', type: 'retail', address: '100 Samora Machel Ave, Harare', access_code: 'MAIN-HQ' }
           );
         } else {
           branchesToSeed.push(
-            { id: mainBranchId, business_id: newBusinessId, name: 'Main Retail Branch', type: 'retail', address: '100 Samora Machel Ave, Harare' },
-            { id: warehouseBranchId, business_id: newBusinessId, name: 'Harare Central Warehouse', type: 'warehouse', address: '12 Coventry Rd, Workington, Harare' },
-            { id: bulawayoBranchId, business_id: newBusinessId, name: 'Bulawayo CBD Branch', type: 'retail', address: '55 Jason Moyo St, Bulawayo' }
+            { id: mainBranchId, business_id: newBusinessId, name: 'Main Retail Branch', type: 'retail', address: '100 Samora Machel Ave, Harare', access_code: 'MAIN-HQ' },
+            { id: warehouseBranchId, business_id: newBusinessId, name: 'Harare Central Warehouse', type: 'warehouse', address: '12 Coventry Rd, Workington, Harare', access_code: null },
+            { id: bulawayoBranchId, business_id: newBusinessId, name: 'Bulawayo CBD Branch', type: 'retail', address: '55 Jason Moyo St, Bulawayo', access_code: 'BULAWAYO-HQ' }
           );
         }
 
@@ -770,7 +770,12 @@ export default function Login() {
                           required={isPinLogin}
                           className="h-11 bg-zinc-50 focus-visible:ring-primary focus-visible:bg-white border-zinc-200 uppercase"
                         />
-                        <p className="text-[10px] text-zinc-400">Your shop-specific unique access code. Contact management if you do not have one.</p>
+                        <p className="text-[10px] text-zinc-400 leading-normal">
+                          Your shop-specific unique access code. Contact management if you do not have one.
+                          <span className="block mt-1.5 font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/20 p-2 rounded-lg border border-amber-200/50 dark:border-amber-900/30">
+                            💡 First time logging in? If you haven't configured an access code yet, use "Email Sign In" above, then navigate to Settings ➔ Branches to view or assign access codes.
+                          </span>
+                        </p>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="cashierPin" className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Personal Cashier PIN</Label>
