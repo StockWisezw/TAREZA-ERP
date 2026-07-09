@@ -308,8 +308,8 @@ export function checkIsOfflineError(err: any): boolean {
 // Map database column types for integrity
 const ALLOWED_KEYS: Record<string, string[]> = {
   businesses: ['id', 'name', 'tax_number', 'email', 'phone', 'currency', 'subscription_plan', 'subscription_status', 'subscription_end_date', 'max_users', 'max_branches', 'created_at', 'updated_at', 'logo_url'],
-  branches: ['id', 'business_id', 'name', 'address', 'phone', 'type', 'is_active', 'created_at', 'updated_at'],
-  profiles: ['id', 'first_name', 'last_name', 'phone', 'email', 'created_at', 'updated_at'],
+  branches: ['id', 'business_id', 'name', 'address', 'phone', 'type', 'is_active', 'access_code', 'created_at', 'updated_at'],
+  profiles: ['id', 'first_name', 'last_name', 'phone', 'email', 'pin', 'created_at', 'updated_at'],
   roles: ['id', 'business_id', 'name', 'description', 'created_at', 'updated_at'],
   role_permissions: ['id', 'role_id', 'permissions', 'created_at'],
   business_users: ['id', 'business_id', 'user_id', 'branch_id', 'role_id', 'is_active', 'created_at', 'updated_at'],

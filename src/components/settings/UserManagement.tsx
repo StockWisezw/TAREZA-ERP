@@ -31,6 +31,7 @@ export function UserManagement() {
   const [showPassword, setShowPassword] = useState(false);
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [selectedRole, setSelectedRole] = useState('Staff');
+  const [pin, setPin] = useState('');
 
   const loadTeamData = async () => {
     try {
@@ -101,6 +102,7 @@ export function UserManagement() {
             phone: profile?.phone || '',
             role: t.role_id ? (roleMap[t.role_id] || 'Staff') : 'Staff',
             branch: t.branch_id ? (branchMap[t.branch_id] || 'Primary') : 'Main Branch',
+            pin: profile?.pin || '',
             status: t.is_active !== false ? 'active' : 'inactive',
             avatar: `${firstNameStr.substring(0, 1)}${lastNameStr.substring(0, 1)}`.toUpperCase()
           };
@@ -179,6 +181,8 @@ export function UserManagement() {
 
       if (!newUserUid) throw new Error("Firebase Auth failed to generate user details.");
 
+      const generatedPin = pin.trim() || Math.floor(1000 + Math.random() * 9000).toString();
+
       // 4. Create internal CRM / user Profile link
       toast.loading("Saving employee profile record...", { id: "user-op" });
       const { error: profileError } = await supabase.from('profiles').insert({
@@ -186,7 +190,8 @@ export function UserManagement() {
         first_name: firstName,
         last_name: lastName,
         phone: phone || null,
-        email: email
+        email: email,
+        pin: generatedPin
       });
       if (profileError) throw profileError;
 
@@ -210,6 +215,7 @@ export function UserManagement() {
       setEmail('');
       setPhone('');
       setPassword('');
+      setPin('');
 
       // Refresh dynamic listings
       await loadTeamData();
@@ -377,6 +383,19 @@ export function UserManagement() {
                 </div>
               </div>
 
+              <div className="space-y-1.5">
+                <Label className="text-zinc-700">POS Quick-Access PIN (4-Digit Numeric)</Label>
+                <Input 
+                  type="text" 
+                  maxLength={4}
+                  value={pin} 
+                  onChange={e => setPin(e.target.value.replace(/\D/g, ''))} 
+                  placeholder="e.g. 1234 (Will auto-generate if empty)" 
+                  className="h-10 border-zinc-200"
+                />
+                <p className="text-[11px] text-zinc-500">This 4-digit code is used by the cashier to log in via the POS Quick PIN screen.</p>
+              </div>
+
               <Button type="submit" className="w-full mt-4" disabled={isSubmitActive}>
                 {isSubmitActive ? (
                   <>
@@ -435,13 +454,14 @@ export function UserManagement() {
                 <TableHead className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Default Branch</TableHead>
                 <TableHead className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Assigned Role</TableHead>
                 <TableHead className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Status</TableHead>
+                <TableHead className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">POS Cashier PIN</TableHead>
                 <TableHead className="text-xs font-semibold text-zinc-500 uppercase tracking-wider text-right">Delete</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {teamMembers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12 text-zinc-500">
+                  <TableCell colSpan={6} className="text-center py-12 text-zinc-500">
                     <p className="font-medium text-sm">No team members registered yet.</p>
                     <p className="text-xs text-zinc-400 mt-1">Tap "Add New User" to assign your first corporate workspace account manually.</p>
                   </TableCell>
@@ -474,6 +494,11 @@ export function UserManagement() {
                     <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50 text-[10px] font-bold tracking-tight uppercase px-2 py-0.5">
                       {user.status}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="py-4">
+                    <span className="font-mono text-xs font-bold text-zinc-950 bg-zinc-100 px-2 py-1 rounded">
+                      {user.pin || 'Not Set'}
+                    </span>
                   </TableCell>
                   <TableCell className="py-4 text-right">
                     <Button 

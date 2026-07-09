@@ -22,12 +22,14 @@ export function BranchWarehouseSettings() {
   const [newBranchName, setNewBranchName] = useState('');
   const [newBranchType, setNewBranchType] = useState('branch');
   const [newBranchAddress, setNewBranchAddress] = useState('');
+  const [newBranchAccessCode, setNewBranchAccessCode] = useState('');
 
   // Editing branch state
   const [editingBranch, setEditingBranch] = useState<any>(null);
   const [editBranchName, setEditBranchName] = useState('');
   const [editBranchType, setEditBranchType] = useState('branch');
   const [editBranchAddress, setEditBranchAddress] = useState('');
+  const [editBranchAccessCode, setEditBranchAccessCode] = useState('');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
@@ -91,11 +93,15 @@ export function BranchWarehouseSettings() {
 
     setIsAdding(true);
     try {
+        const generatedCode = newBranchAccessCode.trim() || 
+          `${newBranchName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
         const { error } = await supabase.from('branches').insert([{
             business_id: businessId,
             name: newBranchName,
             type: newBranchType,
             address: newBranchAddress,
+            access_code: generatedCode,
             is_active: true,
             created_at: new Date().toISOString()
         }]);
@@ -109,6 +115,7 @@ export function BranchWarehouseSettings() {
         // Reset form
         setNewBranchName('');
         setNewBranchAddress('');
+        setNewBranchAccessCode('');
     } catch(err: any) {
         toast.error(err.message || "Failed to create branch");
     } finally {
@@ -131,6 +138,7 @@ export function BranchWarehouseSettings() {
           name: editBranchName,
           type: editBranchType,
           address: editBranchAddress,
+          access_code: editBranchAccessCode.trim() || null,
           updated_at: new Date().toISOString()
         })
         .eq('id', editingBranch.id);
@@ -207,6 +215,11 @@ export function BranchWarehouseSettings() {
                  <Label htmlFor="b-addr">Address</Label>
                  <Input id="b-addr" value={newBranchAddress} onChange={e => setNewBranchAddress(e.target.value)} placeholder="Physical address" />
                </div>
+               <div className="space-y-2">
+                 <Label htmlFor="b-code">Branch Access Code (Optional)</Label>
+                 <Input id="b-code" value={newBranchAccessCode} onChange={e => setNewBranchAccessCode(e.target.value)} placeholder="e.g. HARARE-HQ, BULAWAYO-01 (Auto-generated if empty)" />
+                 <p className="text-[11px] text-zinc-500">This code is used by cashiers to log in to this branch's POS registers.</p>
+               </div>
                <Button type="submit" className="w-full" disabled={isAdding}>
                  {isAdding ? 'Creating...' : 'Create Location'}
                </Button>
@@ -252,16 +265,17 @@ export function BranchWarehouseSettings() {
           <Table>
             <TableHeader className="bg-zinc-50/50">
               <TableRow>
-                <TableHead className="w-[300px]">Location</TableHead>
+                <TableHead className="w-[250px]">Location</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Physical Address</TableHead>
+                <TableHead>Access Code</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {locations.length === 0 ? (
                  <TableRow>
-                   <TableCell colSpan={4} className="text-center py-8 text-zinc-500">No locations found. Add your first branch above.</TableCell>
+                   <TableCell colSpan={5} className="text-center py-8 text-zinc-500">No locations found. Add your first branch above.</TableCell>
                  </TableRow>
               ) : locations.map((loc) => (
                 <TableRow key={loc.id} className="group hover:bg-zinc-50/50 transition-colors">
@@ -289,6 +303,15 @@ export function BranchWarehouseSettings() {
                       <span className="truncate max-w-[200px]">{loc.address || 'No address set'}</span>
                     </div>
                   </TableCell>
+                  <TableCell>
+                    {loc.type === 'warehouse' ? (
+                      <span className="text-xs text-zinc-400 italic">No Quick POS Access</span>
+                    ) : (
+                      <span className="font-mono text-xs font-bold text-zinc-900 bg-zinc-100 px-2 py-1 rounded">
+                        {loc.access_code || 'Not set'}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button 
@@ -301,6 +324,7 @@ export function BranchWarehouseSettings() {
                           setEditBranchName(loc.name);
                           setEditBranchType(loc.type || 'branch');
                           setEditBranchAddress(loc.address || '');
+                          setEditBranchAccessCode(loc.access_code || '');
                           setIsEditOpen(true);
                         }}
                       >
@@ -360,6 +384,16 @@ export function BranchWarehouseSettings() {
                  value={editBranchAddress} 
                  onChange={e => setEditBranchAddress(e.target.value)} 
                />
+             </div>
+             <div className="space-y-2">
+               <Label htmlFor="edit-b-code">Branch Access Code (POS Quick Login)</Label>
+               <Input 
+                 id="edit-b-code" 
+                 value={editBranchAccessCode} 
+                 onChange={e => setEditBranchAccessCode(e.target.value)} 
+                 placeholder="e.g. HARARE-HQ"
+               />
+               <p className="text-[11px] text-zinc-500">This code is used by cashiers to log in to this branch's POS registers.</p>
              </div>
              <Button type="submit" className="w-full" disabled={isSavingEdit}>
                {isSavingEdit ? 'Saving...' : 'Save Changes'}
