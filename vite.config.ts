@@ -11,7 +11,19 @@ export default defineConfig(({mode}) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    css: {
+      transformer: 'lightningcss',
+      lightningcss: {
+        targets: {
+          chrome: 80,
+          safari: 13,
+          firefox: 72,
+          edge: 80,
+        },
+      },
+    },
     build: {
+      cssMinify: 'lightningcss',
       sourcemap: false,
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
