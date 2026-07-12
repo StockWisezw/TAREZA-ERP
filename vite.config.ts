@@ -15,15 +15,15 @@ export default defineConfig(({mode}) => {
       transformer: 'lightningcss',
       lightningcss: {
         targets: {
-          chrome: 80,
-          safari: 13,
-          firefox: 72,
-          edge: 80,
+          chrome: 50,
+          safari: 11,
+          firefox: 50,
+          edge: 15,
         },
       },
     },
     build: {
-      cssMinify: 'lightningcss',
+      cssMinify: 'esbuild',
       sourcemap: false,
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
