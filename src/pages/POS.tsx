@@ -47,7 +47,7 @@ import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useReactToPrint } from 'react-to-print';
 import { useNavigate } from 'react-router-dom';
-import { Package, Tag, ShoppingCart, HelpCircle, Monitor, Cpu, Fingerprint, Maximize, Sliders } from 'lucide-react';
+import { Package, Tag, ShoppingCart, HelpCircle, Monitor, Cpu, Fingerprint, Maximize, Sliders, Layout } from 'lucide-react';
 
 export default function POS() {
   const navigate = useNavigate();
@@ -183,6 +183,17 @@ export default function POS() {
   const [touchOptimized, setTouchOptimized] = useState<boolean>(() => {
     return localStorage.getItem('tareza_pos_touch_optimized') === 'true';
   });
+  const [hideHeader, setHideHeader] = useState<boolean>(() => {
+    return localStorage.getItem('tareza_pos_hide_layout_header') === 'true';
+  });
+  const [scaleMode, setScaleMode] = useState<'zoom' | 'transform'>(() => {
+    const saved = localStorage.getItem('tareza_pos_scale_mode');
+    if (saved) return saved as 'zoom' | 'transform';
+    if (typeof navigator !== 'undefined' && (/android|webview|wv|q2i/i.test(navigator.userAgent))) {
+      return 'zoom';
+    }
+    return 'transform';
+  });
   const [showHwSettings, setShowHwSettings] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -198,6 +209,15 @@ export default function POS() {
   useEffect(() => {
     localStorage.setItem('tareza_pos_touch_optimized', String(touchOptimized));
   }, [touchOptimized]);
+
+  useEffect(() => {
+    localStorage.setItem('tareza_pos_hide_layout_header', String(hideHeader));
+    window.dispatchEvent(new CustomEvent('tareza_pos_header_toggled'));
+  }, [hideHeader]);
+
+  useEffect(() => {
+    localStorage.setItem('tareza_pos_scale_mode', scaleMode);
+  }, [scaleMode]);
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -1332,12 +1352,19 @@ export default function POS() {
 
   // Resolution scaler calculation
   const scaleRatio = parseFloat(posScale) / 100;
-  const scaleStyle: React.CSSProperties = scaleRatio !== 1 ? {
-    transform: `scale(${scaleRatio})`,
-    transformOrigin: 'top left',
-    width: `${100 / scaleRatio}%`,
-    height: `${100 / scaleRatio}%`,
-  } : {};
+  const scaleStyle: React.CSSProperties = scaleRatio !== 1 ? (
+    scaleMode === 'zoom' ? {
+      // @ts-ignore - zoom is non-standard but fully supported on Chrome/WebView
+      zoom: scaleRatio,
+      width: '100%',
+      height: '100%',
+    } : {
+      transform: `scale(${scaleRatio})`,
+      transformOrigin: 'top left',
+      width: `${100 / scaleRatio}%`,
+      height: `${100 / scaleRatio}%`,
+    }
+  ) : {};
 
   // Check register session status
   if (sessionLoading) {
@@ -1640,6 +1667,78 @@ export default function POS() {
                 }}
                 className="h-4.5 w-4.5 mt-1 cursor-pointer rounded border-zinc-300 text-blue-600 focus:ring-blue-500 shrink-0"
               />
+            </div>
+
+            {/* WebView Layout Header Collapse Option */}
+            <div className="flex items-start justify-between p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl hover:bg-zinc-100/70 transition-all">
+              <div className="flex gap-3">
+                <div className="p-1.5 bg-rose-50 rounded-lg text-rose-600 shrink-0 mt-0.5">
+                  <Layout className="h-4 w-4" />
+                </div>
+                <div className="space-y-0.5 pr-2">
+                  <label className="text-xs font-bold text-zinc-805 cursor-pointer block" htmlFor="hw-hide-header">
+                    Hide Main Layout Header
+                  </label>
+                  <p className="text-[10px] text-zinc-400 leading-normal">
+                    Collapses and hides the main ERP top header bar to reclaim 64px of vertical screen height. Highly recommended for handheld smart POS terminals (like Q2I).
+                  </p>
+                </div>
+              </div>
+              <input
+                id="hw-hide-header"
+                type="checkbox"
+                checked={hideHeader}
+                onChange={(e) => {
+                  setHideHeader(e.target.checked);
+                  toast.success(e.target.checked ? 'Main Header hidden to save screen space' : 'Main Header restored');
+                }}
+                className="h-4.5 w-4.5 mt-1 cursor-pointer rounded border-zinc-300 text-blue-600 focus:ring-blue-500 shrink-0"
+              />
+            </div>
+
+            {/* Scaling Engine Selector */}
+            <div className="space-y-2 p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl">
+              <div className="flex justify-between items-baseline">
+                <label className="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
+                  <Cpu className="h-3.5 w-3.5 text-zinc-500" />
+                  Scaling Rendering Engine
+                </label>
+              </div>
+              <p className="text-[10px] text-zinc-400 leading-tight">
+                Change the underlying CSS rendering logic if the screen layout appears misaligned, cut-off, or click locations are offset.
+              </p>
+              <div className="grid grid-cols-2 gap-1 bg-zinc-100 p-1 rounded-xl border border-zinc-200 mt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScaleMode('transform');
+                    toast.success('Scaling Engine: Standard CSS Transform');
+                  }}
+                  className={cn(
+                    "py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer text-center",
+                    scaleMode === 'transform'
+                      ? "bg-white text-blue-600 shadow-xs border border-zinc-200"
+                      : "text-zinc-500 hover:text-zinc-800 hover:bg-white/50"
+                  )}
+                >
+                  CSS Transform
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScaleMode('zoom');
+                    toast.success('Scaling Engine: Android WebView Zoom');
+                  }}
+                  className={cn(
+                    "py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer text-center",
+                    scaleMode === 'zoom'
+                      ? "bg-white text-blue-600 shadow-xs border border-zinc-200"
+                      : "text-zinc-500 hover:text-zinc-800 hover:bg-white/50"
+                  )}
+                >
+                  WebView Zoom (Fixes Q2I)
+                </button>
+              </div>
             </div>
 
             {/* 4. Fullscreen Terminal Toggle */}

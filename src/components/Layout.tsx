@@ -94,6 +94,17 @@ export default function Layout() {
   const [subStatus, setSubStatus] = React.useState<string>('ACTIVE');
   const [subEndDate, setSubEndDate] = React.useState<string | null>(null);
   const [sidebarExpanded, setSidebarExpanded] = React.useState<boolean>(false);
+  const [isHeaderHidden, setIsHeaderHidden] = React.useState<boolean>(() => {
+    return localStorage.getItem('tareza_pos_hide_layout_header') === 'true';
+  });
+
+  React.useEffect(() => {
+    const handleToggle = () => {
+      setIsHeaderHidden(localStorage.getItem('tareza_pos_hide_layout_header') === 'true');
+    };
+    window.addEventListener('tareza_pos_header_toggled', handleToggle);
+    return () => window.removeEventListener('tareza_pos_header_toggled', handleToggle);
+  }, []);
 
   React.useEffect(() => {
     async function fetchBusinessAndBranches() {
@@ -367,6 +378,7 @@ export default function Layout() {
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white dark:bg-zinc-950">
           
           {/* Topbar */}
+          {!(isHeaderHidden && isPosPage) && (
           <header className="flex h-16 items-center justify-between border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm px-4 sm:px-6">
             <div className="flex items-center">
               <Sheet>
@@ -604,8 +616,9 @@ export default function Layout() {
               </DropdownMenu>
             </div>
           </header>
+          )}
 
-          <main className={`flex-1 ${isPosPage ? 'p-2 sm:p-3 h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950' : 'overflow-auto p-4 sm:p-6 lg:p-8'}`}>
+          <main className={`flex-1 ${isPosPage ? (isHeaderHidden ? 'p-0.5 sm:p-1 h-screen max-h-screen flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950' : 'p-2 sm:p-3 h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950') : 'overflow-auto p-4 sm:p-6 lg:p-8'}`}>
             <div className={`mx-auto ${isPosPage ? 'w-full max-w-none h-full flex flex-col overflow-hidden' : 'max-w-[1400px]'}`}>
               {!isPosPage && <Breadcrumbs />}
               <Outlet />

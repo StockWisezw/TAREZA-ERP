@@ -302,15 +302,56 @@ async function startServer() {
     }
   });
 
+  // Helper for generating premium local heuristic insights when offline or key is missing
+  function calculateHeuristicInsights(totalSales: number, transactions: number, lowStock: number, activeBranches: number) {
+    const avgTicket = transactions > 0 ? (totalSales / transactions) : 0;
+    
+    let priorityTip = "";
+    if (lowStock > 5) {
+      priorityTip = `You have a high quantity of low stock items (${lowStock}). To mitigate supplier transport delays, consider centralizing bulk reorders to negotiate lower border clearing and shipping costs.`;
+    } else if (lowStock > 0) {
+      priorityTip = `You have ${lowStock} items near their minimum threshold. Standard lead times suggest replenishment within 7 days is optimal to prevent spot outages.`;
+    } else {
+      priorityTip = `Excellent inventory depth! All key items are currently above their safety thresholds. Continue monitoring to preserve cash liquidity.`;
+    }
+
+    const conversionRateTip = transactions > 50 
+      ? `High drawer velocity detected. Maintain dual-currency flexibility (USD/ZiG) to capture both mobile-money payments and physical cash advantages.`
+      : `With steady transaction density, focus on boosting the average transaction value (currently $${avgTicket.toFixed(2)} USD eq.) through smart product pairings.`;
+
+    const insightText = `### 📈 **Operational Forecast (Local Analysis)**
+Based on real-time indicators:
+* **Active Branches**: Managed across **${activeBranches || 1} retail site(s)**.
+* **Volume Velocity**: **${transactions || 0} completed sales transactions**, yielding a total revenue weight of **$${(totalSales || 0).toLocaleString()} USD equivalent**.
+* **Average Transaction Basket**: Approximately **$${avgTicket.toFixed(2)}** per checkout.
+
+### 🚨 **Stock Priority & Reorders**
+* **Current Warnings**: **${lowStock || 0} inventory lines** require immediate attention.
+* **Advisory**: ${priorityTip}
+
+### 💡 **Strategic Growth Recommendation (Local Engine)**
+* **Liquidity & Drawer Heuristic**: ${conversionRateTip}
+* **Offline Notice**: To activate advanced weather-based trend modeling and predictive demand curves, configure your secure **Gemini API Key** in the **Settings > Secrets** panel. Until then, our local heuristics keep you safely optimized.`;
+
+    return insightText;
+  }
+
   // 4. Gemini AI Insights and Reorder Suggestions API
   app.post("/api/ai/insights", async (req, res) => {
     const { totalSales, transactions, lowStock, activeBranches } = req.body;
     const geminiApiKey = process.env.GEMINI_API_KEY;
 
     if (!geminiApiKey) {
+      const insightText = calculateHeuristicInsights(
+        Number(totalSales || 0),
+        Number(transactions || 0),
+        Number(lowStock || 0),
+        Number(activeBranches || 1)
+      );
       return res.json({
         success: false,
-        insight: "### 💡 AI Advisor (Offline)\n\nTo enable automated AI forecasting, demand projection, and smart stock recommendations, please configure your `GEMINI_API_KEY` in the **Settings > Secrets** panel. Once registered, Tareza's predictive modeling will activate instantly."
+        isOfflineMode: true,
+        insight: insightText
       });
     }
 
@@ -352,10 +393,17 @@ Keep the response concise, visually striking, professional, and limited to about
         insight: insightText
       });
     } catch (err: any) {
-      console.error("Gemini AI API generation failed:", err);
+      console.error("Gemini AI API generation failed, falling back to local insights:", err);
+      const insightText = calculateHeuristicInsights(
+        Number(totalSales || 0),
+        Number(transactions || 0),
+        Number(lowStock || 0),
+        Number(activeBranches || 1)
+      );
       return res.json({
         success: false,
-        insight: `An error occurred while generating AI insights: ${err.message || String(err)}`
+        isOfflineMode: true,
+        insight: insightText
       });
     }
   });

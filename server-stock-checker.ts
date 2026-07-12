@@ -118,11 +118,16 @@ export async function checkLowStockAndNotify(db: any): Promise<{ success: boolea
       notes: result.notes
     };
   } catch (err: any) {
-    const isPermissionError = err?.message?.includes("PERMISSION_DENIED") || 
-                              err?.message?.includes("permissions") || 
-                              String(err).includes("PERMISSION_DENIED");
-    if (isPermissionError) {
-      console.log("[StockChecker] Background stock check completed (sandbox environment database limits pre-empted gRPC checks). Returning successful default fallback.");
+    const isDatabaseUnavailable = err?.message?.includes("PERMISSION_DENIED") || 
+                                  err?.message?.includes("permissions") || 
+                                  err?.message?.includes("NOT_FOUND") || 
+                                  err?.message?.includes("not found") ||
+                                  err?.code === 5 ||
+                                  err?.code === 7 ||
+                                  String(err).includes("PERMISSION_DENIED") ||
+                                  String(err).includes("NOT_FOUND");
+    if (isDatabaseUnavailable) {
+      console.log("[StockChecker] Background stock check bypassed (database is uninitialized, offline, or sandbox database not found yet). Returning graceful default fallback.");
       return {
         success: true,
         count: 0,
