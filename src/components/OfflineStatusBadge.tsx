@@ -63,7 +63,7 @@ export function OfflineStatusBadge() {
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
           <Wifi className="h-3.5 w-3.5" />
-          <span>Online</span>
+          <span className="hidden sm:inline">Online</span>
         </span>
       ) : (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-55/10 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400 border border-rose-500/25 animate-pulse transition-all duration-300">
@@ -72,7 +72,7 @@ export function OfflineStatusBadge() {
             <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
           </span>
           <WifiOff className="h-3.5 w-3.5" />
-          <span>Offline {isOfflineModeForced && '(Forced)'}</span>
+          <span className="hidden sm:inline">Offline {isOfflineModeForced && '(Forced)'}</span>
         </span>
       )}
     </div>

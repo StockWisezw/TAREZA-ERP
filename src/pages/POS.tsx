@@ -186,16 +186,25 @@ export default function POS() {
   const [hideHeader, setHideHeader] = useState<boolean>(() => {
     return localStorage.getItem('tareza_pos_hide_layout_header') === 'true';
   });
-  const [scaleMode, setScaleMode] = useState<'zoom' | 'transform'>(() => {
+  const [scaleMode, setScaleMode] = useState<'zoom' | 'transform' | 'vector'>(() => {
     const saved = localStorage.getItem('tareza_pos_scale_mode');
-    if (saved) return saved as 'zoom' | 'transform';
-    if (typeof navigator !== 'undefined' && (/android|webview|wv|q2i/i.test(navigator.userAgent))) {
-      return 'zoom';
-    }
-    return 'transform';
+    if (saved) return saved as 'zoom' | 'transform' | 'vector';
+    return 'vector';
   });
   const [showHwSettings, setShowHwSettings] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Apply root font-size scaling for crisp, pixel-perfect vector zooming
+  useEffect(() => {
+    if (scaleMode === 'vector') {
+      document.documentElement.style.fontSize = `${posScale}%`;
+    } else {
+      document.documentElement.style.fontSize = ''; // Reset to default
+    }
+    return () => {
+      document.documentElement.style.fontSize = ''; // Revert when leaving POS page
+    };
+  }, [posScale, scaleMode]);
 
   // Persist hardware preferences
   useEffect(() => {
@@ -1358,12 +1367,12 @@ export default function POS() {
       zoom: scaleRatio,
       width: '100%',
       height: '100%',
-    } : {
+    } : scaleMode === 'transform' ? {
       transform: `scale(${scaleRatio})`,
       transformOrigin: 'top left',
       width: `${100 / scaleRatio}%`,
       height: `${100 / scaleRatio}%`,
-    }
+    } : {}
   ) : {};
 
   // Check register session status
@@ -1707,7 +1716,22 @@ export default function POS() {
               <p className="text-[10px] text-zinc-400 leading-tight">
                 Change the underlying CSS rendering logic if the screen layout appears misaligned, cut-off, or click locations are offset.
               </p>
-              <div className="grid grid-cols-2 gap-1 bg-zinc-100 p-1 rounded-xl border border-zinc-200 mt-1">
+              <div className="grid grid-cols-3 gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl border border-zinc-200 dark:border-zinc-800 mt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScaleMode('vector');
+                    toast.success('Scaling Engine: Crisp Native Vector');
+                  }}
+                  className={cn(
+                    "py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer text-center",
+                    scaleMode === 'vector'
+                      ? "bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs border border-zinc-200 dark:border-zinc-700"
+                      : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-250"
+                  )}
+                >
+                  Crisp Vector
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -1715,13 +1739,13 @@ export default function POS() {
                     toast.success('Scaling Engine: Standard CSS Transform');
                   }}
                   className={cn(
-                    "py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer text-center",
+                    "py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer text-center",
                     scaleMode === 'transform'
-                      ? "bg-white text-blue-600 shadow-xs border border-zinc-200"
-                      : "text-zinc-500 hover:text-zinc-800 hover:bg-white/50"
+                      ? "bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs border border-zinc-200 dark:border-zinc-700"
+                      : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-250"
                   )}
                 >
-                  CSS Transform
+                  Transform
                 </button>
                 <button
                   type="button"
@@ -1730,13 +1754,13 @@ export default function POS() {
                     toast.success('Scaling Engine: Android WebView Zoom');
                   }}
                   className={cn(
-                    "py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer text-center",
+                    "py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer text-center",
                     scaleMode === 'zoom'
-                      ? "bg-white text-blue-600 shadow-xs border border-zinc-200"
-                      : "text-zinc-500 hover:text-zinc-800 hover:bg-white/50"
+                      ? "bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs border border-zinc-200 dark:border-zinc-700"
+                      : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-250"
                   )}
                 >
-                  WebView Zoom (Fixes Q2I)
+                  Zoom
                 </button>
               </div>
             </div>

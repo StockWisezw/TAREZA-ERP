@@ -464,13 +464,13 @@ export default function Layout() {
               </div>
             </div>
 
-            <div className="flex items-center space-x-2 sm:space-x-3">
+            <div className="flex items-center space-x-1 sm:space-x-2.5 shrink-0 flex-nowrap">
               <PWAInstallPrompt />
-              <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden xs:block mx-1" id="pwa-divider" />
+              <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden md:block mx-1" id="pwa-divider" />
               <OfflineStatusBadge />
-              <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block mx-1" />
+              <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden md:block mx-1" />
               <SyncStatusIndicator />
-              <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block mx-1" />
+              <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden md:block mx-1" />
               <ThemeToggle />
               <DropdownMenu>
                 <DropdownMenuTrigger render={

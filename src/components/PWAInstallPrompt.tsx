@@ -177,7 +177,7 @@ export function PWAInstallPrompt() {
         onClick={() => setIsOpen(true)}
         variant="ghost" 
         size="sm"
-        className="relative items-center gap-1.5 px-3.5 py-1.5 h-9 rounded-full bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400 border border-indigo-500/20 font-bold text-xs select-none hover:bg-indigo-100 dark:hover:bg-indigo-500/20 active:scale-95 transition-all text-center shrink-0 cursor-pointer shadow-sm hidden xs:inline-flex"
+        className="relative items-center gap-1.5 px-3.5 py-1.5 h-9 rounded-full bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400 border border-indigo-500/20 font-bold text-xs select-none hover:bg-indigo-100 dark:hover:bg-indigo-500/20 active:scale-95 transition-all text-center shrink-0 cursor-pointer shadow-sm hidden sm:inline-flex"
         title="Install Tareza ERP App Shortcut"
       >
         <span className="relative flex h-2 w-2">
