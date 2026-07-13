@@ -64,6 +64,13 @@ const navigation = [
   { name: 'Support Hub', href: '/support', icon: HelpCircle },
 ];
 
+const mobileNavItems = [
+  { name: 'POS Terminal', href: '/pos', icon: ShoppingCart },
+  { name: 'Inventory', href: '/inventory', icon: Package },
+  { name: 'Receiving', href: '/suppliers?tab=receiving', icon: Truck },
+  { name: 'Reports', href: '/reports', icon: FileText },
+];
+
 function SubscriptionBanner({ status, endDate }: { status: string; endDate: string | null }) {
   // Auto locking system has been removed per user request.
   // We bypass expired banners entirely and ensure the user always has continuous access.
@@ -618,7 +625,7 @@ export default function Layout() {
           </header>
           )}
 
-          <main className={`flex-1 ${isPosPage ? (isHeaderHidden ? 'p-0.5 sm:p-1 h-screen max-h-screen flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950' : 'p-2 sm:p-3 h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950') : 'overflow-auto p-4 sm:p-6 lg:p-8'}`}>
+          <main className={`flex-1 pb-16 md:pb-0 ${isPosPage ? (isHeaderHidden ? 'p-0.5 sm:p-1 h-[calc(100vh-4rem)] md:h-screen md:max-h-screen flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950' : 'p-2 sm:p-3 h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950') : 'overflow-auto p-4 sm:p-6 lg:p-8'}`}>
             <div className={`mx-auto ${isPosPage ? 'w-full max-w-none h-full flex flex-col overflow-hidden' : 'max-w-[1400px]'}`}>
               {!isPosPage && <Breadcrumbs />}
               <Outlet />
@@ -626,6 +633,37 @@ export default function Layout() {
           </main>
         </div>
       </div>
+      
+      {/* Premium Standalone/Mobile PWA Bottom Tab Bar */}
+      <div className="fixed bottom-0 left-0 right-0 h-16 md:hidden bg-white/95 dark:bg-[#121214]/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800/80 px-2 flex items-center justify-around z-40 pb-safe shadow-[0_-1px_3px_0_rgba(0,0,0,0.05)] select-none">
+        {mobileNavItems.map((item) => {
+          const isActive = item.href.startsWith('/suppliers')
+            ? (location.pathname === '/suppliers' && location.search.includes('tab=receiving'))
+            : (location.pathname === item.href);
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.name}
+              to={item.href}
+              className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-center transition-all duration-150 active:scale-95 ${
+                isActive 
+                  ? 'text-blue-600 dark:text-blue-400 font-bold' 
+                  : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
+              }`}
+            >
+              <div className={`relative p-1.5 rounded-2xl transition-all duration-200 ${
+                isActive ? 'bg-blue-500/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 scale-105' : 'hover:bg-zinc-100 dark:hover:bg-zinc-900'
+              }`}>
+                <Icon className="h-5 w-5" />
+              </div>
+              <span className="text-[9px] font-bold mt-1 tracking-tight uppercase leading-none">
+                {item.name}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+
       <AIAssistant />
       <HelpCenter />
       <CommandPalette />

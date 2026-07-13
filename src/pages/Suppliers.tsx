@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { SupplierDashboard } from '../components/suppliers/SupplierDashboard';
 import { SupplierDirectory } from '../components/suppliers/SupplierDirectory';
@@ -10,10 +11,23 @@ import { Download, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Suppliers() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(tabParam || 'dashboard');
+
+  useEffect(() => {
+    if (tabParam && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (val: string) => {
+    setActiveTab(val);
+    setSearchParams({ tab: val });
+  };
 
   const handleNewPOClick = () => {
-    setActiveTab('procurement');
+    handleTabChange('procurement');
     toast.success('Switched to Purchases tab. Please click "Create PO" to add a new Purchase Order details.');
   };
 
@@ -30,7 +44,7 @@ export default function Suppliers() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="bg-zinc-100/80 p-1 rounded-xl w-full justify-start overflow-x-auto border border-zinc-200/50 hidden sm:inline-flex mb-6 h-12">
           <TabsTrigger value="dashboard" className="rounded-lg px-6 h-10 data-[state=active]:shadow-sm">Dashboard</TabsTrigger>
           <TabsTrigger value="procurement" className="rounded-lg px-6 h-10 data-[state=active]:shadow-sm">Procurement (POs)</TabsTrigger>
@@ -41,10 +55,10 @@ export default function Suppliers() {
         
         {/* Mobile quick tabs */}
         <div className="sm:hidden grid grid-cols-2 gap-2 mb-6">
-          <Button variant={activeTab === 'dashboard' ? 'default' : 'outline'} onClick={() => setActiveTab('dashboard')} className="w-full text-xs h-9">Dashboard</Button>
-          <Button variant={activeTab === 'procurement' ? 'default' : 'outline'} onClick={() => setActiveTab('procurement')} className="w-full text-xs h-9">Purchases</Button>
-          <Button variant={activeTab === 'receiving' ? 'default' : 'outline'} onClick={() => setActiveTab('receiving')} className="w-full text-xs h-9">Receiving</Button>
-          <Button variant={activeTab === 'payables' ? 'default' : 'outline'} onClick={() => setActiveTab('payables')} className="w-full text-xs h-9">Payables</Button>
+          <Button variant={activeTab === 'dashboard' ? 'default' : 'outline'} onClick={() => handleTabChange('dashboard')} className="w-full text-xs h-9">Dashboard</Button>
+          <Button variant={activeTab === 'procurement' ? 'default' : 'outline'} onClick={() => handleTabChange('procurement')} className="w-full text-xs h-9">Purchases</Button>
+          <Button variant={activeTab === 'receiving' ? 'default' : 'outline'} onClick={() => handleTabChange('receiving')} className="w-full text-xs h-9">Receiving</Button>
+          <Button variant={activeTab === 'payables' ? 'default' : 'outline'} onClick={() => handleTabChange('payables')} className="w-full text-xs h-9">Payables</Button>
         </div>
 
         <div className="animate-in fade-in duration-500">
