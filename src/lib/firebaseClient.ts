@@ -792,9 +792,19 @@ class SupabaseQueryBuilder {
 
         const insertedItems: any[] = [];
         for (const item of itemsToInsert) {
-          // Save to local IndexedDB and queue for background sync
-          const savedLocal = await offlineSyncEngine.save(this.table, item);
-          insertedItems.push(savedLocal);
+          const docRef = fireDoc(db, this.table, item.id);
+          // Save directly to the live Cloud Firestore database
+          await fireSetDoc(docRef, item, { merge: true });
+          insertedItems.push(item);
+
+          // Mirror immediately to local IndexedDB for continuous offline fallback and synchronization backup
+          if (dexieTable) {
+            try {
+              await dexieTable.put({ ...item, syncStatus: 'synced', syncedAt: new Date().toISOString() });
+            } catch (dexieErr) {
+              console.warn('[Dexie] Failed to mirror write:', dexieErr);
+            }
+          }
         }
 
         return { data: insertedItems.map(d => normalizeOutput(d.id, d, this.table)), count: itemsToInsert.length, error: null };
@@ -810,15 +820,33 @@ class SupabaseQueryBuilder {
         }
 
         if (this.targetId) {
-          const existing = dexieTable ? await dexieTable.get(this.targetId) : null;
-          const updated = { ...(existing || {}), ...cleanItem, id: this.targetId };
-          await offlineSyncEngine.save(this.table, updated);
-          return { data: [normalizeOutput(this.targetId, updated, this.table)], count: 1, error: null };
+          const docRef = fireDoc(db, this.table, this.targetId);
+          await fireUpdateDoc(docRef, cleanItem);
+
+          // Mirror immediately to local IndexedDB
+          if (dexieTable) {
+            try {
+              const existing = await dexieTable.get(this.targetId);
+              await dexieTable.put({ ...(existing || {}), ...cleanItem, id: this.targetId, syncStatus: 'synced', syncedAt: new Date().toISOString() });
+            } catch (dexieErr) {
+              console.warn('[Dexie] Failed to mirror update:', dexieErr);
+            }
+          }
+          return { data: [normalizeOutput(this.targetId, { ...cleanItem, id: this.targetId }, this.table)], count: 1, error: null };
         } else {
-          const results = await this.getFilteredLocalDocs();
+          const results = await this.getFilteredFirestoreDocs();
           for (const item of results) {
-            const updated = { ...item, ...cleanItem };
-            await offlineSyncEngine.save(this.table, updated);
+            const docRef = fireDoc(db, this.table, item.id);
+            await fireUpdateDoc(docRef, cleanItem);
+
+            // Mirror immediately to local IndexedDB
+            if (dexieTable) {
+              try {
+                await dexieTable.put({ ...item, ...cleanItem, syncStatus: 'synced', syncedAt: new Date().toISOString() });
+              } catch (dexieErr) {
+                console.warn('[Dexie] Failed to mirror batch update:', dexieErr);
+              }
+            }
           }
           return { data: [], count: results.length, error: null };
         }
@@ -827,11 +855,29 @@ class SupabaseQueryBuilder {
       // Handle Delete
       if (this.isDelete) {
         if (this.targetId) {
-          await offlineSyncEngine.delete(this.table, this.targetId);
+          const docRef = fireDoc(db, this.table, this.targetId);
+          await fireDeleteDoc(docRef);
+
+          if (dexieTable) {
+            try {
+              await dexieTable.delete(this.targetId);
+            } catch (dexieErr) {
+              console.warn('[Dexie] Failed to mirror delete:', dexieErr);
+            }
+          }
         } else {
-          const results = await this.getFilteredLocalDocs();
+          const results = await this.getFilteredFirestoreDocs();
           for (const item of results) {
-            await offlineSyncEngine.delete(this.table, item.id);
+            const docRef = fireDoc(db, this.table, item.id);
+            await fireDeleteDoc(docRef);
+
+            if (dexieTable) {
+              try {
+                await dexieTable.delete(item.id);
+              } catch (dexieErr) {
+                console.warn('[Dexie] Failed to mirror batch delete:', dexieErr);
+              }
+            }
           }
         }
         return { data: null, count: 0, error: null };
@@ -839,13 +885,48 @@ class SupabaseQueryBuilder {
 
       // SELECT single record
       if (this.targetId) {
-        const snap = dexieTable ? await dexieTable.get(this.targetId) : null;
-        let mappedData = [];
-        if (snap && snap.deleted !== true) {
-          if (!requiresBusinessScope || isSystemDev || snap.business_id === activeBizId || this.table === 'businesses') {
-            mappedData = [normalizeOutput(snap.id, snap, this.table)];
+        const docRef = fireDoc(db, this.table, this.targetId);
+        let snap;
+        try {
+          snap = await fireGetDoc(docRef);
+        } catch (err: any) {
+          console.warn(`[Firebase] Live get failed on ${this.table}/${this.targetId}, checking cached fallback...`);
+          try {
+            const { getDocFromCache } = await import('firebase/firestore');
+            snap = await getDocFromCache(docRef);
+          } catch (cacheErr) {
+            // Last resort: read from IndexedDB
+            if (dexieTable) {
+              const localRecord = await dexieTable.get(this.targetId);
+              let mappedData: any[] = [];
+              if (localRecord && localRecord.deleted !== true) {
+                if (!requiresBusinessScope || isSystemDev || localRecord.business_id === activeBizId || this.table === 'businesses') {
+                  mappedData = [normalizeOutput(localRecord.id, localRecord, this.table)];
+                }
+              }
+              return { data: mappedData, count: mappedData.length, error: null };
+            }
+            throw err;
           }
         }
+
+        let mappedData = [];
+        if (snap && snap.exists()) {
+          const snapData = snap.data();
+          if (!requiresBusinessScope || isSystemDev || snapData.business_id === activeBizId || this.table === 'businesses') {
+            mappedData = [normalizeOutput(snap.id, snapData, this.table)];
+          }
+        }
+
+        // Mirror read to IndexedDB
+        if (mappedData.length > 0 && dexieTable) {
+          try {
+            await dexieTable.put({ ...mappedData[0], syncStatus: 'synced', syncedAt: new Date().toISOString() });
+          } catch (dexieErr) {
+            console.warn('[Dexie] Failed to mirror read:', dexieErr);
+          }
+        }
+
         return { 
           data: mappedData, 
           count: mappedData.length, 
@@ -854,7 +935,7 @@ class SupabaseQueryBuilder {
       }
 
       // SELECT multiple records
-      const results = await this.getFilteredLocalDocs();
+      const results = await this.getFilteredFirestoreDocs();
       const mappedData = results.map(item => normalizeOutput(item.id, item, this.table));
       return { 
         data: mappedData, 
@@ -862,9 +943,113 @@ class SupabaseQueryBuilder {
         error: null 
       };
     } catch (error) {
-      console.error(`Local IndexedDB query failed on ${this.table}:`, error);
+      console.error(`Firestore query failed on ${this.table}:`, error);
       return { data: null, count: null, error };
     }
+  }
+
+  async getFilteredFirestoreDocs() {
+    const email = fireAuth.currentUser?.email?.toLowerCase();
+    const isSystemDev = email && (
+      email === 'admin@tarezaerp.co.zw' ||
+      email === 'sales@tarezaerp.co.zw' ||
+      email === 'tapsforex@gmail.com' ||
+      email === 'tapiwagahadza54@gmail.com'
+    );
+    
+    const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
+    const isDevAdminTable = isSystemDev && adminTables.includes(this.table);
+
+    const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id') && this.table !== 'business_users';
+    const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
+
+    const colRef = fireCollection(db, this.table);
+    const constraints: any[] = [];
+
+    if (requiresBusinessScope && activeBizId && !isDevAdminTable) {
+      constraints.push(fireWhere('business_id', '==', activeBizId));
+    } else if (this.table === 'businesses' && activeBizId && !isDevAdminTable) {
+      constraints.push(fireWhere('id', '==', activeBizId));
+    }
+
+    // Apply filters
+    for (const filter of this.eqFilters) {
+      if (filter.col === 'business_id' && requiresBusinessScope && activeBizId && !isDevAdminTable) continue;
+      constraints.push(fireWhere(filter.col, '==', filter.val));
+    }
+
+    for (const filter of this.inFilters) {
+      constraints.push(fireWhere(filter.col, 'in', filter.val));
+    }
+
+    for (const filter of this.gteFilters) {
+      constraints.push(fireWhere(filter.col, '>=', filter.val));
+    }
+
+    for (const filter of this.lteFilters) {
+      constraints.push(fireWhere(filter.col, '<=', filter.val));
+    }
+
+    let snap;
+    try {
+      const q = fireQuery(colRef, ...constraints);
+      snap = await fireGetDocs(q);
+    } catch (err: any) {
+      console.warn(`[Firebase] Live query failed on ${this.table}, checking cached fallback:`, err);
+      try {
+        const { getDocsFromCache } = await import('firebase/firestore');
+        const q = fireQuery(colRef, ...constraints);
+        snap = await getDocsFromCache(q);
+      } catch (cacheErr) {
+        console.warn(`[Firebase] Cache read failed on ${this.table}, falling back to local IndexedDB.`);
+        return await this.getFilteredLocalDocs();
+      }
+    }
+
+    let results = snap.docs.map(docSnap => ({
+      id: docSnap.id,
+      ...(docSnap.data() as any)
+    }));
+
+    // Soft deletion filter
+    results = results.filter((item: any) => item.deleted !== true);
+
+    // Apply sorting in-memory to prevent Firestore index requirements
+    if (this.orderCol) {
+      const col = this.orderCol;
+      const asc = this.orderAscending;
+      results.sort((a: any, b: any) => {
+        const valA = a[col];
+        const valB = b[col];
+        if (valA === undefined || valA === null) return 1;
+        if (valB === undefined || valB === null) return -1;
+        if (valA < valB) return asc ? -1 : 1;
+        if (valA > valB) return asc ? 1 : -1;
+        return 0;
+      });
+    }
+
+    // Apply limit in-memory
+    if (this.limitNum !== undefined) {
+      results = results.slice(0, this.limitNum);
+    }
+
+    // Mirror to IndexedDB as background synchronization cache
+    const dexieTable = (dexieDb as any)[this.table];
+    if (dexieTable && results.length > 0) {
+      try {
+        const mirroredRecords = results.map(item => ({
+          ...item,
+          syncStatus: 'synced',
+          syncedAt: new Date().toISOString()
+        }));
+        await dexieTable.bulkPut(mirroredRecords);
+      } catch (dexieErr) {
+        console.warn('[Dexie] Failed to bulk mirror results:', dexieErr);
+      }
+    }
+
+    return results;
   }
 
   async getFilteredLocalDocs() {
