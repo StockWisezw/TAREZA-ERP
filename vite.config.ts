@@ -11,17 +11,6 @@ export default defineConfig(({mode}) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
-    css: {
-      transformer: 'lightningcss',
-      lightningcss: {
-        targets: {
-          chrome: 50,
-          safari: 11,
-          firefox: 50,
-          edge: 15,
-        },
-      },
-    },
     build: {
       cssMinify: 'esbuild',
       sourcemap: false,
