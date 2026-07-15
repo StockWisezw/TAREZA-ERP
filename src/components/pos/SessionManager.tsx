@@ -29,6 +29,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '../../lib/firebaseClient';
 import { usePOSStore } from '../../store/posStore';
+import { usePermission } from '../../hooks/usePermission';
 
 interface SessionManagerProps {
   activeSession?: any;
@@ -45,6 +46,7 @@ interface SessionManagerProps {
   setShowShiftDetails?: (val: boolean) => void;
   handleStartShift: (branchId?: string, cashierId?: string, userId?: string, shiftDate?: string) => Promise<boolean>;
   handleEndShift?: () => Promise<boolean>;
+  onClose?: () => void;
 }
 
 export const SessionManager: React.FC<SessionManagerProps> = ({
@@ -61,8 +63,10 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   showShiftDetails,
   setShowShiftDetails,
   handleStartShift,
-  handleEndShift
+  handleEndShift,
+  onClose
 }) => {
+  const { role } = usePermission();
   const [branches, setBranches] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
@@ -333,6 +337,16 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
         <Card className="w-full max-w-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl relative overflow-hidden my-auto">
           <div className="absolute top-0 inset-x-0 h-1.5 bg-indigo-600" />
           
+          {onClose && (
+            <button 
+              onClick={onClose} 
+              className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors z-10 cursor-pointer"
+              title="Close Shift Initialization"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+          
           <CardHeader className="pt-6 pb-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="p-1 px-2.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/55 text-indigo-700 dark:text-indigo-400 text-[10px] font-bold font-mono tracking-wider uppercase">TAREZA SHIFT WORKFLOW</span>
@@ -511,6 +525,16 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
               <Play className="w-4 h-4 fill-current shrink-0" />
               <span>Initialize & Start Tareza Session</span>
             </Button>
+            {onClose && (
+              <Button 
+                variant="outline" 
+                onClick={onClose} 
+                className="w-full border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 py-5 font-bold text-xs select-none cursor-pointer rounded-xl flex items-center justify-center gap-2 h-11"
+              >
+                <X className="w-4 h-4 shrink-0" />
+                <span>Cancel & Return to Dashboard</span>
+              </Button>
+            )}
           </DialogFooter>
         </Card>
       </div>
@@ -575,7 +599,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                 <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-150 dark:border-zinc-800/60 flex flex-col justify-between">
                   <span className="text-zinc-400 font-semibold block mb-0.5">Expected Draw Balance</span>
                   <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-sm text-indigo-600 dark:text-indigo-400">
-                    ${(activeSession.expected_balance || 0).toFixed(2)}
+                    {role === 'cashier' ? '[HIDDEN - BLIND TILL]' : `$${(activeSession.expected_balance || 0).toFixed(2)}`}
                   </span>
                 </div>
                 <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-150 dark:border-zinc-800/60 flex flex-col justify-between">
@@ -587,44 +611,53 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
               </div>
 
               {/* Real-time Drawer Reconciliation Summary */}
-              <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 rounded-xl p-3.5 space-y-2.5">
-                <div className="flex justify-between items-center pb-1.5 border-b border-zinc-150 dark:border-zinc-800">
-                  <span className="text-[10px] uppercase font-black text-indigo-700 dark:text-indigo-400 tracking-wider">Real-time Drawer Reconciliation</span>
-                  {loadingTotals ? (
-                    <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
-                  ) : (
-                    <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-500">Live summary</span>
-                  )}
+              {role === 'cashier' ? (
+                <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 rounded-xl p-3.5 space-y-1.5 text-center">
+                  <h4 className="text-[10px] uppercase font-black text-indigo-700 dark:text-indigo-450 tracking-wider">Blind Till Enforced</h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-normal">
+                    Real-time transaction revenues are hidden. Please perform a blind physical count of cash and drawer currency upon shift closure.
+                  </p>
                 </div>
+              ) : (
+                <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex justify-between items-center pb-1.5 border-b border-zinc-150 dark:border-zinc-800">
+                    <span className="text-[10px] uppercase font-black text-indigo-700 dark:text-indigo-400 tracking-wider">Real-time Drawer Reconciliation</span>
+                    {loadingTotals ? (
+                      <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+                    ) : (
+                      <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-500">Live summary</span>
+                    )}
+                  </div>
 
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
-                    <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Cash</span>
-                    <span className="font-mono text-xs font-black text-emerald-650 dark:text-emerald-400">
-                      ${realtimeTotals.cash.toFixed(2)}
-                    </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
+                      <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Cash</span>
+                      <span className="font-mono text-xs font-black text-emerald-650 dark:text-emerald-400">
+                        ${realtimeTotals.cash.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
+                      <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Credit</span>
+                      <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400">
+                        ${realtimeTotals.credit.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
+                      <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Mobile</span>
+                      <span className="font-mono text-xs font-black text-amber-600 dark:text-amber-500">
+                        ${realtimeTotals.mobile.toFixed(2)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
-                    <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Credit</span>
-                    <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400">
-                      ${realtimeTotals.credit.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
-                    <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Mobile</span>
-                    <span className="font-mono text-xs font-black text-amber-600 dark:text-amber-500">
-                      ${realtimeTotals.mobile.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
 
-                <div className="flex justify-between items-center pt-2 border-t border-dashed border-zinc-200 dark:border-zinc-800">
-                  <span className="text-xs font-bold text-zinc-650 dark:text-zinc-350">Total Shift Revenue:</span>
-                  <span className="font-mono text-sm font-black text-zinc-900 dark:text-white">
-                    ${realtimeTotals.total.toFixed(2)}
-                  </span>
+                  <div className="flex justify-between items-center pt-2 border-t border-dashed border-zinc-200 dark:border-zinc-800">
+                    <span className="text-xs font-bold text-zinc-650 dark:text-zinc-350">Total Shift Revenue:</span>
+                    <span className="font-mono text-sm font-black text-zinc-900 dark:text-white">
+                      ${realtimeTotals.total.toFixed(2)}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="p-3.5 bg-amber-50 dark:bg-amber-950/25 border border-amber-250 dark:border-amber-900/30 text-amber-800 dark:text-amber-400 rounded-xl text-[11px] leading-relaxed flex items-start gap-2">
                 <Info className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
@@ -632,11 +665,22 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
               </div>
             </div>
 
-            <DialogFooter className="bg-zinc-50 dark:bg-zinc-900 p-4 border-t border-zinc-105 dark:border-zinc-800 -mx-6 -mb-6 mt-4 gap-2 rounded-b-2xl">
+            <DialogFooter className="bg-zinc-50 dark:bg-zinc-900 p-4 border-t border-zinc-150 dark:border-zinc-800 -mx-6 -mb-6 mt-4 flex flex-col sm:flex-row gap-2 rounded-b-2xl">
+              <Button 
+                variant="outline"
+                onClick={() => setShowShiftDetails?.(false)}
+                className="w-full border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 py-3 text-xs font-bold rounded-xl"
+              >
+                Keep Shift Open
+              </Button>
               <Button 
                 onClick={() => {
                   setShowShiftDetails?.(false);
-                  setClosingActual?.(activeSession.expected_balance?.toString() || '');
+                  if (role === 'cashier') {
+                    setClosingActual?.('');
+                  } else {
+                    setClosingActual?.(activeSession.expected_balance?.toString() || '');
+                  }
                   setShowCloseShift?.(true);
                 }} 
                 className="w-full bg-red-600 hover:bg-red-700 text-white rounded-xl py-3 text-xs font-black select-none cursor-pointer transition-colors"
@@ -660,7 +704,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                 To close out bookkeeping records, please physically count all hardware cash drawer currencies and log the exact cash counter total below:
               </p>
               <div className="space-y-1.5">
-                <label className="text-xs font-black text-zinc-700 dark:text-zinc-350">
+                <label className="text-xs font-black text-zinc-700 dark:text-zinc-355">
                   Actual Counted Drawer Float (USD) *
                 </label>
                 <div className="relative">
@@ -674,9 +718,17 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                   />
                 </div>
               </div>
-              <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs text-zinc-650 dark:text-zinc-400">
-                Current estimate expected: <span className="font-extrabold text-zinc-900 dark:text-white font-mono">${(activeSession.expected_balance || 0).toFixed(2)}</span>. Overages or shortages will raise compliance variances automatically.
-              </div>
+              
+              {role === 'cashier' ? (
+                <div className="p-3 bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/30 rounded-xl text-xs text-indigo-800 dark:text-indigo-400">
+                  <Info className="w-4 h-4 shrink-0 text-indigo-500 inline mr-1" />
+                  <strong>Blind Till Enabled:</strong> Please input the exact counted physical cash in the drawer. The system expects standard business-day reconciliation without displaying variance estimates during counting.
+                </div>
+              ) : (
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs text-zinc-650 dark:text-zinc-400">
+                  Current estimate expected: <span className="font-extrabold text-zinc-900 dark:text-white font-mono">${(activeSession.expected_balance || 0).toFixed(2)}</span>. Overages or shortages will raise compliance variances automatically.
+                </div>
+              )}
             </div>
             <DialogFooter className="bg-zinc-50 dark:bg-zinc-900 p-4 border-t border-zinc-100 dark:border-zinc-850 -mx-6 -mb-6 mt-4 flex gap-2 rounded-b-2xl">
               <Button 

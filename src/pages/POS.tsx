@@ -31,6 +31,7 @@ import { useOfflineQueue } from '../hooks/useOfflineQueue';
 import { ProductGrid } from '../components/pos/ProductGrid';
 import { CartSummary } from '../components/pos/CartSummary';
 import { SessionManager } from '../components/pos/SessionManager';
+import { ShiftsDashboard } from '../components/pos/ShiftsDashboard';
 import { QuotationManager } from '../components/pos/QuotationManager';
 import { PaymentFlow } from '../components/pos/PaymentFlow';
 import { TransactionHistoryManager } from '../components/pos/TransactionHistoryManager';
@@ -172,6 +173,7 @@ export default function POS() {
   const [dbQuotes, setDbQuotes] = useState<any[]>([]);
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
   const [activeMobileTab, setActiveMobileTab] = useState<'catalog' | 'cart'>('catalog');
+  const [viewingDashboard, setViewingDashboard] = useState(true);
 
   // POS Hardware & Touchscreen Resolution Optimizers
   const [posScale, setPosScale] = useState<'75' | '85' | '90' | '100' | '110'>(() => {
@@ -1387,6 +1389,25 @@ export default function POS() {
     );
   }
 
+  // First Dashboard for POS: Registers and Shifts log
+  if (viewingDashboard) {
+    return (
+      <ShiftsDashboard
+        activeSession={activeSession}
+        setActiveSession={setActiveSession}
+        refreshActiveSession={refreshActiveSession}
+        onEnterCheckout={(session) => {
+          setViewingDashboard(false);
+        }}
+        openingFloat={openingFloat}
+        setOpeningFloat={setOpeningFloat}
+        requireFloat={requireFloat}
+        setRequireFloat={setRequireFloat}
+        handleStartShift={handleStartShift}
+      />
+    );
+  }
+
   // Session screen layout wrapper when cashier has no active shift opened
   if (!activeSession) {
     return (
@@ -1395,6 +1416,7 @@ export default function POS() {
         setOpeningFloat={setOpeningFloat}
         requireFloat={requireFloat}
         handleStartShift={handleStartShift}
+        onClose={() => setViewingDashboard(true)}
       />
     );
   }
@@ -1447,6 +1469,16 @@ export default function POS() {
                 setActiveSession={setActiveSession}
                 userId={(activeSession as any)?.user_id || (activeSession as any)?.cashier_id || 'unknown'}
               />
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setViewingDashboard(true)}
+                className="border-indigo-200 bg-indigo-50/25 text-indigo-650 dark:border-indigo-900 dark:bg-indigo-950/20 dark:text-indigo-400 text-xs shadow-none cursor-pointer rounded-xl font-extrabold hover:bg-indigo-100/45 flex items-center gap-1"
+                title="Return to Shifts & Registers Dashboard"
+              >
+                <Layout className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Shifts Dashboard</span>
+              </Button>
               <Button 
                 variant="outline" 
                 size="sm" 

@@ -165,7 +165,6 @@ service cloud.firestore {
       allow delete: if isSystemDeveloper() || belongsToUserBusinessAndBranch(existing().business_id, existing().get('branch_id', null));
     }
     
-    // Expense Categories
     match /expense_categories/{id} {
       allow read: if isSystemDeveloper() || belongsToUserBusinessAndBranch(existing().business_id, existing().get('branch_id', null));
       allow create: if isSystemDeveloper() || belongsToUserBusinessAndBranch(incoming().business_id, incoming().get('branch_id', null));

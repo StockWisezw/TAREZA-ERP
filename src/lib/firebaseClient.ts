@@ -551,7 +551,7 @@ export function setActiveBusinessId(id: string | null) {
 }
 
 export async function getActiveBusinessId(): Promise<string | null> {
-  if (cachedBusinessId) return cachedBusinessId;
+  if (cachedBusinessId && cachedBusinessId !== 'default_business') return cachedBusinessId;
 
   const localId = safeGetLocalStorage('tareza_active_business_id');
   if (localId && localId !== 'default_business' && localId !== 'null') {
@@ -563,6 +563,7 @@ export async function getActiveBusinessId(): Promise<string | null> {
   if (!user) return 'default_business';
 
   if (activeBusinessIdPromise) {
+    if (cachedBusinessId && cachedBusinessId !== 'default_business') return cachedBusinessId;
     return activeBusinessIdPromise;
   }
 
@@ -578,7 +579,6 @@ export async function getActiveBusinessId(): Promise<string | null> {
         if (directSnap && directSnap.exists()) {
           const bizId = directSnap.data()?.business_id;
           if (bizId) {
-            setActiveBusinessId(bizId);
             return bizId;
           }
         }
@@ -592,7 +592,6 @@ export async function getActiveBusinessId(): Promise<string | null> {
         if (qSnap && !qSnap.empty) {
           const bizId = qSnap.docs[0].data()?.business_id;
           if (bizId) {
-            setActiveBusinessId(bizId);
             return bizId;
           }
         }
@@ -620,7 +619,6 @@ export async function getActiveBusinessId(): Promise<string | null> {
               if (cacheSnap && cacheSnap.exists()) {
                 const bizId = cacheSnap.data()?.business_id;
                 if (bizId) {
-                  setActiveBusinessId(bizId);
                   return bizId;
                 }
               }
@@ -640,8 +638,15 @@ export async function getActiveBusinessId(): Promise<string | null> {
 
   try {
     const res = await activeBusinessIdPromise;
-    cachedBusinessId = res;
-    return res;
+    // Safeguard: If cachedBusinessId was explicitly set in the meantime to a real business, do NOT overwrite it!
+    if (res && res !== 'default_business') {
+      if (!cachedBusinessId || cachedBusinessId === 'default_business') {
+        setActiveBusinessId(res);
+      }
+    } else if (!cachedBusinessId) {
+      cachedBusinessId = 'default_business';
+    }
+    return cachedBusinessId;
   } finally {
     activeBusinessIdPromise = null;
   }
@@ -785,7 +790,7 @@ class SupabaseQueryBuilder {
 
           const cleanItem = normalizeInput(item, this.table);
           if (requiresBusinessScope && activeBizId) {
-            if (!(isDevAdminTable && cleanItem.business_id)) {
+            if (!cleanItem.business_id) {
               cleanItem.business_id = activeBizId;
             }
           }
@@ -816,7 +821,7 @@ class SupabaseQueryBuilder {
       if (this.isUpdate) {
         const cleanItem = normalizeInput(this.payload, this.table);
         if (requiresBusinessScope && activeBizId) {
-          if (!(isDevAdminTable && cleanItem.business_id)) {
+          if (!cleanItem.business_id) {
             cleanItem.business_id = activeBizId;
           }
         }

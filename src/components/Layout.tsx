@@ -26,6 +26,7 @@ import {
   Mail
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { usePermission } from '../hooks/usePermission';
 import { useBusinessStore } from '../store';
 import { Building2 } from 'lucide-react';
 import { Button } from './ui/button';
@@ -69,7 +70,6 @@ const mobileNavItems = [
   { name: 'POS Terminal', href: '/pos', icon: ShoppingCart },
   { name: 'Inventory', href: '/inventory', icon: Package },
   { name: 'Receiving', href: '/suppliers?tab=receiving', icon: Truck },
-  { name: 'Reports', href: '/reports', icon: FileText },
 ];
 
 function SubscriptionBanner({ status, endDate }: { status: string; endDate: string | null }) {
@@ -90,9 +90,16 @@ interface NotificationItem {
 
 export default function Layout() {
   const { signOut, user } = useAuth();
+  const { role, loading: rbacLoading } = usePermission();
   const location = useLocation();
   const isPosPage = location.pathname === '/pos';
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (!rbacLoading && role === 'cashier' && location.pathname !== '/pos') {
+      navigate('/pos', { replace: true });
+    }
+  }, [role, rbacLoading, location.pathname, navigate]);
   const isDeveloper = user?.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(user.email.toLowerCase());
   // Screen lock removed per user request
   const isLocked = false;
@@ -257,44 +264,56 @@ export default function Layout() {
     window.location.href = '/login';
   };
 
-  const NavLinks = ({ mobile }: { mobile?: boolean }) => (
-    <div className="flex flex-col px-1.5 dev-nav-links">
-      {navigation.map((item) => {
-        const isActive = location.pathname === item.href;
-        const showLabel = mobile || sidebarExpanded;
-        
-        return (
-          <Link
-            key={item.name}
-            to={item.href}
-            onClick={() => {
-              if (!mobile) {
-                // Keep collapsed when page is selected so user sees full page
-                setSidebarExpanded(false);
-              }
-            }}
-            title={!showLabel ? item.name : undefined}
-            className={`flex items-center rounded-full transition-all mb-1 h-9 ${
-              showLabel 
-                ? 'px-3.5 py-2 gap-3 justify-start' 
-                : 'p-0 w-9 h-9 mx-auto justify-center'
-            } ${
-              isActive 
-                ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 font-bold shadow-sm' 
-                : 'text-zinc-650 hover:bg-zinc-100/80 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-850/50 dark:hover:text-zinc-50'
-            }`}
-          >
-            <item.icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? 'text-blue-700 dark:text-blue-400' : 'text-zinc-500 dark:text-zinc-400'}`} />
-            {showLabel && (
-              <span className="text-xs font-semibold tracking-tight truncate select-none leading-none">
-                {item.name}
-              </span>
-            )}
-          </Link>
-        )
-      })}
-    </div>
-  );
+  const NavLinks = ({ mobile }: { mobile?: boolean }) => {
+    const filteredNav = navigation.filter(item => {
+      if (role === 'cashier') {
+        return item.href === '/pos';
+      }
+      if (role === 'staff') {
+        return ['/pos', '/inventory', '/customers', '/suppliers', '/messenger', '/support'].includes(item.href);
+      }
+      return true;
+    });
+
+    return (
+      <div className="flex flex-col px-1.5 dev-nav-links">
+        {filteredNav.map((item) => {
+          const isActive = location.pathname === item.href;
+          const showLabel = mobile || sidebarExpanded;
+          
+          return (
+            <Link
+              key={item.name}
+              to={item.href}
+              onClick={() => {
+                if (!mobile) {
+                  // Keep collapsed when page is selected so user sees full page
+                  setSidebarExpanded(false);
+                }
+              }}
+              title={!showLabel ? item.name : undefined}
+              className={`flex items-center rounded-full transition-all mb-1 h-9 ${
+                showLabel 
+                  ? 'px-3.5 py-2 gap-3 justify-start' 
+                  : 'p-0 w-9 h-9 mx-auto justify-center'
+              } ${
+                isActive 
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 font-bold shadow-sm' 
+                  : 'text-zinc-650 hover:bg-zinc-100/80 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-850/50 dark:hover:text-zinc-50'
+              }`}
+            >
+              <item.icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? 'text-blue-700 dark:text-blue-400' : 'text-zinc-500 dark:text-zinc-400'}`} />
+              {showLabel && (
+                <span className="text-xs font-semibold tracking-tight truncate select-none leading-none">
+                  {item.name}
+                </span>
+              )}
+            </Link>
+          )
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-white dark:bg-zinc-950 max-h-screen overflow-hidden font-sans text-zinc-900 dark:text-zinc-100">
@@ -460,17 +479,19 @@ export default function Layout() {
                 </div>
               )}
               
-              <div 
-                className="hidden sm:flex relative w-64 max-w-md ml-2 cursor-pointer"
-                onClick={() => window.dispatchEvent(new CustomEvent('open-command-palette'))}
-              >
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                <input 
-                  type="button" 
-                  value="Search features... (⌘K)" 
-                  className="pl-9 pr-4 text-left bg-zinc-100/50 dark:bg-zinc-900/50 border-transparent focus-visible:bg-white dark:focus-visible:bg-zinc-900 focus-visible:border-blue-500/50 shadow-none h-10 rounded-full text-xs text-zinc-500 font-medium cursor-pointer w-full text-ellipsis overflow-hidden whitespace-nowrap outline-none" 
-                />
-              </div>
+              {role !== 'cashier' && (
+                <div 
+                  className="hidden sm:flex relative w-64 max-w-md ml-2 cursor-pointer"
+                  onClick={() => window.dispatchEvent(new CustomEvent('open-command-palette'))}
+                >
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                  <input 
+                    type="button" 
+                    value="Search features... (⌘K)" 
+                    className="pl-9 pr-4 text-left bg-zinc-100/50 dark:bg-zinc-900/50 border-transparent focus-visible:bg-white dark:focus-visible:bg-zinc-900 focus-visible:border-blue-500/50 shadow-none h-10 rounded-full text-xs text-zinc-500 font-medium cursor-pointer w-full text-ellipsis overflow-hidden whitespace-nowrap outline-none" 
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex items-center space-x-1 sm:space-x-2.5 shrink-0 flex-nowrap">
@@ -556,7 +577,7 @@ export default function Layout() {
                               <div className="flex items-center justify-between mb-0.5">
                                 <h4 className={`text-xs font-bold truncate leading-snug ${
                                   !item.read ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-700 dark:text-zinc-350'
-                                }`}>
+                                }}`}>
                                   {item.title}
                                 </h4>
                                 {!item.read && (
@@ -605,12 +626,18 @@ export default function Layout() {
                   <DropdownMenuLabel className="font-normal p-3">
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-semibold leading-none">{user?.email || 'admin@tareza.co.zw'}</p>
-                      <p className="text-xs leading-none text-zinc-500">Administrator</p>
+                      <p className="text-xs leading-none text-zinc-500">
+                        {role === 'cashier' ? 'Cashier (Blind Till)' : 'Administrator'}
+                      </p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="py-2 cursor-pointer">Profile Settings</DropdownMenuItem>
-                  <DropdownMenuItem className="py-2 cursor-pointer">Branch Setup</DropdownMenuItem>
+                  {role !== 'cashier' && (
+                    <>
+                      <DropdownMenuItem className="py-2 cursor-pointer">Profile Settings</DropdownMenuItem>
+                      <DropdownMenuItem className="py-2 cursor-pointer">Branch Setup</DropdownMenuItem>
+                    </>
+                  )}
                   {isDeveloper && (
                     <DropdownMenuItem onClick={() => navigate('/dev-portal')} className="py-2 font-semibold text-blue-600 dark:text-blue-400 cursor-pointer">
                       <Lock className="w-4 h-4 mr-2" /> Developer Portal

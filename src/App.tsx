@@ -41,6 +41,26 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+// Smart Root Redirect (starts with login and bypasses landing page)
+const RootRoute = () => {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+        <div className="w-8 h-8 rounded-full border-4 border-zinc-200 border-t-zinc-900 animate-spin mb-4" />
+        <p className="text-zinc-500 text-sm font-medium animate-pulse">Loading Tareza ERP...</p>
+      </div>
+    );
+  }
+  
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return <Navigate to="/login" replace />;
+};
+
 export default function App() {
   React.useEffect(() => {
     // Non-blocking background sync of exchange rates daily
@@ -61,7 +81,7 @@ export default function App() {
               </div>
             }>
               <Routes>
-                <Route path="/" element={<Landing />} />
+                <Route path="/" element={<RootRoute />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/dev-portal" element={<ProtectedRoute><DeveloperPanel /></ProtectedRoute>} />
                 <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>

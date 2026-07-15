@@ -17,6 +17,7 @@ import {
   HelpCircle,
   Sparkles
 } from 'lucide-react';
+import { usePermission } from '../hooks/usePermission';
 
 // Custom hook to detect mobile viewport size
 export function useIsMobile(breakpoint: number = 768) {
@@ -48,6 +49,17 @@ export function MobileCompactView({ onCloseSheet, className = '' }: MobileCompac
   const location = useLocation();
   const [showAll, setShowAll] = useState(false);
   const isMobile = useIsMobile();
+  const [isStandalone, setIsStandalone] = useState(false);
+  const { role } = usePermission();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isPWA = window.matchMedia('(display-mode: standalone)').matches || 
+                    (window.navigator as any).standalone || 
+                    document.referrer.includes('android-app://');
+      setIsStandalone(!!isPWA);
+    }
+  }, []);
 
   // Core focused items
   const essentialItems = [
@@ -69,6 +81,24 @@ export function MobileCompactView({ onCloseSheet, className = '' }: MobileCompac
     { name: 'System Settings', href: '/settings', icon: Settings },
     { name: 'Support Hub', href: '/support', icon: HelpCircle },
   ];
+
+  // Filtering based on role
+  const filteredEssential = essentialItems.filter(item => {
+    if (role === 'cashier') {
+      return item.href === '/pos';
+    }
+    return true;
+  });
+
+  const filteredSecondary = secondaryItems.filter(item => {
+    if (role === 'cashier') {
+      return false; // Cashiers have zero access to secondary administrative modules
+    }
+    if (role === 'staff') {
+      return ['/pos', '/inventory', '/customers', '/suppliers', '/messenger', '/support'].includes(item.href);
+    }
+    return true;
+  });
 
   const handleLinkClick = () => {
     if (onCloseSheet) {
@@ -98,7 +128,7 @@ export function MobileCompactView({ onCloseSheet, className = '' }: MobileCompac
           Core Operations
         </p>
         
-        {essentialItems.map((item) => {
+        {filteredEssential.map((item) => {
           // Match receiving tab subpath or exact route
           const isActive = item.href.includes('tab=receiving')
             ? (location.pathname === '/suppliers' && location.search.includes('tab=receiving'))
@@ -135,51 +165,53 @@ export function MobileCompactView({ onCloseSheet, className = '' }: MobileCompac
         })}
 
         {/* Expandable Secondary Navigation */}
-        <div className="pt-4 mt-2 border-t border-zinc-100 dark:border-zinc-850">
-          <button
-            onClick={() => setShowAll(!showAll)}
-            className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-zinc-100/70 dark:hover:bg-zinc-800/40 text-zinc-650 dark:text-zinc-400 text-xs font-bold transition-all"
-          >
-            <span className="uppercase tracking-widest text-[10px] text-zinc-400 dark:text-zinc-500">
-              {showAll ? 'Hide Secondary Modules' : 'All Modules & Utilities'}
-            </span>
-            <div className="flex items-center gap-1.5 text-zinc-500">
-              <span className="text-[10px] bg-zinc-150 dark:bg-zinc-800 px-2 py-0.5 rounded-full font-bold">
-                {secondaryItems.length}
+        {!isStandalone && filteredSecondary.length > 0 && (
+          <div className="pt-4 mt-2 border-t border-zinc-100 dark:border-zinc-850">
+            <button
+              onClick={() => setShowAll(!showAll)}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-zinc-100/70 dark:hover:bg-zinc-800/40 text-zinc-650 dark:text-zinc-400 text-xs font-bold transition-all"
+            >
+              <span className="uppercase tracking-widest text-[10px] text-zinc-400 dark:text-zinc-500">
+                {showAll ? 'Hide Secondary Modules' : 'All Modules & Utilities'}
               </span>
-              {showAll ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </div>
-          </button>
+              <div className="flex items-center gap-1.5 text-zinc-500">
+                <span className="text-[10px] bg-zinc-150 dark:bg-zinc-800 px-2 py-0.5 rounded-full font-bold">
+                  {filteredSecondary.length}
+                </span>
+                {showAll ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </div>
+            </button>
 
-          {showAll && (
-            <div className="mt-2 space-y-1 pl-1 pr-1 animate-in fade-in slide-in-from-top-1 duration-200">
-              {secondaryItems.map((item) => {
-                const isActive = location.pathname === item.href;
-                const Icon = item.icon;
-                
-                return (
-                  <Link
-                    key={item.name}
-                    to={item.href}
-                    onClick={handleLinkClick}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 ${
-                      isActive 
-                        ? 'bg-blue-50/50 text-blue-600 dark:bg-blue-500/5 dark:text-blue-400 font-bold' 
-                        : 'text-zinc-650 hover:bg-zinc-100/50 dark:text-zinc-400 dark:hover:bg-zinc-900'
-                    }`}
-                  >
-                    <Icon className={`h-4.5 w-4.5 shrink-0 ${
-                      isActive ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-400'
-                    }`} />
-                    <span className="text-xs font-semibold leading-none">
-                      {item.name}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </div>
+            {showAll && (
+              <div className="mt-2 space-y-1 pl-1 pr-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                {filteredSecondary.map((item) => {
+                  const isActive = location.pathname === item.href;
+                  const Icon = item.icon;
+                  
+                  return (
+                    <Link
+                      key={item.name}
+                      to={item.href}
+                      onClick={handleLinkClick}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 ${
+                        isActive 
+                          ? 'bg-blue-50/50 text-blue-600 dark:bg-blue-500/5 dark:text-blue-400 font-bold' 
+                          : 'text-zinc-650 hover:bg-zinc-100/50 dark:text-zinc-400 dark:hover:bg-zinc-900'
+                      }`}
+                    >
+                      <Icon className={`h-4.5 w-4.5 shrink-0 ${
+                        isActive ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-405'
+                      }`} />
+                      <span className="text-xs font-semibold leading-none">
+                        {item.name}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
