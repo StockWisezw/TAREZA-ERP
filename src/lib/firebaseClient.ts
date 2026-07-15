@@ -764,7 +764,9 @@ class SupabaseQueryBuilder {
       );
       
       const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
-      const isDevAdminTable = isSystemDev && adminTables.includes(this.table);
+      // Only bypass active business scoping for system devs if we are explicitly inside the Developer Panel page (/dev-portal)
+      const isDevPortal = typeof window !== 'undefined' && window.location && window.location.pathname.includes('/dev-portal');
+      const isDevAdminTable = isSystemDev && isDevPortal && adminTables.includes(this.table);
 
       const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id') && this.table !== 'business_users';
       const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
@@ -958,7 +960,9 @@ class SupabaseQueryBuilder {
     );
     
     const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
-    const isDevAdminTable = isSystemDev && adminTables.includes(this.table);
+    // Only bypass active business scoping for system devs if we are explicitly inside the Developer Panel page (/dev-portal)
+    const isDevPortal = typeof window !== 'undefined' && window.location && window.location.pathname.includes('/dev-portal');
+    const isDevAdminTable = isSystemDev && isDevPortal && adminTables.includes(this.table);
 
     const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id') && this.table !== 'business_users';
     const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;
@@ -1072,7 +1076,9 @@ class SupabaseQueryBuilder {
     );
     
     const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
-    const isDevAdminTable = isSystemDev && adminTables.includes(this.table);
+    // Only bypass active business scoping for system devs if we are explicitly inside the Developer Panel page (/dev-portal)
+    const isDevPortal = typeof window !== 'undefined' && window.location && window.location.pathname.includes('/dev-portal');
+    const isDevAdminTable = isSystemDev && isDevPortal && adminTables.includes(this.table);
 
     const requiresBusinessScope = ALLOWED_KEYS[this.table]?.includes('business_id') && this.table !== 'business_users';
     const activeBizId = (requiresBusinessScope || this.table === 'businesses') ? await getActiveBusinessId() : null;

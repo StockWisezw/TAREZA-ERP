@@ -47,6 +47,7 @@ import { SupportHub } from './SupportHub';
 import { supabase } from '../lib/firebaseClient';
 import { Breadcrumbs } from './Breadcrumbs';
 import { CommandPalette } from './CommandPalette';
+import { MobileCompactView } from './MobileCompactView';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -101,6 +102,7 @@ export default function Layout() {
   const [subStatus, setSubStatus] = React.useState<string>('ACTIVE');
   const [subEndDate, setSubEndDate] = React.useState<string | null>(null);
   const [sidebarExpanded, setSidebarExpanded] = React.useState<boolean>(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState<boolean>(false);
   const [isHeaderHidden, setIsHeaderHidden] = React.useState<boolean>(() => {
     return localStorage.getItem('tareza_pos_hide_layout_header') === 'true';
   });
@@ -388,12 +390,12 @@ export default function Layout() {
           {!(isHeaderHidden && isPosPage) && (
           <header className="flex h-16 items-center justify-between border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm px-4 sm:px-6">
             <div className="flex items-center">
-              <Sheet>
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                 <SheetTrigger render={<Button variant="ghost" size="icon" className="md:hidden mr-2 rounded-full" />}>
                   <Menu className="h-5 w-5" />
                 </SheetTrigger>
-                <SheetContent side="left" className="w-[260px] p-0 bg-zinc-50 dark:bg-[#18181b]">
-                  <div className="h-16 px-5 flex items-center border-b border-zinc-200 dark:border-zinc-800/80">
+                <SheetContent side="left" className="w-[280px] p-0 bg-zinc-50 dark:bg-[#18181b] flex flex-col overflow-hidden">
+                  <div className="h-16 px-5 flex items-center border-b border-zinc-200 dark:border-zinc-800/80 shrink-0">
                     {businessName ? (
                       <div className="flex items-center gap-2 select-none overflow-hidden pr-2">
                         {businessLogo ? (
@@ -409,8 +411,8 @@ export default function Layout() {
                       <TarezaLogo size="sm" showSubtitle={false} />
                     )}
                   </div>
-                  <div className="py-4">
-                    <NavLinks mobile />
+                  <div className="flex-1 overflow-y-auto py-4">
+                    <MobileCompactView onCloseSheet={() => setMobileMenuOpen(false)} />
                   </div>
                 </SheetContent>
               </Sheet>
