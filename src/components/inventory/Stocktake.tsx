@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
-import { Search, Plus, Filter, ClipboardList, CheckCircle2, Play, AlertTriangle, Settings, Calendar as CalendarIcon, Tag, Trash2, Check, RotateCcw, Landmark, Sparkles, RefreshCw, Eye, EyeOff, Printer } from 'lucide-react';
+import { Search, Plus, Filter, ClipboardList, CheckCircle2, Play, AlertTriangle, Settings, Calendar as CalendarIcon, Tag, Trash2, Check, RotateCcw, Landmark, Sparkles, RefreshCw, Eye, EyeOff, Printer, UploadCloud, FileSpreadsheet, FileText, Loader2 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -34,6 +34,14 @@ export function Stocktake() {
   const [onlyShowVariances, setOnlyShowVariances] = useState(false);
   const [savingProgress, setSavingProgress] = useState(false);
   const [reconciliationValuation, setReconciliationValuation] = useState<'cost' | 'sales'>('cost');
+
+  // Bulk Import Counts State
+  const [isBulkImporting, setIsBulkImporting] = useState(false);
+  const [bulkImportText, setBulkImportText] = useState('');
+  const [bulkImportResults, setBulkImportResults] = useState<{
+    matched: any[];
+    unmatched: any[];
+  } | null>(null);
 
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
   const [userBusinessId, setUserBusinessId] = useState<string | null>(null);
@@ -393,7 +401,7 @@ export function Stocktake() {
     return null;
   };
 
-  const handleApprove = async () => {
+  const handleApprove = async (postToPOS: boolean = false) => {
     if (!reviewItem) return;
     try {
       const currentPosSessionId = reviewItem.pos_session_id;
@@ -418,6 +426,82 @@ export function Stocktake() {
       const branchId = reviewItem.branch_id || reviewItem.branches?.id;
       const calcs = calculateAuditDiscrepancies(reviewItemsData, branchId);
 
+      // If postToPOS is true, let's do the POS sale posting first!
+      let chargeSalesPostedValue = false;
+      if (postToPOS) {
+        // Calculate exact discrepancies (both positive/shortages and negative/overages)
+        const discrepancyItems = reviewItemsData.filter((i: any) => {
+          const bInv = branchId 
+            ? i.product?.inventory?.find((a: any) => a.branch_id === branchId)
+            : null;
+          const systemQty = bInv ? bInv.quantity : (i.product?.inventory?.[0]?.quantity || 0);
+          return Number(i.counted_qty || 0) !== systemQty; 
+        }).map((i: any) => {
+          const bInv = branchId 
+            ? i.product?.inventory?.find((a: any) => a.branch_id === branchId)
+            : null;
+          const systemQty = bInv ? bInv.quantity : (i.product?.inventory?.[0]?.quantity || 0);
+          const discrepancyQty = systemQty - Number(i.counted_qty || 0);
+          const retailPrice = Number(i.product?.retail_price || 0);
+          return {
+            product: i.product,
+            quantity: discrepancyQty,
+            unitPrice: retailPrice,
+            subtotal: discrepancyQty * retailPrice,
+            vatAmount: 0
+          };
+        });
+
+        if (discrepancyItems.length > 0) {
+          const totalDiscrepancyAmount = discrepancyItems.reduce((acc, item) => acc + item.subtotal, 0);
+
+          const chargePayload = {
+            receipt_number: `STK-CHG-${reviewItem.id.substring(0,8).toUpperCase()}`,
+            receiptNumber: `STK-CHG-${reviewItem.id.substring(0,8).toUpperCase()}`,
+            total: totalDiscrepancyAmount, 
+            vat_total: 0,
+            discount_total: 0,
+            subtotal: totalDiscrepancyAmount,
+            payment_method: 'stocktake_adjustment',
+            payments: [{ method: 'stocktake_adjustment', amount: totalDiscrepancyAmount }],
+            items: discrepancyItems,
+            status: 'COMPLETED',
+            business_id: reviewItem.business_id,
+            branch_id: branchId,
+            created_at: new Date().toISOString()
+          };
+
+          // 1. Insert POS sale record
+          const { error: saleErr } = await supabase.from('sales').insert([chargePayload]);
+          if (saleErr) throw saleErr;
+
+          // 2. Fetch and Update active register session metrics
+          const { data: sessData } = await supabase
+            .from('register_sessions')
+            .select('sales_total, sales_count, expected_balance')
+            .eq('id', currentPosSessionId)
+            .single();
+
+          if (sessData) {
+            const currentTotalSales = Number(sessData.sales_total || 0) + totalDiscrepancyAmount;
+            const currentCountSales = Number(sessData.sales_count || 0) + 1;
+            const currentExpectedObj = Number(sessData.expected_balance || 0) + totalDiscrepancyAmount;
+
+            await supabase
+              .from('register_sessions')
+              .update({
+                sales_total: currentTotalSales,
+                sales_count: currentCountSales,
+                expected_balance: currentExpectedObj
+              })
+              .eq('id', currentPosSessionId);
+          }
+
+          chargeSalesPostedValue = true;
+          window.dispatchEvent(new Event('tareza-session-updated'));
+        }
+      }
+
       // 1. Update advanced header
       const { error: errorAdv } = await supabase
         .from('stocktakes_advanced')
@@ -425,7 +509,8 @@ export function Stocktake() {
           status: 'COMPLETED', 
           completed_at: new Date().toISOString(),
           total_shortage: calcs.shortageAmount,
-          total_overage: calcs.overageAmount
+          total_overage: calcs.overageAmount,
+          charge_sales_posted: chargeSalesPostedValue
         })
         .eq('id', reviewItem.id);
       
@@ -485,13 +570,162 @@ export function Stocktake() {
         }
       }
       
-      toast.success(`Success! Quantities approved, mirror logs updated and live branch catalog adjusted.`);
+      if (postToPOS) {
+        toast.success(`Success! Quantities approved, POS discrepancy sale posted, and live branch catalog adjusted.`);
+      } else {
+        toast.success(`Success! Quantities approved, stocktake marked completed and live branch catalog adjusted.`);
+      }
       setReviewItem(null);
       fetchStocktakes();
       fetchProducts();
     } catch (err: any) {
       toast.error(err.message || 'Error occurred during stocktake approval');
     }
+  };
+
+  const handleParseBulkImport = (text: string) => {
+    if (!text.trim()) {
+      toast.error("Please provide some text or a CSV file.");
+      return;
+    }
+
+    const lines = text.split('\n');
+    const matched: any[] = [];
+    const unmatched: any[] = [];
+
+    let isFirstLine = true;
+    let skuIndex = 0;
+    let qtyIndex = 1;
+
+    lines.forEach(line => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) return;
+
+      const parts = trimmedLine.split(/[,\t;]/).map(p => p.trim().replace(/^["']|["']$/g, ''));
+      if (parts.length < 2) return;
+
+      // Detect header row and locate indices dynamically
+      if (isFirstLine && (parts[0].toLowerCase().includes('sku') || parts[0].toLowerCase().includes('bar') || parts[0].toLowerCase().includes('expected') || parts[0].toLowerCase().includes('name'))) {
+        isFirstLine = false;
+        parts.forEach((col, idx) => {
+          if (col.toLowerCase().includes('sku') || col.toLowerCase().includes('barcode') || col.toLowerCase().includes('code')) {
+            skuIndex = idx;
+          }
+          if (col.toLowerCase().includes('count') || col.toLowerCase().includes('physical') || col.toLowerCase().includes('qty')) {
+            qtyIndex = idx;
+          }
+        });
+        return;
+      }
+      isFirstLine = false;
+
+      const key = parts[skuIndex] || '';
+      const qtyStr = parts[qtyIndex] || '';
+      const qty = Number(qtyStr);
+
+      if (isNaN(qty) || !key) return;
+
+      const product = products.find(p => 
+        (p.sku && p.sku.trim().toLowerCase() === key.toLowerCase()) || 
+        (p.barcode && p.barcode.trim().toLowerCase() === key.toLowerCase())
+      );
+
+      if (product) {
+        matched.push({
+          product,
+          counted_qty: qty,
+          notes: 'Bulk Imported'
+        });
+      } else {
+        unmatched.push({
+          key,
+          qty,
+          reason: 'Product SKU/Barcode not found in database catalog'
+        });
+      }
+    });
+
+    setBulkImportResults({ matched, unmatched });
+    if (matched.length > 0) {
+      toast.success(`Successfully parsed ${matched.length} matching products!`);
+    } else {
+      toast.warning("Could not match any products. Please ensure the SKU or Barcode matches your catalog.");
+    }
+  };
+
+  const handleApplyBulkImport = async () => {
+    if (!bulkImportResults || bulkImportResults.matched.length === 0) {
+      toast.error("No matched items to apply.");
+      return;
+    }
+
+    const updated = [...countedItems];
+    
+    bulkImportResults.matched.forEach(importItem => {
+      const existingIdx = updated.findIndex(x => x.product.id === importItem.product.id);
+      if (existingIdx > -1) {
+        updated[existingIdx].counted_qty = importItem.counted_qty;
+        updated[existingIdx].notes = importItem.notes;
+      } else {
+        updated.push(importItem);
+      }
+    });
+
+    setCountedItems(updated);
+    if (activeStocktake) {
+      await saveCountedItemsToDB(activeStocktake.id, updated);
+      localStorage.setItem(`stocktake_counted_${activeStocktake.id}`, JSON.stringify(updated));
+    }
+
+    toast.success(`Applied ${bulkImportResults.matched.length} physical stock counts!`);
+    setIsBulkImporting(false);
+    setBulkImportText('');
+    setBulkImportResults(null);
+  };
+
+  const downloadStocktakeTemplate = () => {
+    if (!activeStocktake) return;
+    
+    const headers = ['SKU/Barcode', 'Physical Counted Quantity', 'Product Name', 'Current System Stock'];
+    
+    const itemsToExport = countedItems.length > 0 ? countedItems : products.map(p => ({
+      product: p,
+      counted_qty: 0
+    }));
+
+    const rows = itemsToExport.map(item => {
+      const branchInventory = item.product?.inventory?.find((i: any) => i.branch_id === activeStocktake?.branch_id);
+      const systemExpected = branchInventory ? branchInventory.quantity : 0;
+      return [
+        item.product.sku || item.product.barcode || item.product.id,
+        item.counted_qty.toString(),
+        item.product.name,
+        systemExpected.toString()
+      ];
+    });
+
+    const csvContent = "\uFEFF" + headers.join(',') + "\n" + rows.map(row => row.map(val => `"${val.replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `stocktake_template_${activeStocktake.id.substring(0,8)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      setBulkImportText(text);
+      handleParseBulkImport(text);
+    };
+    reader.readAsText(file);
   };
 
   const handleDirectApprove = async (stId: string, items: any[]) => {
@@ -1184,8 +1418,32 @@ export function Stocktake() {
                 <Button 
                   onClick={async () => {
                     const calcs = calculateAuditDiscrepancies(reviewItemsData, reviewItem.branch_id || reviewItem.branches?.id);
-                    if (calcs.shortageAmount <= 0) {
-                      toast.info("There are no individual shortages in this stocktake to be charged to POS session.");
+                    const branchId = reviewItem.branch_id || reviewItem.branches?.id;
+
+                    const discrepancyItems = reviewItemsData.filter((i: any) => {
+                      const branchInventory = branchId 
+                        ? i.product?.inventory?.find((a: any) => a.branch_id === branchId)
+                        : null;
+                      const systemQty = branchInventory ? branchInventory.quantity : (i.product?.inventory?.[0]?.quantity || 0);
+                      return Number(i.counted_qty || 0) !== systemQty; 
+                    }).map((i: any) => {
+                      const branchInventory = branchId 
+                        ? i.product?.inventory?.find((a: any) => a.branch_id === branchId)
+                        : null;
+                      const systemQty = branchInventory ? branchInventory.quantity : (i.product?.inventory?.[0]?.quantity || 0);
+                      const discrepancyQty = systemQty - Number(i.counted_qty || 0);
+                      const retailPrice = Number(i.product?.retail_price || 0);
+                      return {
+                        product: i.product,
+                        quantity: discrepancyQty,
+                        unitPrice: retailPrice,
+                        subtotal: discrepancyQty * retailPrice,
+                        vatAmount: 0
+                      };
+                    });
+
+                    if (discrepancyItems.length === 0) {
+                      toast.info("There are no stock discrepancies in this stocktake to point-charge to POS session.");
                       return;
                     }
                     
@@ -1208,40 +1466,22 @@ export function Stocktake() {
                         return;
                       }
 
-                      // Post a custom sales receipt of the shortages to POS as sales
+                      const totalDiscrepancyAmount = discrepancyItems.reduce((acc, item) => acc + item.subtotal, 0);
+
+                      // Post a custom sales receipt of the differences (shortages as positive, overages as negative) to POS as sales
                       const chargePayload = {
                         receipt_number: `STK-CHG-${reviewItem.id.substring(0,8).toUpperCase()}`,
                         receiptNumber: `STK-CHG-${reviewItem.id.substring(0,8).toUpperCase()}`,
-                        total: calcs.shortageAmount, 
+                        total: totalDiscrepancyAmount, 
                         vat_total: 0,
                         discount_total: 0,
-                        subtotal: calcs.shortageAmount,
+                        subtotal: totalDiscrepancyAmount,
                         payment_method: 'stocktake_adjustment',
-                        payments: [{ method: 'stocktake_adjustment', amount: calcs.shortageAmount }],
-                        items: reviewItemsData.filter((i: any) => {
-                          const branchInventory = reviewItem?.branch_id 
-                            ? i.product?.inventory?.find((a: any) => a.branch_id === reviewItem.branch_id)
-                            : null;
-                          const systemQty = branchInventory ? branchInventory.quantity : (i.product?.inventory?.[0]?.quantity || 0);
-                          return Number(i.counted_qty || 0) < systemQty; 
-                        }).map((i: any) => {
-                          const branchInventory = reviewItem?.branch_id 
-                            ? i.product?.inventory?.find((a: any) => a.branch_id === reviewItem.branch_id)
-                            : null;
-                          const systemQty = branchInventory ? branchInventory.quantity : (i.product?.inventory?.[0]?.quantity || 0);
-                          const discrepancyQty = systemQty - Number(i.counted_qty || 0);
-                          const retailPrice = Number(i.product?.retail_price || 0);
-                          return {
-                            product: i.product,
-                            quantity: discrepancyQty,
-                            unitPrice: retailPrice,
-                            subtotal: discrepancyQty * retailPrice,
-                            vatAmount: 0
-                          };
-                        }),
+                        payments: [{ method: 'stocktake_adjustment', amount: totalDiscrepancyAmount }],
+                        items: discrepancyItems,
                         status: 'COMPLETED',
                         business_id: reviewItem.business_id,
-                        branch_id: reviewItem.branch_id || reviewItem.branches?.id,
+                        branch_id: branchId,
                         created_at: new Date().toISOString()
                       };
 
@@ -1249,10 +1489,10 @@ export function Stocktake() {
                       const { error: saleErr } = await supabase.from('sales').insert([chargePayload]);
                       if (saleErr) throw saleErr;
 
-                      // 2. Update active register session metrics
-                      const currentTotalSales = Number(sessData.sales_total || 0) + calcs.shortageAmount;
+                      // 2. Update active register session metrics using exact net discrepancy
+                      const currentTotalSales = Number(sessData.sales_total || 0) + totalDiscrepancyAmount;
                       const currentCountSales = Number(sessData.sales_count || 0) + 1;
-                      const currentExpectedObj = Number(sessData.expected_balance || 0) + calcs.shortageAmount;
+                      const currentExpectedObj = Number(sessData.expected_balance || 0) + totalDiscrepancyAmount;
 
                       await updateDoc(sessRef, {
                         sales_total: currentTotalSales,
@@ -1270,8 +1510,8 @@ export function Stocktake() {
                       window.dispatchEvent(new Event('tareza-session-updated'));
 
                       // 5. Update local state
-                      setReviewItem(prev => prev ? { ...prev, charge_sales_posted: true } : null);
-                      toast.success(`Success! Net shortage of $${calcs.shortageAmount.toFixed(2)} charged directly to POS Session.`);
+                      setReviewItem((prev: any) => prev ? { ...prev, charge_sales_posted: true } : null);
+                      toast.success(`Success! Net stock variances of $${totalDiscrepancyAmount.toFixed(2)} charged directly to POS Session.`);
                       fetchStocktakes();
                     } catch (err: any) {
                       toast.error(err.message || "Failed to post charge to linked POS shift session.");
@@ -1279,14 +1519,15 @@ export function Stocktake() {
                   }}
                   className="bg-indigo-650 hover:bg-indigo-700 text-white font-semibold"
                 >
-                  Charge Shortages to POS Session
+                  Charge All Differences to POS Session
                 </Button>
               )}
 
               {reviewItem?.status === 'REVIEW' && (
                 <>
                   <Button variant="outline" className="border-red-200 text-red-650 bg-red-50 hover:bg-red-100 font-semibold" onClick={handleReject}>Reject & Recount</Button>
-                  <Button onClick={handleApprove} className="bg-zinc-900 text-white hover:bg-zinc-800 font-semibold">Approve & Write Changes</Button>
+                  <Button onClick={() => handleApprove(false)} variant="outline" className="border-zinc-300 text-zinc-700 hover:bg-zinc-50 font-semibold">Approve & Write Stock Only</Button>
+                  <Button onClick={() => handleApprove(true)} className="bg-indigo-600 text-white hover:bg-indigo-700 font-semibold">Approve, Write Stock & Post to POS</Button>
                 </>
               )}
             </div>
@@ -1695,6 +1936,18 @@ export function Stocktake() {
                 >
                   <RotateCcw className="h-3.5 w-3.5 mr-1 text-zinc-400" /> Reset All to Zero
                 </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 h-8 font-semibold"
+                  onClick={() => {
+                    setBulkImportResults(null);
+                    setBulkImportText('');
+                    setIsBulkImporting(true);
+                  }}
+                >
+                  <UploadCloud className="h-3.5 w-3.5 mr-1" /> Bulk Import Counts
+                </Button>
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <label className="text-xs text-zinc-650 flex items-center font-bold cursor-pointer select-none">
@@ -1925,6 +2178,149 @@ export function Stocktake() {
                 Validate & Adjust Stock Live
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Import Counts Dialog Modal */}
+      <Dialog open={isBulkImporting} onOpenChange={setIsBulkImporting}>
+        <DialogContent className="max-w-2xl bg-white border-zinc-250 rounded-xl p-6 flex flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-zinc-900 flex items-center gap-2">
+              <UploadCloud className="h-5 w-5 text-indigo-600" />
+              Bulk Import Stock Counts
+            </DialogTitle>
+            <DialogDescription className="text-zinc-500">
+              Paste product count values or upload a CSV file to set physical quantities in bulk. Products will be dynamically matched by SKU or Barcode.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-zinc-700">Option 1: Paste Text Data</Label>
+              <textarea
+                placeholder="SKU,CountedQty&#10;BV-MZB-2L,95&#10;6001234567890,12"
+                value={bulkImportText}
+                onChange={(e) => setBulkImportText(e.target.value)}
+                className="w-full h-44 text-xs font-mono border border-zinc-200 rounded-lg p-2.5 bg-zinc-50/50 focus:outline-none focus:ring-1 focus:ring-zinc-900 resize-none"
+              />
+              <Button 
+                type="button" 
+                size="sm"
+                onClick={() => handleParseBulkImport(bulkImportText)}
+                className="w-full bg-zinc-900 text-white hover:bg-zinc-800 text-xs font-semibold h-9"
+              >
+                Analyze & Parse Text
+              </Button>
+            </div>
+
+            <div className="space-y-2 flex flex-col justify-between">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-zinc-700">Option 2: Upload CSV File</Label>
+                <div className="border border-dashed border-zinc-300 rounded-lg p-4 bg-zinc-50/40 text-center flex flex-col items-center justify-center gap-2 hover:bg-zinc-50 hover:border-zinc-400 transition-colors duration-150 cursor-pointer min-h-[120px] relative">
+                  <input 
+                    type="file" 
+                    accept=".csv,.txt"
+                    onChange={handleFileUpload}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                  <FileSpreadsheet className="h-8 w-8 text-zinc-400" />
+                  <span className="text-xs font-bold text-zinc-700">Drag & Drop or Click to Upload</span>
+                  <span className="text-[10px] text-zinc-500 font-mono">Supports .csv or .txt (Comma/Tab separated)</span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-lg space-y-1.5">
+                <span className="text-xs font-extrabold text-indigo-950 flex items-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-indigo-600" /> Need a starting sheet?
+                </span>
+                <p className="text-[11px] text-indigo-900 leading-normal">
+                  Download a template loaded with your catalog's SKUs, barcodes, names and system stock levels. Fill in the quantities and import it right back!
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={downloadStocktakeTemplate}
+                  className="bg-white hover:bg-indigo-50 border-indigo-200 text-indigo-700 hover:text-indigo-800 text-[11px] font-bold h-8 w-full shadow-xs"
+                >
+                  Download Active Template (.CSV)
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {bulkImportResults && (
+            <div className="space-y-2.5 border-t border-zinc-150 pt-4 flex-1 flex flex-col min-h-0">
+              <div className="flex justify-between items-center">
+                <Label className="text-xs font-black uppercase text-zinc-600 tracking-wider">Analysis Preview Results</Label>
+                <div className="flex gap-2">
+                  <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-0 text-[10px] font-bold">
+                    Matched: {bulkImportResults.matched.length}
+                  </Badge>
+                  {bulkImportResults.unmatched.length > 0 && (
+                    <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-50 border-0 text-[10px] font-bold">
+                      Unmatched: {bulkImportResults.unmatched.length}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="border border-zinc-150 rounded-lg max-h-44 overflow-y-auto bg-zinc-50/30 text-xs">
+                <Table>
+                  <TableHeader className="bg-zinc-100 sticky top-0 z-10 text-[10px] uppercase font-bold text-zinc-500">
+                    <TableRow>
+                      <TableHead className="py-2">Identifier</TableHead>
+                      <TableHead className="py-2 text-right">New Count Qty</TableHead>
+                      <TableHead className="py-2">Status / Matches</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {bulkImportResults.matched.map((item, idx) => (
+                      <TableRow key={`m-${idx}`} className="hover:bg-zinc-50/50">
+                        <TableCell className="py-1.5 font-bold text-zinc-800">{item.product.name}</TableCell>
+                        <TableCell className="py-1.5 text-right font-mono font-bold text-indigo-700">{item.counted_qty}</TableCell>
+                        <TableCell className="py-1.5 text-emerald-700 font-bold flex items-center gap-1">
+                          <Check className="h-3.5 w-3.5" /> Matched SKU: {item.product.sku || 'N/A'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {bulkImportResults.unmatched.map((item, idx) => (
+                      <TableRow key={`u-${idx}`} className="hover:bg-zinc-50/50 bg-rose-50/20">
+                        <TableCell className="py-1.5 font-mono text-zinc-500 text-[11px]">{item.key}</TableCell>
+                        <TableCell className="py-1.5 text-right font-mono text-zinc-500">{item.qty}</TableCell>
+                        <TableCell className="py-1.5 text-rose-600 font-medium flex items-center gap-1 text-[10px]">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-500" /> {item.reason}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2.5 border-t border-zinc-150 pt-4">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setIsBulkImporting(false);
+                setBulkImportText('');
+                setBulkImportResults(null);
+              }}
+              className="text-zinc-600 hover:bg-zinc-100 text-xs font-semibold h-9"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleApplyBulkImport}
+              disabled={!bulkImportResults || bulkImportResults.matched.length === 0}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold h-9 px-4 shadow-sm"
+            >
+              Apply Imported Counts ({bulkImportResults?.matched?.length || 0} items)
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

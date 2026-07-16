@@ -56,6 +56,8 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'all' | 'open' | 'closed'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentUserRole, setCurrentUserRole] = useState<string>('staff');
+  const [currentUserId, setCurrentUserId] = useState<string>('');
 
   // Open/Close shift modal triggers
   const [showOpenModal, setShowOpenModal] = useState(false);
@@ -83,6 +85,13 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
     return localStorage.getItem('tareza_offline_mode') === 'true' || (typeof window !== 'undefined' && !window.navigator.onLine);
   };
 
+  const getShiftReferenceCode = (shiftId: string) => {
+    const indexInFull = shifts.findIndex(s => s.id === shiftId);
+    if (indexInFull === -1) return 'TAR26001';
+    const seqNumber = shifts.length - indexInFull;
+    return `TAR26${String(seqNumber).padStart(3, '0')}`;
+  };
+
   const fetchShiftsAndMetadata = async () => {
     try {
       setLoading(true);
@@ -91,15 +100,38 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
         setLoading(false);
         return;
       }
+      setCurrentUserId(userData.user.id);
 
       // Fetch user tenancy mapping context
       const { data: bData } = await supabase.from('business_users')
-        .select('business_id, branch_id')
+        .select('business_id, branch_id, role_id')
         .eq('user_id', userData.user.id)
         .limit(1)
         .maybeSingle();
 
       const bid = bData?.business_id || 'offline_business_id';
+
+      if (bData?.role_id) {
+        const { data: roleDef } = await supabase
+          .from('roles')
+          .select('name')
+          .eq('id', bData.role_id)
+          .limit(1)
+          .maybeSingle();
+        
+        if (roleDef?.name) {
+          const rawName = roleDef.name.toLowerCase();
+          if (rawName.includes('admin') || rawName.includes('owner') || rawName.includes('developer')) {
+            setCurrentUserRole('admin');
+          } else if (rawName.includes('manager')) {
+            setCurrentUserRole('manager');
+          } else if (rawName.includes('cashier')) {
+            setCurrentUserRole('cashier');
+          } else {
+            setCurrentUserRole('staff');
+          }
+        }
+      }
 
       // Load active branches
       const { data: branchesRes } = await supabase.from('branches')
@@ -262,7 +294,7 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
   const totalVariance = shifts.reduce((acc, s) => acc + (Number(s.variance) || 0), 0);
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto w-full animate-fade-in text-zinc-900 dark:text-zinc-100 select-none pb-20">
+    <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto w-full animate-fade-in text-zinc-900 dark:text-zinc-100 select-none pb-24 h-full overflow-y-auto pr-1">
       
       {/* Upper header section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
@@ -293,53 +325,98 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
 
       {/* KPI Stats Panel */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-2xl relative overflow-hidden">
+        {/* Open Sessions */}
+        <Card 
+          onClick={() => setTab('open')}
+          className={`bg-white dark:bg-zinc-900 border shadow-sm rounded-2xl relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] select-none ${
+            tab === 'open' 
+              ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md' 
+              : 'border-zinc-200 dark:border-zinc-800 hover:border-emerald-300 dark:hover:border-emerald-700/60'
+          }`}
+        >
           <div className="absolute top-0 inset-x-0 h-1 bg-emerald-500" />
           <CardContent className="pt-5 flex items-center gap-4">
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+            <div className={`p-3 rounded-2xl transition-all ${tab === 'open' ? 'bg-emerald-500 text-white' : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'}`}>
               <Power className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Open Sessions</span>
-              <p className="text-2xl font-black text-zinc-900 dark:text-white mt-0.5">{openSessionsCount}</p>
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">Open Sessions</span>
+              <p className="text-2xl font-black text-zinc-900 dark:text-white mt-0.5 flex items-center gap-1.5">
+                {openSessionsCount}
+                <span className="text-[10px] font-bold text-emerald-500 px-1.5 py-0.2 rounded bg-emerald-50 dark:bg-emerald-950/40 uppercase tracking-widest">Active</span>
+              </p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-2xl relative overflow-hidden">
+        {/* Closed Sessions */}
+        <Card 
+          onClick={() => setTab('closed')}
+          className={`bg-white dark:bg-zinc-900 border shadow-sm rounded-2xl relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] select-none ${
+            tab === 'closed' 
+              ? 'border-zinc-500 ring-2 ring-zinc-500/20 shadow-md' 
+              : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-600'
+          }`}
+        >
           <div className="absolute top-0 inset-x-0 h-1 bg-zinc-400" />
           <CardContent className="pt-5 flex items-center gap-4">
-            <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 rounded-2xl">
+            <div className={`p-3 rounded-2xl transition-all ${tab === 'closed' ? 'bg-zinc-500 text-white' : 'bg-zinc-50 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400'}`}>
               <Clock className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Closed Sessions</span>
-              <p className="text-2xl font-black text-zinc-900 dark:text-white mt-0.5">{closedSessionsCount}</p>
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">Closed Sessions</span>
+              <p className="text-2xl font-black text-zinc-900 dark:text-white mt-0.5 flex items-center gap-1.5">
+                {closedSessionsCount}
+                <span className="text-[10px] font-bold text-zinc-500 px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 uppercase tracking-widest">Audited</span>
+              </p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-2xl relative overflow-hidden">
+        {/* Total Sales Revenue */}
+        <Card 
+          onClick={() => {
+            setTab('all');
+            setSearchTerm('');
+          }}
+          className={`bg-white dark:bg-zinc-900 border shadow-sm rounded-2xl relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] select-none ${
+            tab === 'all' && !searchTerm
+              ? 'border-indigo-500 ring-2 ring-indigo-500/20 shadow-md' 
+              : 'border-zinc-200 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-indigo-700/60'
+          }`}
+          title="Click to show all register sessions"
+        >
           <div className="absolute top-0 inset-x-0 h-1 bg-blue-500" />
           <CardContent className="pt-5 flex items-center gap-4">
-            <div className="p-3 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 rounded-2xl">
+            <div className={`p-3 rounded-2xl transition-all ${tab === 'all' && !searchTerm ? 'bg-indigo-600 text-white' : 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'}`}>
               <TrendingUp className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Total Sales Revenue</span>
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">Total Sales Revenue</span>
               <p className="text-2xl font-black text-zinc-900 dark:text-white mt-0.5 font-mono">${totalSalesVolume.toFixed(2)}</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-2xl relative overflow-hidden">
+        {/* Compliance Variance */}
+        <Card 
+          onClick={() => {
+            setTab('closed');
+          }}
+          className={`bg-white dark:bg-zinc-900 border shadow-sm rounded-2xl relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] select-none ${
+            tab === 'closed'
+              ? 'border-amber-500 ring-2 ring-amber-500/20'
+              : 'border-zinc-200 dark:border-zinc-800 hover:border-amber-300 dark:hover:border-amber-700/60'
+          }`}
+          title="Click to audit closed sessions"
+        >
           <div className="absolute top-0 inset-x-0 h-1 bg-amber-500" />
           <CardContent className="pt-5 flex items-center gap-4">
             <div className="p-3 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-2xl">
               <Coins className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Compliance Variance</span>
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">Compliance Variance</span>
               <p className={`text-2xl font-black mt-0.5 font-mono ${totalVariance < 0 ? 'text-red-500' : totalVariance > 0 ? 'text-emerald-500' : 'text-zinc-900 dark:text-white'}`}>
                 ${totalVariance.toFixed(2)}
               </p>
@@ -436,7 +513,12 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
                             <span className={`w-1.5 h-1.5 rounded-full ${isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400'}`} />
                             <div>
                               <p className="font-semibold text-zinc-900 dark:text-white">{getBranchName(s.branch_id)}</p>
-                              <p className="text-[10px] text-zinc-450 font-mono mt-0.5">{s.id.slice(0, 8)}...</p>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-bold font-mono text-[9px] border border-zinc-200 dark:border-zinc-700">
+                                  {getShiftReferenceCode(s.id)}
+                                </span>
+                                <span className="text-[10px] text-zinc-400 font-mono">({s.id.slice(0, 8)})</span>
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -495,29 +577,43 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
                               <span className="hidden sm:inline ml-1">View Audit</span>
                             </Button>
 
-                            {isOpen ? (
+                             {isOpen ? (
                               <>
-                                <Button
-                                  size="sm"
-                                  onClick={() => selectSessionToUse(s)}
-                                  className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-extrabold py-1 px-2 cursor-pointer"
-                                >
-                                  <Play className="w-3 h-3 fill-current shrink-0" />
-                                  <span className="hidden sm:inline ml-1">Use Shift</span>
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => {
-                                    setSelectedShiftToClose(s);
-                                    setClosingActual(s.expected_balance?.toString() || '');
-                                    setShowCloseModal(true);
-                                  }}
-                                  className="h-8 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold py-1 px-2 cursor-pointer"
-                                >
-                                  <Power className="w-3.5 h-3.5" />
-                                  <span className="hidden sm:inline ml-1">Close Till</span>
-                                </Button>
+                                {(s.cashier_id === currentUserId || currentUserRole === 'admin' || currentUserRole === 'manager') ? (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => selectSessionToUse(s)}
+                                      className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-extrabold py-1 px-2 cursor-pointer"
+                                    >
+                                      <Play className="w-3 h-3 fill-current shrink-0" />
+                                      <span className="hidden sm:inline ml-1">Use Shift</span>
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      onClick={() => {
+                                        setSelectedShiftToClose(s);
+                                        setClosingActual(s.expected_balance?.toString() || '');
+                                        setShowCloseModal(true);
+                                      }}
+                                      className="h-8 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold py-1 px-2 cursor-pointer"
+                                    >
+                                      <Power className="w-3.5 h-3.5" />
+                                      <span className="hidden sm:inline ml-1">Close Till</span>
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    disabled
+                                    className="h-8 bg-zinc-150 text-zinc-400 dark:bg-zinc-800 rounded-lg text-[11px] py-1 px-2 select-none cursor-not-allowed"
+                                    title="Only the cashier who started this shift or an admin/manager can use or close it."
+                                  >
+                                    <Play className="w-3 h-3 text-zinc-400 shrink-0 inline mr-1" />
+                                    <span>In Use</span>
+                                  </Button>
+                                )}
                               </>
                             ) : (
                               <Button
@@ -661,7 +757,7 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
         <DialogContent className="sm:max-w-md bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 rounded-2xl p-6">
           <DialogHeader>
             <DialogTitle className="text-lg font-black text-rose-600 flex items-center gap-2">
-              <Power className="w-5 h-5 animate-pulse" /> End Cashier Shift Audit
+              <Power className="w-5 h-5 animate-pulse" /> End Cashier Shift Audit {selectedShiftToClose && `(${getShiftReferenceCode(selectedShiftToClose.id)})`}
             </DialogTitle>
             <p className="text-xs text-zinc-500 leading-relaxed font-semibold mt-1">
               Physically count the cash drawer currencies and enter the counted value below to resolve final variances.
@@ -719,7 +815,7 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
           <DialogHeader>
             <DialogTitle className="text-lg font-black text-indigo-650 dark:text-indigo-400 flex items-center gap-2">
               <Eye className="w-5 h-5 text-indigo-500" />
-              Terminal Shift Audit Detail
+              Terminal Shift Audit Detail {viewingDetailsShift && `(${getShiftReferenceCode(viewingDetailsShift.id)})`}
             </DialogTitle>
           </DialogHeader>
 

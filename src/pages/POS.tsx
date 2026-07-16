@@ -174,6 +174,44 @@ export default function POS() {
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
   const [activeMobileTab, setActiveMobileTab] = useState<'catalog' | 'cart'>('catalog');
   const [viewingDashboard, setViewingDashboard] = useState(true);
+  const [showOfflinePrompt, setShowOfflinePrompt] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? window.navigator.onLine : true);
+
+  const handleToggleOfflineMode = () => {
+    const currentMode = localStorage.getItem('tareza_offline_mode') === 'true';
+    if (currentMode) {
+      localStorage.setItem('tareza_offline_mode', 'false');
+      window.dispatchEvent(new Event('offline-mode-changed'));
+      toast.success('Switched back to Online Mode. Synchronizing local cache...');
+    } else {
+      localStorage.setItem('tareza_offline_mode', 'true');
+      window.dispatchEvent(new Event('offline-mode-changed'));
+      toast.info('Switched to Offline Transaction Mode manually.');
+    }
+  };
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setShowOfflinePrompt(true);
+    };
+    const handleNetworkOfflineEvent = () => {
+      setShowOfflinePrompt(true);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('tareza-network-offline', handleNetworkOfflineEvent);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('tareza-network-offline', handleNetworkOfflineEvent);
+    };
+  }, []);
 
   // POS Hardware & Touchscreen Resolution Optimizers
   const [posScale, setPosScale] = useState<'75' | '85' | '90' | '100' | '110'>(() => {
@@ -1462,7 +1500,30 @@ export default function POS() {
           
           {/* Header toolbar */}
           <div className="flex justify-between items-center mb-3">
-            <h1 className="text-xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">Point of Sale</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">Point of Sale</h1>
+              {localStorage.getItem('tareza_offline_mode') === 'true' ? (
+                <button
+                  type="button"
+                  onClick={handleToggleOfflineMode}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 text-[10px] font-black tracking-wider uppercase animate-pulse cursor-pointer hover:bg-amber-100 transition-all select-none"
+                  title="Offline Transaction Mode. Click to switch online."
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Offline Mode
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleToggleOfflineMode}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/55 text-emerald-700 dark:text-emerald-400 text-[10px] font-black tracking-wider uppercase cursor-pointer hover:bg-emerald-100 transition-all select-none"
+                  title="Online Connected. Click to force offline mode."
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Online
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <TransactionHistoryManager 
                 activeSession={activeSession}
@@ -1825,6 +1886,59 @@ export default function POS() {
               className="bg-zinc-900 hover:bg-zinc-805 dark:bg-zinc-100 dark:hover:bg-zinc-250 text-white dark:text-zinc-950 rounded-xl px-5 text-xs font-bold select-none cursor-pointer h-9"
             >
               Apply Settings
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Offline Mode Switch Prompt Dialog */}
+      <Dialog open={showOfflinePrompt} onOpenChange={setShowOfflinePrompt}>
+        <DialogContent className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl rounded-2xl p-6">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-zinc-900 dark:text-white tracking-tight flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400">
+                <Sliders className="h-5 w-5 animate-pulse" />
+              </span>
+              Internet Connection Lost!
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-500 leading-relaxed mt-2">
+              It looks like you are currently offline or your network has disconnected. Would you like to continue using **Offline Transaction Mode**?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 my-4 bg-zinc-50 dark:bg-zinc-950 p-3.5 rounded-xl border border-zinc-150 dark:border-zinc-850 text-xs text-zinc-650 dark:text-zinc-350 leading-relaxed">
+            <p className="flex items-start gap-2">
+              <span className="text-amber-500 font-bold">✔</span>
+              <span>Transactions are saved securely in your browser's local cache.</span>
+            </p>
+            <p className="flex items-start gap-2">
+              <span className="text-amber-500 font-bold">✔</span>
+              <span>Stock level counts will be updated locally on this device.</span>
+            </p>
+            <p className="flex items-start gap-2">
+              <span className="text-amber-500 font-bold">✔</span>
+              <span>All offline sales will automatically synchronize to the ERP ledger once your internet connection is restored.</span>
+            </p>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowOfflinePrompt(false)}
+              className="rounded-xl grow font-bold h-10 border-zinc-200"
+            >
+              Stay Online
+            </Button>
+            <Button
+              onClick={() => {
+                localStorage.setItem('tareza_offline_mode', 'true');
+                window.dispatchEvent(new Event('offline-mode-changed'));
+                setShowOfflinePrompt(false);
+                toast.success('Switched to Offline Transaction Mode. Happy selling!');
+              }}
+              className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl grow font-black h-10 flex items-center justify-center gap-2 shadow-md"
+            >
+              <span>Continue Offline</span>
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -37,6 +37,39 @@ export function usePOSSession() {
     return localStorage.getItem('tareza_offline_mode') === 'true' || (typeof window !== 'undefined' && !window.navigator.onLine);
   };
 
+  const getUserRoleAndBusiness = async (userId: string) => {
+    try {
+      const { data: userLink } = await supabase
+        .from('business_users')
+        .select('business_id, role_id')
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle();
+
+      if (!userLink) return { businessId: null, isAdminOrManager: false };
+
+      let isAdminOrManager = false;
+      if (userLink.role_id) {
+        const { data: roleDef } = await supabase
+          .from('roles')
+          .select('name')
+          .eq('id', userLink.role_id)
+          .limit(1)
+          .maybeSingle();
+        
+        if (roleDef?.name) {
+          const rawName = roleDef.name.toLowerCase();
+          isAdminOrManager = rawName.includes('admin') || rawName.includes('owner') || rawName.includes('developer') || rawName.includes('manager');
+        }
+      }
+
+      return { businessId: userLink.business_id, isAdminOrManager };
+    } catch (err) {
+      console.error("Error fetching user role context:", err);
+      return { businessId: null, isAdminOrManager: false };
+    }
+  };
+
   const refreshActiveSession = async () => {
     try {
       if (getIsOffline()) {
@@ -66,14 +99,37 @@ export function usePOSSession() {
           }
         }
 
-        const { data: userBusiness } = await supabase
-          .from('business_users')
-          .select('business_id')
-          .eq('user_id', userContext.user.id)
-          .limit(1)
-          .maybeSingle();
-        if (userBusiness?.business_id) {
-          const activeRS = await getOpenRegisterSession(userBusiness.business_id, userContext.user.id);
+        const { businessId, isAdminOrManager } = await getUserRoleAndBusiness(userContext.user.id);
+        if (businessId) {
+          let activeRS = null;
+
+          // If admin or manager, they can continue using a cached active session from another user
+          if (isAdminOrManager) {
+            const cachedSessionRaw = localStorage.getItem('tareza_active_session_cache');
+            if (cachedSessionRaw) {
+              try {
+                const sessionFromCache = JSON.parse(cachedSessionRaw);
+                if (sessionFromCache && sessionFromCache.id) {
+                  const { data: rsData } = await supabase
+                    .from('register_sessions')
+                    .select('*')
+                    .eq('id', sessionFromCache.id)
+                    .eq('business_id', businessId)
+                    .eq('status', 'OPEN')
+                    .limit(1)
+                    .maybeSingle();
+                  if (rsData) {
+                    activeRS = rsData;
+                  }
+                }
+              } catch (_) {}
+            }
+          }
+
+          // Fallback to the user's own open session if no session found or not admin/manager
+          if (!activeRS) {
+            activeRS = await getOpenRegisterSession(businessId, userContext.user.id);
+          }
           
           if (activeRS && storedOffActive) {
             const parsed = JSON.parse(storedOffActive);
@@ -139,15 +195,36 @@ export function usePOSSession() {
             }
           }
 
-          const { data: userBusiness } = await supabase
-            .from('business_users')
-            .select('business_id')
-            .eq('user_id', userContext.user.id)
-            .limit(1)
-            .maybeSingle();
+          const { businessId, isAdminOrManager } = await getUserRoleAndBusiness(userContext.user.id);
           if (!active) return;
-          if (userBusiness?.business_id) {
-            const activeRS = await getOpenRegisterSession(userBusiness.business_id, userContext.user.id);
+          if (businessId) {
+            let activeRS = null;
+
+            if (isAdminOrManager) {
+              const cachedSessionRaw = localStorage.getItem('tareza_active_session_cache');
+              if (cachedSessionRaw) {
+                try {
+                  const sessionFromCache = JSON.parse(cachedSessionRaw);
+                  if (sessionFromCache && sessionFromCache.id) {
+                    const { data: rsData } = await supabase
+                      .from('register_sessions')
+                      .select('*')
+                      .eq('id', sessionFromCache.id)
+                      .eq('business_id', businessId)
+                      .eq('status', 'OPEN')
+                      .limit(1)
+                      .maybeSingle();
+                    if (rsData && active) {
+                      activeRS = rsData;
+                    }
+                  }
+                } catch (_) {}
+              }
+            }
+
+            if (!activeRS && active) {
+              activeRS = await getOpenRegisterSession(businessId, userContext.user.id);
+            }
             if (!active) return;
 
             if (activeRS && storedOffActive) {
@@ -202,6 +279,7 @@ export function usePOSSession() {
       localStorage.setItem('tareza_offline_mode', 'true');
       toast.info('Network connection lost! Automatically switched to OFFLINE mode.');
       window.dispatchEvent(new Event('offline-mode-changed'));
+      window.dispatchEvent(new Event('tareza-network-offline'));
     };
 
     const handleAutoOnline = () => {
