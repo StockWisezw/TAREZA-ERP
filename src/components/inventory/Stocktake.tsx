@@ -629,6 +629,7 @@ export function Stocktake() {
     let isFirstLine = true;
     let skuIndex = 0;
     let qtyIndex = 1;
+    const branchId = activeStocktake?.branch_id || activeStocktake?.branches?.id;
 
     lines.forEach(line => {
       const trimmedLine = line.trim();
@@ -654,9 +655,8 @@ export function Stocktake() {
 
       const key = parts[skuIndex] || '';
       const qtyStr = parts[qtyIndex] || '';
-      const qty = Number(qtyStr);
 
-      if (isNaN(qty) || !key) return;
+      if (!key) return;
 
       const product = products.find(p => 
         (p.sku && p.sku.trim().toLowerCase() === key.toLowerCase()) || 
@@ -664,15 +664,27 @@ export function Stocktake() {
       );
 
       if (product) {
+        // Retrieve current expected stock level from the products module's live inventory
+        const liveProduct = products.find(p => p.id === product.id) || product;
+        const branchInventory = liveProduct?.inventory?.find((i: any) => i.branch_id === branchId);
+        const systemExpected = branchInventory ? Number(branchInventory.quantity || 0) : 0;
+
+        let finalCount = Number(qtyStr);
+        if (qtyStr === '' || isNaN(finalCount)) {
+          finalCount = systemExpected;
+        }
+
         matched.push({
           product,
-          counted_qty: qty,
+          system_qty: systemExpected,
+          counted_qty: finalCount,
           notes: 'Bulk Imported'
         });
       } else {
+        const qtyVal = Number(qtyStr);
         unmatched.push({
           key,
-          qty,
+          qty: isNaN(qtyVal) ? 0 : qtyVal,
           reason: 'Product SKU/Barcode not found in database catalog'
         });
       }
@@ -2306,24 +2318,38 @@ export function Stocktake() {
                     <TableHeader className="bg-zinc-100 sticky top-0 z-10 text-[10px] uppercase font-bold text-zinc-500">
                       <TableRow>
                         <TableHead className="py-2">Identifier</TableHead>
+                        <TableHead className="py-2 text-right">System Expected Qty</TableHead>
                         <TableHead className="py-2 text-right">New Count Qty</TableHead>
+                        <TableHead className="py-2 text-right">Delta</TableHead>
                         <TableHead className="py-2">Status / Matches</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {bulkImportResults.matched.map((item, idx) => (
-                        <TableRow key={`m-${idx}`} className="hover:bg-zinc-50/50">
-                          <TableCell className="py-1.5 font-bold text-zinc-800">{item.product.name}</TableCell>
-                          <TableCell className="py-1.5 text-right font-mono font-bold text-indigo-700">{item.counted_qty}</TableCell>
-                          <TableCell className="py-1.5 text-emerald-700 font-bold flex items-center gap-1">
-                            <Check className="h-3.5 w-3.5" /> Matched SKU: {item.product.sku || 'N/A'}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {bulkImportResults.matched.map((item, idx) => {
+                        const delta = item.counted_qty - (item.system_qty || 0);
+                        return (
+                          <TableRow key={`m-${idx}`} className="hover:bg-zinc-50/50">
+                            <TableCell className="py-1.5 font-bold text-zinc-800">
+                              <div>{item.product.name}</div>
+                              <div className="text-[10px] text-zinc-400 font-mono">SKU: {item.product.sku || 'N/A'}</div>
+                            </TableCell>
+                            <TableCell className="py-1.5 text-right font-mono text-zinc-600">{item.system_qty || 0}</TableCell>
+                            <TableCell className="py-1.5 text-right font-mono font-bold text-indigo-700">{item.counted_qty}</TableCell>
+                            <TableCell className={`py-1.5 text-right font-mono font-bold ${delta < 0 ? 'text-rose-600' : delta > 0 ? 'text-emerald-600' : 'text-zinc-500'}`}>
+                              {delta > 0 ? `+${delta}` : delta}
+                            </TableCell>
+                            <TableCell className="py-1.5 text-emerald-700 font-bold flex items-center gap-1">
+                              <Check className="h-3.5 w-3.5" /> Matched
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                       {bulkImportResults.unmatched.map((item, idx) => (
                         <TableRow key={`u-${idx}`} className="hover:bg-zinc-50/50 bg-rose-50/20">
                           <TableCell className="py-1.5 font-mono text-zinc-500 text-[11px]">{item.key}</TableCell>
+                          <TableCell className="py-1.5 text-right font-mono text-zinc-500">-</TableCell>
                           <TableCell className="py-1.5 text-right font-mono text-zinc-500">{item.qty}</TableCell>
+                          <TableCell className="py-1.5 text-right font-mono text-zinc-500">-</TableCell>
                           <TableCell className="py-1.5 text-rose-600 font-medium flex items-center gap-1 text-[10px]">
                             <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-500" /> {item.reason}
                           </TableCell>
