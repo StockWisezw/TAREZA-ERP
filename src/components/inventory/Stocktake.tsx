@@ -54,6 +54,26 @@ export function Stocktake() {
     loadUserContext();
   }, []);
 
+  const getLiveSystemQty = (product: any, branchId?: string) => {
+    if (!product) return 0;
+    const masterProd = products.find(p => p.id === product.id);
+    const targetProduct = masterProd || product;
+    
+    const targetBranchId = branchId || activeStocktake?.branch_id || activeStocktake?.branches?.id || userBranchId;
+    if (targetBranchId && targetProduct.inventory && targetProduct.inventory.length > 0) {
+      const branchInventory = targetProduct.inventory.find((i: any) => i.branch_id === targetBranchId);
+      if (branchInventory) {
+        return Number(branchInventory.quantity || 0);
+      }
+    }
+    
+    if (targetProduct.inventory && targetProduct.inventory.length > 0) {
+      return Number(targetProduct.inventory[0].quantity || 0);
+    }
+    
+    return 0;
+  };
+
   const loadUserContext = async () => {
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -195,10 +215,7 @@ export function Stocktake() {
     let overageAmount = 0;
 
     items.forEach(item => {
-      const branchInventory = branchId 
-        ? item.product?.inventory?.find((i: any) => i.branch_id === branchId)
-        : null;
-      const systemQty = branchInventory ? branchInventory.quantity : (item.product?.inventory?.[0]?.quantity || 0);
+      const systemQty = getLiveSystemQty(item.product, branchId);
       const countedQty = Number(item.counted_qty || 0);
       const price = reconciliationValuation === 'cost'
         ? Number(item.product?.cost_price || item.product?.wholesale_price || 0)
@@ -311,10 +328,7 @@ export function Stocktake() {
 
       // Map rows
       const insertRows = items.map(item => {
-        const branchInventory = currentBranchId 
-          ? item.product?.inventory?.find((i: any) => i.branch_id === currentBranchId)
-          : null;
-        const sysQty = branchInventory ? branchInventory.quantity : (item.product?.inventory?.[0]?.quantity || 0);
+        const sysQty = getLiveSystemQty(item.product, currentBranchId);
         const cntQty = Number(item.counted_qty || 0);
         return {
           stocktake_id: stocktakeId,
@@ -376,8 +390,11 @@ export function Stocktake() {
           const rawProd: any = row.products || {};
           loadedProductIds.add(rawProd.id);
           
+          const masterProd = products.find(p => p.id === rawProd.id);
           let productInventory = [];
-          if (rawProd.inventory && rawProd.inventory.length > 0) {
+          if (masterProd?.inventory && masterProd.inventory.length > 0) {
+            productInventory = masterProd.inventory;
+          } else if (rawProd.inventory && rawProd.inventory.length > 0) {
             productInventory = rawProd.inventory;
           } else {
             productInventory = [{
@@ -402,8 +419,7 @@ export function Stocktake() {
       // Add any missing active products from catalog defaulted to their system expected quantity
       const missingProducts = products.filter(p => !loadedProductIds.has(p.id));
       const extraItems = missingProducts.map(p => {
-        const branchInventory = p.inventory?.find((i: any) => i.branch_id === branchId);
-        const sysQty = branchInventory ? branchInventory.quantity : 0;
+        const sysQty = getLiveSystemQty(p, branchId);
         return {
           product: p,
           counted_qty: sysQty,
@@ -419,8 +435,7 @@ export function Stocktake() {
     // Fallback: load all products from catalog defaulted to system expected quantities
     try {
       const defaultItems = products.map(p => {
-        const branchInventory = p.inventory?.find((i: any) => i.branch_id === branchId);
-        const sysQty = branchInventory ? branchInventory.quantity : 0;
+        const sysQty = getLiveSystemQty(p, branchId);
         return {
           product: p,
           counted_qty: sysQty,
@@ -464,16 +479,10 @@ export function Stocktake() {
       if (postToPOS) {
         // Calculate exact discrepancies (both positive/shortages and negative/overages)
         const discrepancyItems = reviewItemsData.filter((i: any) => {
-          const bInv = branchId 
-            ? i.product?.inventory?.find((a: any) => a.branch_id === branchId)
-            : null;
-          const systemQty = bInv ? bInv.quantity : (i.product?.inventory?.[0]?.quantity || 0);
+          const systemQty = getLiveSystemQty(i.product, branchId);
           return Number(i.counted_qty || 0) !== systemQty; 
         }).map((i: any) => {
-          const bInv = branchId 
-            ? i.product?.inventory?.find((a: any) => a.branch_id === branchId)
-            : null;
-          const systemQty = bInv ? bInv.quantity : (i.product?.inventory?.[0]?.quantity || 0);
+          const systemQty = getLiveSystemQty(i.product, branchId);
           const discrepancyQty = systemQty - Number(i.counted_qty || 0);
           const retailPrice = Number(i.product?.retail_price || 0);
           return {
@@ -665,9 +674,7 @@ export function Stocktake() {
 
       if (product) {
         // Retrieve current expected stock level from the products module's live inventory
-        const liveProduct = products.find(p => p.id === product.id) || product;
-        const branchInventory = liveProduct?.inventory?.find((i: any) => i.branch_id === branchId);
-        const systemExpected = branchInventory ? Number(branchInventory.quantity || 0) : 0;
+        const systemExpected = getLiveSystemQty(product, branchId);
 
         let finalCount = Number(qtyStr);
         if (qtyStr === '' || isNaN(finalCount)) {
@@ -739,8 +746,7 @@ export function Stocktake() {
     }));
 
     const rows = itemsToExport.map(item => {
-      const branchInventory = item.product?.inventory?.find((i: any) => i.branch_id === activeStocktake?.branch_id);
-      const systemExpected = branchInventory ? branchInventory.quantity : 0;
+      const systemExpected = getLiveSystemQty(item.product, activeStocktake?.branch_id);
       return [
         item.product.sku || item.product.barcode || item.product.id,
         item.counted_qty.toString(),
@@ -986,17 +992,14 @@ export function Stocktake() {
       // Handle prepopulate logic
       let initialCountedItems: any[] = [];
       if (prePopulate && products.length > 0) {
-        initialCountedItems = products
-          .filter(p => !branchId || p.inventory?.some((i: any) => i.branch_id === branchId) || p.inventory?.length === 0 || !p.inventory)
-          .map(p => {
-            const branchInventory = p.inventory?.find((i: any) => i.branch_id === branchId);
-            const sysQty = branchInventory ? branchInventory.quantity : 0;
-            return {
-              product: p,
-              counted_qty: sysQty, // initialize to system stock for faster adjustments!
-              notes: ''
-            };
-          });
+        initialCountedItems = products.map(p => {
+          const sysQty = getLiveSystemQty(p, branchId);
+          return {
+            product: p,
+            counted_qty: sysQty, // initialize to system stock for faster adjustments!
+            notes: ''
+          };
+        });
       }
 
       toast.success('Stocktake created successfully');
@@ -1040,7 +1043,7 @@ export function Stocktake() {
     const matchesQuery = pName.includes(term) || pSku.includes(term) || pBar.includes(term);
     
     if (onlyShowVariances) {
-      const sysQty = item.product?.inventory?.find((i: any) => i.branch_id === activeStocktake?.branch_id)?.quantity || 0;
+      const sysQty = getLiveSystemQty(item.product, activeStocktake?.branch_id);
       const cntQty = Number(item.counted_qty || 0);
       return matchesQuery && sysQty !== cntQty;
     }
@@ -1318,10 +1321,7 @@ export function Stocktake() {
             {/* Reconciliation Valuation Basis Selector & Aggregate Summary */}
             {(() => {
               const reviewCalcs = reviewItemsData.reduce((acc, item) => {
-                const branchInventory = reviewItem?.branch_id 
-                  ? item.product?.inventory?.find((i: any) => i.branch_id === reviewItem.branch_id)
-                  : null;
-                const systemQty = branchInventory ? branchInventory.quantity : (item.product?.inventory?.[0]?.quantity || 0);
+                const systemQty = getLiveSystemQty(item.product, reviewItem?.branch_id);
                 const countedQty = Number(item.counted_qty || 0);
                 const price = reconciliationValuation === 'cost' 
                   ? Number(item.product?.cost_price || item.product?.wholesale_price || 0) 
@@ -1404,10 +1404,7 @@ export function Stocktake() {
                     </TableRow>
                   ) : (
                     reviewItemsData.map((item: any, idx) => {
-                      const branchInventory = reviewItem?.branch_id 
-                        ? item.product?.inventory?.find((i: any) => i.branch_id === reviewItem.branch_id)
-                        : null;
-                      const systemQty = branchInventory ? branchInventory.quantity : (item.product?.inventory?.[0]?.quantity || 0);
+                      const systemQty = getLiveSystemQty(item.product, reviewItem?.branch_id);
                       const countedQty = Number(item.counted_qty || 0);
                       const variance = countedQty - systemQty;
                       const price = reconciliationValuation === 'cost' 
@@ -1466,16 +1463,10 @@ export function Stocktake() {
                     const branchId = reviewItem.branch_id || reviewItem.branches?.id;
 
                     const discrepancyItems = reviewItemsData.filter((i: any) => {
-                      const branchInventory = branchId 
-                        ? i.product?.inventory?.find((a: any) => a.branch_id === branchId)
-                        : null;
-                      const systemQty = branchInventory ? branchInventory.quantity : (i.product?.inventory?.[0]?.quantity || 0);
+                      const systemQty = getLiveSystemQty(i.product, branchId);
                       return Number(i.counted_qty || 0) !== systemQty; 
                     }).map((i: any) => {
-                      const branchInventory = branchId 
-                        ? i.product?.inventory?.find((a: any) => a.branch_id === branchId)
-                        : null;
-                      const systemQty = branchInventory ? branchInventory.quantity : (i.product?.inventory?.[0]?.quantity || 0);
+                      const systemQty = getLiveSystemQty(i.product, branchId);
                       const discrepancyQty = systemQty - Number(i.counted_qty || 0);
                       const retailPrice = Number(i.product?.retail_price || 0);
                       return {
@@ -1951,8 +1942,7 @@ export function Stocktake() {
                   className="bg-white text-zinc-700 h-8 font-semibold"
                   onClick={async () => {
                     const mapped = countedItems.map(item => {
-                      const branchInventory = item.product?.inventory?.find((i: any) => i.branch_id === activeStocktake?.branch_id);
-                      const sysQty = branchInventory ? branchInventory.quantity : 0;
+                      const sysQty = getLiveSystemQty(item.product, activeStocktake?.branch_id);
                       return {
                         ...item,
                         counted_qty: sysQty
@@ -2067,8 +2057,7 @@ export function Stocktake() {
                       </TableRow>
                     ) : (
                       filteredCountItems.map((item, index) => {
-                        const branchInventory = item.product?.inventory?.find((i: any) => i.branch_id === activeStocktake?.branch_id);
-                        const systemExpected = branchInventory ? branchInventory.quantity : 0;
+                        const systemExpected = getLiveSystemQty(item.product, activeStocktake?.branch_id);
                         const countedQty = Number(item.counted_qty || 0);
                         const variance = countedQty - systemExpected;
                         const price = reconciliationValuation === 'cost' 
