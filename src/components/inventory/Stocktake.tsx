@@ -2184,8 +2184,8 @@ export function Stocktake() {
 
       {/* Bulk Import Counts Dialog Modal */}
       <Dialog open={isBulkImporting} onOpenChange={setIsBulkImporting}>
-        <DialogContent className="max-w-2xl bg-white border-zinc-250 rounded-xl p-6 flex flex-col gap-4">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] max-w-5xl h-[90vh] md:h-auto md:max-h-[85vh] bg-white border-zinc-250 rounded-xl p-5 md:p-6 flex flex-col overflow-hidden gap-0">
+          <DialogHeader className="pb-4 border-b border-zinc-100 shrink-0">
             <DialogTitle className="text-lg font-bold text-zinc-900 flex items-center gap-2">
               <UploadCloud className="h-5 w-5 text-indigo-600" />
               Bulk Import Stock Counts
@@ -2195,112 +2195,116 @@ export function Stocktake() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-xs font-bold text-zinc-700">Option 1: Paste Text Data</Label>
-              <textarea
-                placeholder="SKU,CountedQty&#10;BV-MZB-2L,95&#10;6001234567890,12"
-                value={bulkImportText}
-                onChange={(e) => setBulkImportText(e.target.value)}
-                className="w-full h-44 text-xs font-mono border border-zinc-200 rounded-lg p-2.5 bg-zinc-50/50 focus:outline-none focus:ring-1 focus:ring-zinc-900 resize-none"
-              />
-              <Button 
-                type="button" 
-                size="sm"
-                onClick={() => handleParseBulkImport(bulkImportText)}
-                className="w-full bg-zinc-900 text-white hover:bg-zinc-800 text-xs font-semibold h-9"
-              >
-                Analyze & Parse Text
-              </Button>
-            </div>
-
-            <div className="space-y-2 flex flex-col justify-between">
+          {/* Scrollable container for dialog content */}
+          <div className="flex-1 overflow-y-auto py-4 pr-1 space-y-4 min-h-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-xs font-bold text-zinc-700">Option 2: Upload CSV File</Label>
-                <div className="border border-dashed border-zinc-300 rounded-lg p-4 bg-zinc-50/40 text-center flex flex-col items-center justify-center gap-2 hover:bg-zinc-50 hover:border-zinc-400 transition-colors duration-150 cursor-pointer min-h-[120px] relative">
-                  <input 
-                    type="file" 
-                    accept=".csv,.txt"
-                    onChange={handleFileUpload}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  />
-                  <FileSpreadsheet className="h-8 w-8 text-zinc-400" />
-                  <span className="text-xs font-bold text-zinc-700">Drag & Drop or Click to Upload</span>
-                  <span className="text-[10px] text-zinc-500 font-mono">Supports .csv or .txt (Comma/Tab separated)</span>
-                </div>
-              </div>
-
-              <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-lg space-y-1.5">
-                <span className="text-xs font-extrabold text-indigo-950 flex items-center gap-1.5">
-                  <Sparkles className="h-4 w-4 text-indigo-600" /> Need a starting sheet?
-                </span>
-                <p className="text-[11px] text-indigo-900 leading-normal">
-                  Download a template loaded with your catalog's SKUs, barcodes, names and system stock levels. Fill in the quantities and import it right back!
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
+                <Label className="text-xs font-bold text-zinc-700">Option 1: Paste Text Data</Label>
+                <textarea
+                  placeholder="SKU,CountedQty&#10;BV-MZB-2L,95&#10;6001234567890,12"
+                  value={bulkImportText}
+                  onChange={(e) => setBulkImportText(e.target.value)}
+                  className="w-full h-44 text-xs font-mono border border-zinc-200 rounded-lg p-2.5 bg-zinc-50/50 focus:outline-none focus:ring-1 focus:ring-zinc-900 resize-none"
+                />
+                <Button 
+                  type="button" 
                   size="sm"
-                  onClick={downloadStocktakeTemplate}
-                  className="bg-white hover:bg-indigo-50 border-indigo-200 text-indigo-700 hover:text-indigo-800 text-[11px] font-bold h-8 w-full shadow-xs"
+                  onClick={() => handleParseBulkImport(bulkImportText)}
+                  className="w-full bg-zinc-900 text-white hover:bg-zinc-800 text-xs font-semibold h-9"
                 >
-                  Download Active Template (.CSV)
+                  Analyze & Parse Text
                 </Button>
               </div>
-            </div>
-          </div>
 
-          {bulkImportResults && (
-            <div className="space-y-2.5 border-t border-zinc-150 pt-4 flex-1 flex flex-col min-h-0">
-              <div className="flex justify-between items-center">
-                <Label className="text-xs font-black uppercase text-zinc-600 tracking-wider">Analysis Preview Results</Label>
-                <div className="flex gap-2">
-                  <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-0 text-[10px] font-bold">
-                    Matched: {bulkImportResults.matched.length}
-                  </Badge>
-                  {bulkImportResults.unmatched.length > 0 && (
-                    <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-50 border-0 text-[10px] font-bold">
-                      Unmatched: {bulkImportResults.unmatched.length}
-                    </Badge>
-                  )}
+              <div className="space-y-2 flex flex-col justify-between">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-zinc-700">Option 2: Upload CSV File</Label>
+                  <div className="border border-dashed border-zinc-300 rounded-lg p-4 bg-zinc-50/40 text-center flex flex-col items-center justify-center gap-2 hover:bg-zinc-50 hover:border-zinc-400 transition-colors duration-150 cursor-pointer min-h-[120px] relative">
+                    <input 
+                      type="file" 
+                      accept=".csv,.txt"
+                      onChange={handleFileUpload}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    />
+                    <FileSpreadsheet className="h-8 w-8 text-zinc-400" />
+                    <span className="text-xs font-bold text-zinc-700">Drag & Drop or Click to Upload</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">Supports .csv or .txt (Comma/Tab separated)</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-lg space-y-1.5">
+                  <span className="text-xs font-extrabold text-indigo-950 flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-indigo-600" /> Need a starting sheet?
+                  </span>
+                  <p className="text-[11px] text-indigo-900 leading-normal">
+                    Download a template loaded with your catalog's SKUs, barcodes, names and system stock levels. Fill in the quantities and import it right back!
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={downloadStocktakeTemplate}
+                    className="bg-white hover:bg-indigo-50 border-indigo-200 text-indigo-700 hover:text-indigo-800 text-[11px] font-bold h-8 w-full shadow-xs"
+                  >
+                    Download Active Template (.CSV)
+                  </Button>
                 </div>
               </div>
-
-              <div className="border border-zinc-150 rounded-lg max-h-44 overflow-y-auto bg-zinc-50/30 text-xs">
-                <Table>
-                  <TableHeader className="bg-zinc-100 sticky top-0 z-10 text-[10px] uppercase font-bold text-zinc-500">
-                    <TableRow>
-                      <TableHead className="py-2">Identifier</TableHead>
-                      <TableHead className="py-2 text-right">New Count Qty</TableHead>
-                      <TableHead className="py-2">Status / Matches</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {bulkImportResults.matched.map((item, idx) => (
-                      <TableRow key={`m-${idx}`} className="hover:bg-zinc-50/50">
-                        <TableCell className="py-1.5 font-bold text-zinc-800">{item.product.name}</TableCell>
-                        <TableCell className="py-1.5 text-right font-mono font-bold text-indigo-700">{item.counted_qty}</TableCell>
-                        <TableCell className="py-1.5 text-emerald-700 font-bold flex items-center gap-1">
-                          <Check className="h-3.5 w-3.5" /> Matched SKU: {item.product.sku || 'N/A'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {bulkImportResults.unmatched.map((item, idx) => (
-                      <TableRow key={`u-${idx}`} className="hover:bg-zinc-50/50 bg-rose-50/20">
-                        <TableCell className="py-1.5 font-mono text-zinc-500 text-[11px]">{item.key}</TableCell>
-                        <TableCell className="py-1.5 text-right font-mono text-zinc-500">{item.qty}</TableCell>
-                        <TableCell className="py-1.5 text-rose-600 font-medium flex items-center gap-1 text-[10px]">
-                          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-500" /> {item.reason}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
             </div>
-          )}
 
-          <div className="flex justify-end gap-2.5 border-t border-zinc-150 pt-4">
+            {bulkImportResults && (
+              <div className="space-y-2.5 border-t border-zinc-150 pt-4 flex flex-col min-h-0">
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs font-black uppercase text-zinc-600 tracking-wider">Analysis Preview Results</Label>
+                  <div className="flex gap-2">
+                    <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-0 text-[10px] font-bold">
+                      Matched: {bulkImportResults.matched.length}
+                    </Badge>
+                    {bulkImportResults.unmatched.length > 0 && (
+                      <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-50 border-0 text-[10px] font-bold">
+                        Unmatched: {bulkImportResults.unmatched.length}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border border-zinc-150 rounded-lg max-h-60 overflow-y-auto bg-zinc-50/30 text-xs">
+                  <Table>
+                    <TableHeader className="bg-zinc-100 sticky top-0 z-10 text-[10px] uppercase font-bold text-zinc-500">
+                      <TableRow>
+                        <TableHead className="py-2">Identifier</TableHead>
+                        <TableHead className="py-2 text-right">New Count Qty</TableHead>
+                        <TableHead className="py-2">Status / Matches</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {bulkImportResults.matched.map((item, idx) => (
+                        <TableRow key={`m-${idx}`} className="hover:bg-zinc-50/50">
+                          <TableCell className="py-1.5 font-bold text-zinc-800">{item.product.name}</TableCell>
+                          <TableCell className="py-1.5 text-right font-mono font-bold text-indigo-700">{item.counted_qty}</TableCell>
+                          <TableCell className="py-1.5 text-emerald-700 font-bold flex items-center gap-1">
+                            <Check className="h-3.5 w-3.5" /> Matched SKU: {item.product.sku || 'N/A'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {bulkImportResults.unmatched.map((item, idx) => (
+                        <TableRow key={`u-${idx}`} className="hover:bg-zinc-50/50 bg-rose-50/20">
+                          <TableCell className="py-1.5 font-mono text-zinc-500 text-[11px]">{item.key}</TableCell>
+                          <TableCell className="py-1.5 text-right font-mono text-zinc-500">{item.qty}</TableCell>
+                          <TableCell className="py-1.5 text-rose-600 font-medium flex items-center gap-1 text-[10px]">
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-500" /> {item.reason}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sticky footer for action buttons */}
+          <div className="flex justify-end gap-2.5 border-t border-zinc-150 pt-4 bg-white mt-auto shrink-0">
             <Button
               type="button"
               variant="ghost"
