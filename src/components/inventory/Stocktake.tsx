@@ -33,7 +33,7 @@ export function Stocktake() {
   const [filterQuery, setFilterQuery] = useState('');
   const [onlyShowVariances, setOnlyShowVariances] = useState(false);
   const [savingProgress, setSavingProgress] = useState(false);
-  const [reconciliationValuation, setReconciliationValuation] = useState<'cost' | 'sales'>('cost');
+  const [reconciliationValuation, setReconciliationValuation] = useState<'cost' | 'sales'>('sales');
 
   // Bulk Import Counts State
   const [isBulkImporting, setIsBulkImporting] = useState(false);
@@ -368,9 +368,13 @@ export function Stocktake() {
         return null;
       }
 
+      let mappedItems: any[] = [];
+      const loadedProductIds = new Set<string>();
+
       if (data && data.length > 0) {
-        const mappedItems = data.map(row => {
+        mappedItems = data.map(row => {
           const rawProd: any = row.products || {};
+          loadedProductIds.add(rawProd.id);
           
           let productInventory = [];
           if (rawProd.inventory && rawProd.inventory.length > 0) {
@@ -393,10 +397,39 @@ export function Stocktake() {
             notes: row.notes || ''
           };
         });
-        return mappedItems;
       }
+
+      // Add any missing active products from catalog defaulted to their system expected quantity
+      const missingProducts = products.filter(p => !loadedProductIds.has(p.id));
+      const extraItems = missingProducts.map(p => {
+        const branchInventory = p.inventory?.find((i: any) => i.branch_id === branchId);
+        const sysQty = branchInventory ? branchInventory.quantity : 0;
+        return {
+          product: p,
+          counted_qty: sysQty,
+          notes: ''
+        };
+      });
+
+      return [...mappedItems, ...extraItems];
     } catch (err) {
       console.error('Error in loading stocktake products:', err);
+    }
+    
+    // Fallback: load all products from catalog defaulted to system expected quantities
+    try {
+      const defaultItems = products.map(p => {
+        const branchInventory = p.inventory?.find((i: any) => i.branch_id === branchId);
+        const sysQty = branchInventory ? branchInventory.quantity : 0;
+        return {
+          product: p,
+          counted_qty: sysQty,
+          notes: ''
+        };
+      });
+      return defaultItems;
+    } catch (fallbackErr) {
+      console.error('Error in fallback product loader:', fallbackErr);
     }
     return null;
   };
