@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, signOut as fireSignOut } from 'firebase/auth';
-import { fireAuth, supabase, firebaseConfig } from '../lib/firebaseClient';
+import { fireAuth, supabase, firebaseConfig, setActiveBusinessId } from '../lib/firebaseClient';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -210,7 +210,7 @@ export default function Login() {
 
       // Cache target branch & business details in local storage for POS to resume instantly
       localStorage.setItem('tareza_active_branch_id', branchData.id);
-      localStorage.setItem('tareza_active_business_id', branchData.business_id);
+      setActiveBusinessId(branchData.business_id);
       localStorage.setItem('tareza_active_cashier_id', authenticatedUser.id);
       localStorage.setItem('tareza_active_cashier_name', `${authenticatedUser.first_name} ${authenticatedUser.last_name}`);
 

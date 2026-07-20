@@ -113,6 +113,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       await db.settings.delete('current_user_session');
       await indexedDbService.clearAllPOSCache();
       usePOSStore.getState().resetStore();
+      
+      // Clear localStorage active business/branch to prevent stale session pollution
+      localStorage.removeItem('tareza_active_business_id');
+      localStorage.removeItem('tareza_active_branch_id');
     } catch (err) {
       console.error('Error clearing local cache on signout:', err);
     }

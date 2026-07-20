@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Activity, CreditCard, DollarSign, Package, Sparkles, Clock, Lock, Unlock, Play, RefreshCw, AlertTriangle, CheckCircle2, BarChart3, PieChart as PieChartIcon, Check, TrendingUp, Coins } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, Legend, PieChart, Pie, LineChart, Line } from 'recharts';
 import { useEffect, useState } from 'react';
-import { supabase, firebaseConfig } from '../lib/firebaseClient';
+import { supabase, firebaseConfig, setActiveBusinessId } from '../lib/firebaseClient';
 import { DynamicBranchOverview } from '../components/dashboard/DynamicBranchOverview';
 import { toast } from 'sonner';
 import { useTheme } from 'next-themes';
@@ -552,7 +552,11 @@ export default function Dashboard() {
           finalBrId = businessData.branch_id;
           
           const { data: bizDoc } = await supabase.from('businesses').select('id').eq('id', finalBusId).limit(1).maybeSingle();
-          if (bizDoc) bizExists = true;
+          if (bizDoc) {
+            bizExists = true;
+            // Set the active business ID in client cache and localStorage
+            setActiveBusinessId(finalBusId);
+          }
         }
 
         const { data: profile } = await supabase.from('profiles').select('first_name').eq('id', userData.user.id).limit(1).maybeSingle();
