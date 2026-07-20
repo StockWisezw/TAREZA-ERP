@@ -28,6 +28,7 @@ import {
   documentId,
   persistentLocalCache,
   persistentMultipleTabManager,
+  persistentSingleTabManager,
   memoryLocalCache,
   setLogLevel,
   disableNetwork,
@@ -119,6 +120,7 @@ function createFirestoreInstance() {
   
   if (isPersistenceEnabled) {
     try {
+      // Tier 1: Multi-tab persistence (robust default)
       return initializeFirestore(app, {
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager()
@@ -126,7 +128,18 @@ function createFirestoreInstance() {
         experimentalForceLongPolling: true
       }, resolvedConfig.firestoreDatabaseId);
     } catch (err: any) {
-      console.warn('[Firebase] Fallback to memoryLocalCache due to IndexedDb or container restriction: ', err);
+      console.warn('[Firebase] Multi-tab persistence initialization failed, trying single-tab fallback: ', err);
+      try {
+        // Tier 2: Single-tab persistence (extremely stable in sandboxed iframe contexts)
+        return initializeFirestore(app, {
+          localCache: persistentLocalCache({
+            tabManager: persistentSingleTabManager({})
+          }),
+          experimentalForceLongPolling: true
+        }, resolvedConfig.firestoreDatabaseId);
+      } catch (singleTabErr: any) {
+        console.warn('[Firebase] Single-tab persistence failed, falling back to memoryLocalCache: ', singleTabErr);
+      }
     }
   }
 

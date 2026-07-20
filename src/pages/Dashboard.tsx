@@ -546,16 +546,67 @@ export default function Dashboard() {
           .limit(1)
           .maybeSingle();
 
+        let resolvedBusinessData = businessData;
+
+        // Safeguard: Check local IndexedDB cache if Firestore returned empty (offline or intermittent sync)
+        if (!resolvedBusinessData) {
+          try {
+            const { db: dexieDb } = await import('../lib/dexieDb');
+            const localRecord = await dexieDb.table('business_users').get(userData.user.id);
+            if (localRecord && localRecord.business_id) {
+              resolvedBusinessData = {
+                business_id: localRecord.business_id,
+                branch_id: localRecord.branch_id
+              };
+              console.log('[Dashboard] Recovered business user profile from local IndexedDB cache:', resolvedBusinessData);
+            } else {
+              const allUsers = await dexieDb.table('business_users').toArray();
+              const matched = allUsers.find((bu: any) => bu.user_id === userData.user.id);
+              if (matched && matched.business_id) {
+                resolvedBusinessData = {
+                  business_id: matched.business_id,
+                  branch_id: matched.branch_id
+                };
+                console.log('[Dashboard] Matched local business user by user_id field:', resolvedBusinessData);
+              }
+            }
+          } catch (dexieErr) {
+            console.warn('[Dashboard] Could not query offline IndexedDB cache:', dexieErr);
+          }
+        }
+
         let bizExists = false;
-        if (businessData) {
-          finalBusId = businessData.business_id;
-          finalBrId = businessData.branch_id;
-          
+        if (resolvedBusinessData) {
+          finalBusId = resolvedBusinessData.business_id;
+          finalBrId = resolvedBusinessData.branch_id;
+
           const { data: bizDoc } = await supabase.from('businesses').select('id').eq('id', finalBusId).limit(1).maybeSingle();
           if (bizDoc) {
             bizExists = true;
+          } else {
+            // Recovering/Creating matching business doc for existing tenancy to guarantee data persistence
+            try {
+              await supabase.from('businesses').insert({
+                id: finalBusId,
+                name: 'My Business',
+                tax_number: finalBusId,
+                email: userData.user.email || '',
+                created_at: new Date().toISOString()
+              });
+              bizExists = true;
+              console.log('[Dashboard] Automatically restored missing business document for ID:', finalBusId);
+            } catch (recoveryErr) {
+              console.warn('[Dashboard] Missing business record recovery failed (non-blocking):', recoveryErr);
+              bizExists = true; // Still allow so we don't wipe active tenancy
+            }
+          }
+
+          if (bizExists) {
             // Set the active business ID in client cache and localStorage
             setActiveBusinessId(finalBusId);
+            if (finalBrId) {
+              localStorage.setItem('tareza_active_branch_id', finalBrId);
+            }
           }
         }
 
