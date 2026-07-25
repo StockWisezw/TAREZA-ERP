@@ -53,8 +53,11 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   ],
   cashier: [
     Permission.READ_PRODUCT,
+    Permission.CREATE_PRODUCT,
+    Permission.UPDATE_PRODUCT,
     Permission.CREATE_SALE,
     Permission.READ_SALE,
+    Permission.MODIFY_SALE,
   ],
   accountant: [
     Permission.READ_PRODUCT,

@@ -96,7 +96,7 @@ export default function Layout() {
   const navigate = useNavigate();
 
   React.useEffect(() => {
-    if (!rbacLoading && role === 'cashier' && location.pathname !== '/pos') {
+    if (!rbacLoading && role === 'cashier' && (location.pathname === '/settings' || location.pathname.startsWith('/settings/'))) {
       navigate('/pos', { replace: true });
     }
   }, [role, rbacLoading, location.pathname, navigate]);
@@ -267,7 +267,7 @@ export default function Layout() {
   const NavLinks = ({ mobile }: { mobile?: boolean }) => {
     const filteredNav = navigation.filter(item => {
       if (role === 'cashier') {
-        return item.href === '/pos';
+        return item.href !== '/settings';
       }
       if (role === 'staff') {
         return ['/pos', '/inventory', '/customers', '/suppliers', '/messenger', '/support'].includes(item.href);
@@ -627,7 +627,7 @@ export default function Layout() {
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-semibold leading-none">{user?.email || 'admin@tareza.co.zw'}</p>
                       <p className="text-xs leading-none text-zinc-500">
-                        {role === 'cashier' ? 'Cashier (Blind Till)' : 'Administrator'}
+                        {role === 'cashier' ? 'Cashier' : 'Administrator'}
                       </p>
                     </div>
                   </DropdownMenuLabel>
