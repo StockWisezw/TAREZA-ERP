@@ -57,6 +57,15 @@ export default function Login() {
     try {
       // First attempt standard Firebase Auth login with dev/client credentials
       await signInWithEmailAndPassword(fireAuth, demoEmail, demoPassword);
+      const { getActiveBusinessId, setActiveBusinessId } = await import('../lib/firebaseClient');
+      if (role === 'developer') {
+        setActiveBusinessId('TZ-999999-DEV');
+      } else {
+        const resolvedBiz = await getActiveBusinessId();
+        if (resolvedBiz && resolvedBiz !== 'default_business') {
+          setActiveBusinessId(resolvedBiz);
+        }
+      }
       toast.success(`Successfully logged in as ${role === 'developer' ? 'System Developer' : 'Business Client'}!`);
       navigate('/dashboard');
     } catch (err: any) {
@@ -465,6 +474,16 @@ export default function Login() {
           return;
         }
 
+        const { getActiveBusinessId, setActiveBusinessId } = await import('../lib/firebaseClient');
+        if (isDeveloperEmail) {
+          setActiveBusinessId('TZ-999999-DEV');
+        } else {
+          const resolvedBiz = await getActiveBusinessId();
+          if (resolvedBiz && resolvedBiz !== 'default_business') {
+            setActiveBusinessId(resolvedBiz);
+          }
+        }
+
         toast.success('Welcome back to Tareza ERP');
         navigate('/dashboard');
       } catch (error: any) {
@@ -541,6 +560,8 @@ export default function Login() {
             // Already registered or fallback direct sign-in with master password
             try {
               await signInWithEmailAndPassword(fireAuth, email, password);
+              const { setActiveBusinessId } = await import('../lib/firebaseClient');
+              setActiveBusinessId('TZ-999999-DEV');
               toast.success(`Logged in as Developer (${email})!`);
               navigate('/dashboard');
               return;

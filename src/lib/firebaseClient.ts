@@ -206,11 +206,12 @@ let firebaseCurrentUser: any = null;
 
 onAuthStateChanged(fireAuth, (user) => {
   firebaseCurrentUser = user;
+  activeBusinessIdPromise = null;
   if (!user) {
     setActiveBusinessId(null);
   } else {
-    // Prefetch active business ID
-    getActiveBusinessId();
+    // Prefetch active business ID for newly authenticated user
+    getActiveBusinessId().catch(err => console.warn('[Auth] Business ID prefetch notice:', err));
   }
 });
 
@@ -555,6 +556,7 @@ let activeBusinessIdPromise: Promise<string | null> | null = null;
 
 export function setActiveBusinessId(id: string | null) {
   cachedBusinessId = id;
+  activeBusinessIdPromise = null;
   safeSetLocalStorage('tareza_active_business_id', id);
   if (id && id !== 'default_business') {
     offlineSyncEngine.hydrateLocalDatabase(id).catch(err => {
@@ -575,9 +577,17 @@ export async function getActiveBusinessId(): Promise<string | null> {
   const user = fireAuth.currentUser;
   if (!user) return 'default_business';
 
+  // Fast-path for developer/admin accounts to guarantee zero data loss
+  const isDevEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(user.email?.toLowerCase() || '');
+  if (isDevEmail) {
+    cachedBusinessId = 'TZ-999999-DEV';
+    safeSetLocalStorage('tareza_active_business_id', 'TZ-999999-DEV');
+    return 'TZ-999999-DEV';
+  }
+
   if (activeBusinessIdPromise) {
-    if (cachedBusinessId && cachedBusinessId !== 'default_business') return cachedBusinessId;
-    return activeBusinessIdPromise;
+    const prevRes = await activeBusinessIdPromise;
+    if (prevRes && prevRes !== 'default_business') return prevRes;
   }
 
   activeBusinessIdPromise = (async () => {
@@ -591,9 +601,7 @@ export async function getActiveBusinessId(): Promise<string | null> {
         const directSnap = await fireGetDoc(directDocRef);
         if (directSnap && directSnap.exists()) {
           const bizId = directSnap.data()?.business_id;
-          if (bizId) {
-            return bizId;
-          }
+          if (bizId) return bizId;
         }
 
         // 2. Fallback query for legacy or non-UID-keyed setups
@@ -604,12 +612,22 @@ export async function getActiveBusinessId(): Promise<string | null> {
         const qSnap = await fireGetDocs(q);
         if (qSnap && !qSnap.empty) {
           const bizId = qSnap.docs[0].data()?.business_id;
-          if (bizId) {
-            return bizId;
-          }
+          if (bizId) return bizId;
         }
 
-        // If both completed but no record exists yet, exit loop to allow creation
+        // 3. Fallback to local Dexie IndexedDB cache
+        try {
+          const { db: dexieDb } = await import('./dexieDb');
+          const localRecord = await dexieDb.table('business_users').get(user.uid);
+          if (localRecord && localRecord.business_id) return localRecord.business_id;
+
+          const allLocal = await dexieDb.table('business_users').toArray();
+          const matched = allLocal.find((bu: any) => bu.user_id === user.uid || bu.id === user.uid || (user.email && bu.email === user.email));
+          if (matched && matched.business_id) return matched.business_id;
+        } catch (dexieErr) {
+          console.warn('[Firebase] Dexie fallback lookup failed:', dexieErr);
+        }
+
         break;
       } catch (err: any) {
         const errMsg = String(err).toLowerCase();
@@ -631,12 +649,18 @@ export async function getActiveBusinessId(): Promise<string | null> {
               const cacheSnap = await getDocFromCache(directDocRef);
               if (cacheSnap && cacheSnap.exists()) {
                 const bizId = cacheSnap.data()?.business_id;
-                if (bizId) {
-                  return bizId;
-                }
+                if (bizId) return bizId;
               }
             } catch (cacheErr) {
               // Ignore cache fetch failures
+            }
+            try {
+              const { db: dexieDb } = await import('./dexieDb');
+              const allLocal = await dexieDb.table('business_users').toArray();
+              const matched = allLocal.find((bu: any) => bu.user_id === user.uid || bu.id === user.uid || (user.email && bu.email === user.email));
+              if (matched && matched.business_id) return matched.business_id;
+            } catch (dErr) {
+              // Ignore
             }
             break;
           }
@@ -651,17 +675,15 @@ export async function getActiveBusinessId(): Promise<string | null> {
 
   try {
     const res = await activeBusinessIdPromise;
-    // Safeguard: If cachedBusinessId was explicitly set in the meantime to a real business, do NOT overwrite it!
     if (res && res !== 'default_business') {
-      if (!cachedBusinessId || cachedBusinessId === 'default_business') {
-        setActiveBusinessId(res);
-      }
-    } else if (!cachedBusinessId) {
-      cachedBusinessId = 'default_business';
+      setActiveBusinessId(res);
+      return res;
     }
-    return cachedBusinessId;
+    return cachedBusinessId || 'default_business';
   } finally {
-    activeBusinessIdPromise = null;
+    if (!cachedBusinessId || cachedBusinessId === 'default_business') {
+      activeBusinessIdPromise = null;
+    }
   }
 }
 
