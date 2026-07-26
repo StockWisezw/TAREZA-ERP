@@ -30,6 +30,8 @@ import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
 import { RegulatoryComplianceExports } from '../components/reports/RegulatoryComplianceExports';
 import { useBusinessStore } from '../store';
+import { useSubscription } from '../hooks/useSubscription';
+import { PremiumLockBanner } from '../components/common/PremiumBadge';
 import { AIForecasting } from '../components/reports/AIForecasting';
 import QuickBooksStyleReports from '../components/reports/QuickBooksStyleReports';
 import { jsPDF } from 'jspdf';
@@ -890,8 +892,14 @@ export default function Reports() {
     }
   };
 
+  const { isUnlocked } = useSubscription();
+  const locked = !isUnlocked('reports');
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10 px-4 sm:px-6">
+      {locked && (
+        <PremiumLockBanner featureTitle="GAAP Financial & Profit Analytics Reports" requiredTier="PRO" />
+      )}
       
       {/* Dynamic Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-200 pb-5">

@@ -17,6 +17,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { usePOSStore } from '../store/posStore';
 import { useBusinessStore } from '../store';
 import { postJournalEntry } from '../services/ledgerService';
+import { useSubscription } from '../hooks/useSubscription';
+import { PremiumLockBanner } from '../components/common/PremiumBadge';
 
 interface CashLog {
   id: string;
@@ -1691,10 +1693,15 @@ export default function CashManagement() {
   };
 
 
+  const { isUnlocked } = useSubscription();
+  const locked = !isUnlocked('cash');
   const activeVariance = countedCash - expectedCash;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-6xl mx-auto pb-12 px-4">
+      {locked && (
+        <PremiumLockBanner featureTitle="Cash Management & Blind Till Audits" requiredTier="PRO" />
+      )}
       {/* Upper Title Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-zinc-100 shadow-sm">
         <div>

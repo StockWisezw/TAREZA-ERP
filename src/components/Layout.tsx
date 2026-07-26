@@ -49,6 +49,23 @@ import { supabase } from '../lib/firebaseClient';
 import { Breadcrumbs } from './Breadcrumbs';
 import { CommandPalette } from './CommandPalette';
 import { MobileCompactView } from './MobileCompactView';
+import { useSubscription, FeatureKey } from '../hooks/useSubscription';
+import { PremiumBadge } from './common/PremiumBadge';
+
+const hrefToFeatureKey: Record<string, FeatureKey> = {
+  '/dashboard': 'dashboard',
+  '/pos': 'pos',
+  '/cash': 'cash',
+  '/accounting': 'accounting',
+  '/coa': 'coa',
+  '/inventory': 'inventory',
+  '/customers': 'customers',
+  '/suppliers': 'suppliers',
+  '/reports': 'reports',
+  '/messenger': 'messenger',
+  '/gmail': 'gmail',
+  '/support': 'support',
+};
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -94,6 +111,7 @@ export default function Layout() {
   const location = useLocation();
   const isPosPage = location.pathname === '/pos';
   const navigate = useNavigate();
+  const { isUnlocked, getFeatureTier, checkAccess } = useSubscription();
 
   React.useEffect(() => {
     if (!rbacLoading && role === 'cashier' && (location.pathname === '/settings' || location.pathname.startsWith('/settings/'))) {
@@ -280,22 +298,28 @@ export default function Layout() {
         {filteredNav.map((item) => {
           const isActive = location.pathname === item.href;
           const showLabel = mobile || sidebarExpanded;
+          const featureKey = hrefToFeatureKey[item.href];
+          const locked = featureKey ? !isUnlocked(featureKey) : false;
+          const reqTier = featureKey ? getFeatureTier(featureKey) : 'STARTER';
           
           return (
             <Link
               key={item.name}
               to={item.href}
               onClick={() => {
+                if (featureKey && locked) {
+                  checkAccess(featureKey, item.name);
+                }
                 if (!mobile) {
                   // Keep collapsed when page is selected so user sees full page
                   setSidebarExpanded(false);
                 }
               }}
-              title={!showLabel ? item.name : undefined}
+              title={!showLabel ? `${item.name}${locked ? ` (${reqTier} Required)` : ''}` : undefined}
               className={`flex items-center rounded-full transition-all mb-1 h-9 ${
                 showLabel 
                   ? 'px-3.5 py-2 gap-3 justify-start' 
-                  : 'p-0 w-9 h-9 mx-auto justify-center'
+                  : 'p-0 w-9 h-9 mx-auto justify-center relative'
               } ${
                 isActive 
                   ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 font-bold shadow-sm' 
@@ -303,13 +327,19 @@ export default function Layout() {
               }`}
             >
               <item.icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? 'text-blue-700 dark:text-blue-400' : 'text-zinc-500 dark:text-zinc-400'}`} />
+              {!showLabel && locked && (
+                <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-950" />
+              )}
               {showLabel && (
-                <span className="text-xs font-semibold tracking-tight truncate select-none leading-none">
-                  {item.name}
-                </span>
+                <div className="flex items-center justify-between w-full min-w-0 pr-0.5">
+                  <span className="text-xs font-semibold tracking-tight truncate select-none leading-none">
+                    {item.name}
+                  </span>
+                  {locked && <PremiumBadge tier={reqTier} showIcon={false} />}
+                </div>
               )}
             </Link>
-          )
+          );
         })}
       </div>
     );

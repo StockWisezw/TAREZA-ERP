@@ -16,6 +16,8 @@ import {
   initializeChartOfAccounts, 
   logAuditEvent 
 } from '../services/ledgerService';
+import { useSubscription } from '../hooks/useSubscription';
+import { PremiumLockBanner } from '../components/common/PremiumBadge';
 
 interface Account {
   id: string;
@@ -143,9 +145,14 @@ export default function ChartOfAccounts() {
     a.name.toLowerCase().includes(coaSearch.toLowerCase()) ||
     a.type.toLowerCase().includes(coaSearch.toLowerCase())
   );
+  const { isUnlocked } = useSubscription();
+  const locked = !isUnlocked('coa');
 
   return (
     <div className="flex flex-col h-full overflow-hidden p-6 gap-6 bg-zinc-50/50">
+      {locked && (
+        <PremiumLockBanner featureTitle="Chart of Accounts Ledger Matrix" requiredTier="PRO" />
+      )}
       
       {/* Dynamic Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0">

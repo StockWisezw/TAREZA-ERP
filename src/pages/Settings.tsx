@@ -17,10 +17,13 @@ import { IntegrationSettings } from '../components/settings/IntegrationSettings'
 import { SupportSettings } from '../components/settings/SupportSettings';
 import { TutorialsSettings } from '../components/settings/TutorialsSettings';
 import { Separator } from '../components/ui/separator';
+import { useSubscription } from '../hooks/useSubscription';
+import { PremiumLockBanner } from '../components/common/PremiumBadge';
 
 export default function Settings() {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('business');
+  const { isUnlocked } = useSubscription();
 
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
@@ -31,24 +34,52 @@ export default function Settings() {
   }, [location.search]);
 
   const renderContent = () => {
-    switch (activeTab) {
-      case 'business': return <BusinessProfile />;
-      case 'billing': return <BillingSettings />;
-      case 'taxation': return <TaxationSettings />;
-      case 'currency': return <CurrencySettings />;
-      case 'branches': return <BranchWarehouseSettings />;
-      case 'users': return <UserManagement />;
-      case 'roles': return <RolesPermissions />;
-      case 'pos': return <PosSettings />;
-      case 'themes': return <ThemeSettings />;
-      case 'localization': return <LocalizationSettings />;
-      case 'notifications': return <NotificationSettings />;
-      case 'security': return <SecuritySettings />;
-      case 'integrations': return <IntegrationSettings />;
-      case 'support': return <SupportSettings />;
-      case 'tutorials': return <TutorialsSettings />;
-      default: return <BusinessProfile />;
+    let content = null;
+    let locked = false;
+    let requiredTier: 'PRO' | 'ENTERPRISE' = 'PRO';
+    let title = '';
+
+    if (activeTab === 'roles') {
+      locked = !isUnlocked('roles');
+      requiredTier = 'PRO';
+      title = 'Custom Roles & RBAC Policy Profiles';
+    } else if (activeTab === 'security') {
+      locked = !isUnlocked('security');
+      requiredTier = 'PRO';
+      title = 'Automated Security & Database Backups';
+    } else if (activeTab === 'integrations') {
+      locked = !isUnlocked('integrations');
+      requiredTier = 'ENTERPRISE';
+      title = 'Developer API Keys & Paynow Gateways';
     }
+
+    switch (activeTab) {
+      case 'business': content = <BusinessProfile />; break;
+      case 'billing': content = <BillingSettings />; break;
+      case 'taxation': content = <TaxationSettings />; break;
+      case 'currency': content = <CurrencySettings />; break;
+      case 'branches': content = <BranchWarehouseSettings />; break;
+      case 'users': content = <UserManagement />; break;
+      case 'roles': content = <RolesPermissions />; break;
+      case 'pos': content = <PosSettings />; break;
+      case 'themes': content = <ThemeSettings />; break;
+      case 'localization': content = <LocalizationSettings />; break;
+      case 'notifications': content = <NotificationSettings />; break;
+      case 'security': content = <SecuritySettings />; break;
+      case 'integrations': content = <IntegrationSettings />; break;
+      case 'support': content = <SupportSettings />; break;
+      case 'tutorials': content = <TutorialsSettings />; break;
+      default: content = <BusinessProfile />; break;
+    }
+
+    return (
+      <div className="space-y-4">
+        {locked && (
+          <PremiumLockBanner featureTitle={title} requiredTier={requiredTier} />
+        )}
+        {content}
+      </div>
+    );
   };
 
   return (

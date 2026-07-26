@@ -24,6 +24,8 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSubscription } from '../hooks/useSubscription';
+import { PremiumLockBanner } from '../components/common/PremiumBadge';
 
 interface StaffUser {
   userId: string;
@@ -263,8 +265,14 @@ export default function Messenger() {
     }));
   };
 
+  const { isUnlocked } = useSubscription();
+  const locked = !isUnlocked('messenger');
+
   return (
     <div className="max-w-[1400px] mx-auto pb-10 flex flex-col h-[calc(100vh-140px)] gap-6">
+      {locked && (
+        <PremiumLockBanner featureTitle="E2E Encrypted Staff Messenger" requiredTier="PRO" />
+      )}
       {/* Dynamic branding header row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>

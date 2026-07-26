@@ -19,6 +19,14 @@ import {
   X,
   BookOpen
 } from 'lucide-react';
+import { useSubscription, FeatureKey } from '../../hooks/useSubscription';
+import { PremiumBadge } from '../common/PremiumBadge';
+
+const tabToFeatureKey: Record<string, FeatureKey> = {
+  roles: 'roles',
+  security: 'security',
+  integrations: 'integrations',
+};
 
 interface SettingsSidebarProps {
   activeTab: string;
@@ -77,9 +85,18 @@ const groups: NavGroup[] = [
 
 export function SettingsSidebar({ activeTab, setActiveTab }: SettingsSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const { isUnlocked, getFeatureTier, checkAccess } = useSubscription();
 
   // Extract flat list of items for quick search matching
   const allItems = groups.flatMap(group => group.items);
+
+  const handleTabClick = (tabId: string, label: string) => {
+    const fKey = tabToFeatureKey[tabId];
+    if (fKey && !isUnlocked(fKey)) {
+      checkAccess(fKey, label);
+    }
+    setActiveTab(tabId);
+  };
 
   const filteredItems = searchQuery.trim() === ''
     ? null
@@ -123,27 +140,34 @@ export function SettingsSidebar({ activeTab, setActiveTab }: SettingsSidebarProp
             ) : (
               filteredItems.map((item) => {
                 const Icon = item.icon;
+                const fKey = tabToFeatureKey[item.id];
+                const locked = fKey ? !isUnlocked(fKey) : false;
+                const reqTier = fKey ? getFeatureTier(fKey) : 'STARTER';
+
                 return (
                   <button
                     key={item.id}
                     onClick={() => {
-                      setActiveTab(item.id);
+                      handleTabClick(item.id, item.label);
                       setSearchQuery('');
                     }}
                     className={cn(
-                      "flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-bold transition-colors w-full text-left cursor-pointer",
+                      "flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-bold transition-colors w-full text-left cursor-pointer justify-between",
                       activeTab === item.id
                         ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-450 border border-indigo-100 dark:border-indigo-900/40"
                         : "text-zinc-650 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50 border border-transparent"
                     )}
                   >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    <div>
-                      <p className="font-bold leading-tight">{item.label}</p>
-                      <p className="text-[9.5px] font-medium text-zinc-400 dark:text-zinc-500 mt-0.5 max-w-[190px] truncate leading-none">
-                        {item.description}
-                      </p>
+                    <div className="flex items-center gap-3">
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <div>
+                        <p className="font-bold leading-tight">{item.label}</p>
+                        <p className="text-[9.5px] font-medium text-zinc-400 dark:text-zinc-500 mt-0.5 max-w-[190px] truncate leading-none">
+                          {item.description}
+                        </p>
+                      </div>
                     </div>
+                    {locked && <PremiumBadge tier={reqTier} showIcon={false} />}
                   </button>
                 );
               })
@@ -159,20 +183,27 @@ export function SettingsSidebar({ activeTab, setActiveTab }: SettingsSidebarProp
               <div className="space-y-0.5 lg:space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
+                  const fKey = tabToFeatureKey[item.id];
+                  const locked = fKey ? !isUnlocked(fKey) : false;
+                  const reqTier = fKey ? getFeatureTier(fKey) : 'STARTER';
+
                   return (
                     <button
                       key={item.id}
-                      onClick={() => setActiveTab(item.id)}
+                      onClick={() => handleTabClick(item.id, item.label)}
                       title={item.description}
                       className={cn(
-                        "flex items-center gap-2.5 rounded-lg px-2.5 py-1.8 text-xs font-bold transition-colors w-full text-left cursor-pointer",
+                        "flex items-center justify-between rounded-lg px-2.5 py-1.8 text-xs font-bold transition-colors w-full text-left cursor-pointer",
                         activeTab === item.id
                           ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50 border-l-2 border-indigo-500 pl-2"
                           : "text-zinc-550 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900/50 dark:hover:text-zinc-50 border-l-2 border-transparent"
                       )}
                     >
-                      <Icon className="h-3.8/10 w-3.8/10 shrink-0 text-zinc-400 dark:text-zinc-500" />
-                      <span className="truncate">{item.label}</span>
+                      <div className="flex items-center gap-2.5 truncate">
+                        <Icon className="h-3.8/10 w-3.8/10 shrink-0 text-zinc-400 dark:text-zinc-500" />
+                        <span className="truncate">{item.label}</span>
+                      </div>
+                      {locked && <PremiumBadge tier={reqTier} showIcon={false} />}
                     </button>
                   );
                 })}

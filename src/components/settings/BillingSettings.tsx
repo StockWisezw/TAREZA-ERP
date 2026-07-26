@@ -20,7 +20,8 @@ import {
   Lock,
   Upload,
   Coins,
-  FileText 
+  FileText,
+  ExternalLink 
 } from 'lucide-react';
 import { Table, TableHead, TableHeader, TableRow, TableCell, TableBody } from '../ui/table';
 import { 
@@ -97,6 +98,104 @@ export function BillingSettings() {
   const [verificationCountdown, setVerificationCountdown] = useState(300);
   const [dragOver, setDragOver] = useState(false);
   const [pastedInvoices, setPastedInvoices] = useState<any[]>([]);
+
+  // Paynow Live Integration Gateway States
+  const [paynowPhoneInput, setPaynowPhoneInput] = useState('');
+  const [paynowEmailInput, setPaynowEmailInput] = useState('');
+  const [paynowMethodSelect, setPaynowMethodSelect] = useState<'paynow_web' | 'ecocash' | 'onemoney'>('paynow_web');
+  const [paynowInitiating, setPaynowInitiating] = useState(false);
+  const [paynowRedirectUrl, setPaynowRedirectUrl] = useState<string | null>(null);
+  const [paynowPollUrl, setPaynowPollUrl] = useState<string | null>(null);
+  const [paynowStatusNote, setPaynowStatusNote] = useState<string | null>(null);
+  const [isPaynowPolling, setIsPaynowPolling] = useState(false);
+
+  const handleInitiatePaynow = async () => {
+    const targetBusinessId = businessData?.id || 'default_business';
+    const targetEmail = paynowEmailInput || userEmail || 'billing@tareza.co.zw';
+
+    setPaynowInitiating(true);
+    setPaynowStatusNote(null);
+    setPaynowRedirectUrl(null);
+
+    try {
+      const response = await fetch('/api/paynow/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          business_id: targetBusinessId,
+          email: targetEmail,
+          amount: selectedPlanCost,
+          phone: paynowPhoneInput,
+          method: paynowMethodSelect
+        })
+      });
+
+      const res = await response.json();
+      if (!response.ok || !res.success) {
+        throw new Error(res.error || 'Failed to initiate Paynow payment.');
+      }
+
+      toast.success('Paynow payment transaction created!');
+      if (res.redirectUrl) {
+        setPaynowRedirectUrl(res.redirectUrl);
+      }
+      if (res.pollUrl) {
+        setPaynowPollUrl(res.pollUrl);
+      }
+      setPaynowStatusNote(res.note || res.instructions || 'Transaction initiated successfully.');
+
+      if (res.redirectUrl) {
+        window.open(res.redirectUrl, '_blank');
+      }
+    } catch (err: any) {
+      console.error('Paynow initiation error:', err);
+      toast.error(err.message || 'Paynow payment initiation failed.');
+    } finally {
+      setPaynowInitiating(false);
+    }
+  };
+
+  const handleCheckPaynowStatus = async () => {
+    if (!paynowPollUrl) return;
+    const targetBusinessId = businessData?.id || 'default_business';
+    setIsPaynowPolling(true);
+    try {
+      const response = await fetch('/api/paynow/poll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pollUrl: paynowPollUrl,
+          business_id: targetBusinessId
+        })
+      });
+      const res = await response.json();
+      if (res.success && (res.status === 'Paid' || String(res.status).toLowerCase() === 'paid')) {
+        toast.success('Paynow payment confirmed! Your subscription is now ACTIVE!');
+        setPaynowPollUrl(null);
+        setPaynowRedirectUrl(null);
+        setPaynowStatusNote('Payment verified and plan activated successfully!');
+        loadData();
+      } else {
+        toast.info(`Paynow status: ${res.status || 'Pending'}. ${res.message || 'Awaiting customer authorization.'}`);
+      }
+    } catch (err: any) {
+      toast.error('Unable to check status from Paynow servers.');
+    } finally {
+      setIsPaynowPolling(false);
+    }
+  };
+
+  useEffect(() => {
+    let interval: any = null;
+    if (paynowPollUrl) {
+      interval = setInterval(() => {
+        handleCheckPaynowStatus();
+      }, 5000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [paynowPollUrl, businessData?.id]);
 
   const loadData = async () => {
     setLoading(true);
@@ -1322,28 +1421,174 @@ export function BillingSettings() {
                   </div>
                 )}
 
-                {/* TAB 2: PAYNOW ZIMBABWE (Placeholder soon) */}
+                {/* TAB 2: PAYNOW ZIMBABWE (LIVE INTEGRATION) */}
                 {activeBillingTab === 'paynow' && (
-                  <div className="space-y-4 py-3 animate-in fade-in duration-300">
-                    <div className="border border-indigo-100 dark:border-indigo-900/60 p-5 rounded-xl bg-indigo-50/20 dark:bg-indigo-950/20 text-center space-y-3">
-                      <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/35 flex items-center justify-center mx-auto text-indigo-605">
-                        <CreditCard className="w-5 h-5 animate-bounce" />
+                  <div className="space-y-4 py-2 animate-in fade-in duration-300">
+                    <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/40 dark:bg-indigo-950/30 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+                            PN
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-xs text-zinc-900 dark:text-white flex items-center gap-1.5">
+                              TAREZA TECHNOLOGIES Paynow Gateway
+                              <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300">
+                                Live Integration #25065
+                              </Badge>
+                            </h4>
+                            <p className="text-[10px] text-zinc-500">Official Zimbabwe Multi-Currency Gateway Checkout</p>
+                          </div>
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        <h4 className="font-bold text-sm text-zinc-900 dark:text-white">Paynow Zimbabwe Gateway Coming Soon</h4>
-                        <p className="text-xs text-zinc-500 leading-relaxed max-w-xs mx-auto">
-                          Our automated credit/debit card gateway and multi-currency push-USSD checkout portal is undergoing local compliance approval.
-                        </p>
+
+                      <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-zinc-500">Selected Plan / Cycle:</span>
+                          <span className="font-bold text-zinc-900 dark:text-white uppercase">{selectedPlanCode} ({selectedCycle})</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-zinc-500">Total Payable Amount:</span>
+                          <span className="font-black text-indigo-600 dark:text-indigo-400 text-sm">${selectedPlanCost.toFixed(2)} USD</span>
+                        </div>
                       </div>
-                      <Button 
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setActiveBillingTab('ecocash')}
-                        className="text-[11px] font-bold h-8 px-4 border-indigo-200 text-indigo-700 bg-white dark:bg-zinc-950 dark:text-indigo-400"
+
+                      {/* Payment Method Selection */}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Select Paynow Payment Option</Label>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPaynowMethodSelect('paynow_web')}
+                            className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
+                              paynowMethodSelect === 'paynow_web'
+                                ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 font-bold text-indigo-700 dark:text-indigo-300 shadow-sm'
+                                : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400'
+                            }`}
+                          >
+                            <CreditCard className="w-4 h-4 mb-1 text-indigo-500" />
+                            <div className="text-[11px] font-bold">Web Checkout</div>
+                            <div className="text-[9px] text-zinc-400">Card / EcoCash / Web</div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPaynowMethodSelect('ecocash')}
+                            className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
+                              paynowMethodSelect === 'ecocash'
+                                ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 font-bold text-indigo-700 dark:text-indigo-300 shadow-sm'
+                                : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400'
+                            }`}
+                          >
+                            <Smartphone className="w-4 h-4 mb-1 text-emerald-500" />
+                            <div className="text-[11px] font-bold">EcoCash Push</div>
+                            <div className="text-[9px] text-zinc-400">Handset PIN Prompt</div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPaynowMethodSelect('onemoney')}
+                            className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
+                              paynowMethodSelect === 'onemoney'
+                                ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 font-bold text-indigo-700 dark:text-indigo-300 shadow-sm'
+                                : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400'
+                            }`}
+                          >
+                            <Smartphone className="w-4 h-4 mb-1 text-amber-500" />
+                            <div className="text-[11px] font-bold">OneMoney Push</div>
+                            <div className="text-[9px] text-zinc-400">NetOne STK Prompt</div>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Inputs for Email and Mobile Phone */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label htmlFor="paynow-email" className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">Receipt Email</Label>
+                          <Input
+                            id="paynow-email"
+                            type="email"
+                            placeholder="e.g. billing@tareza.co.zw"
+                            value={paynowEmailInput || userEmail}
+                            onChange={(e) => setPaynowEmailInput(e.target.value)}
+                            className="h-9 text-xs rounded-lg"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="paynow-phone" className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">Mobile Phone (e.g. 0771234567)</Label>
+                          <Input
+                            id="paynow-phone"
+                            type="tel"
+                            placeholder="0771234567 or 0712345678"
+                            value={paynowPhoneInput}
+                            onChange={(e) => setPaynowPhoneInput(e.target.value)}
+                            className="h-9 text-xs rounded-lg"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Action Button */}
+                      <Button
+                        onClick={handleInitiatePaynow}
+                        disabled={paynowInitiating}
+                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-11 rounded-xl text-xs shadow-md flex items-center justify-center gap-2"
                       >
-                        ← Pay Immediately with EcoCash Direct Instead
+                        {paynowInitiating ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Connecting to TAREZA TECHNOLOGIES Paynow Gateway...
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="w-4 h-4" />
+                            Pay ${selectedPlanCost.toFixed(2)} USD via Paynow Gateway
+                          </>
+                        )}
                       </Button>
                     </div>
+
+                    {/* Active Paynow Status & Redirection Section */}
+                    {(paynowRedirectUrl || paynowPollUrl || paynowStatusNote) && (
+                      <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30 space-y-3 animate-in fade-in duration-300">
+                        <div className="flex items-center gap-2">
+                          <RefreshCw className={`w-4 h-4 text-emerald-600 dark:text-emerald-400 ${isPaynowPolling ? 'animate-spin' : ''}`} />
+                          <h4 className="font-bold text-xs text-emerald-900 dark:text-emerald-200">
+                            Paynow Transaction Active
+                          </h4>
+                        </div>
+
+                        <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                          {paynowStatusNote}
+                        </p>
+
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {paynowRedirectUrl && (
+                            <Button
+                              size="sm"
+                              onClick={() => window.open(paynowRedirectUrl, '_blank')}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold h-8 px-3 rounded-lg flex items-center gap-1.5"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              Open Official Paynow Page
+                            </Button>
+                          )}
+
+                          {paynowPollUrl && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={handleCheckPaynowStatus}
+                              disabled={isPaynowPolling}
+                              className="text-[11px] font-bold h-8 px-3 border-emerald-300 text-emerald-700 dark:text-emerald-300 rounded-lg flex items-center gap-1.5"
+                            >
+                              {isPaynowPolling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                              Verify Payment Status
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

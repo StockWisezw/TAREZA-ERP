@@ -23,6 +23,8 @@ import {
   postJournalEntry, 
   logAuditEvent 
 } from '../services/ledgerService';
+import { useSubscription } from '../hooks/useSubscription';
+import { PremiumLockBanner } from '../components/common/PremiumBadge';
 
 interface Account {
   id: string;
@@ -244,9 +246,14 @@ export default function Accounting() {
   const totalDebitSum = lines.reduce((sum, l) => sum + Number(l.debit || 0), 0);
   const totalCreditSum = lines.reduce((sum, l) => sum + Number(l.credit || 0), 0);
   const isBalanced = Math.abs(totalDebitSum - totalCreditSum) < 0.01 && totalDebitSum > 0;
+  const { isUnlocked } = useSubscription();
+  const locked = !isUnlocked('accounting');
 
   return (
     <div className="flex flex-col h-full overflow-hidden p-6 gap-6 bg-zinc-50/50">
+      {locked && (
+        <PremiumLockBanner featureTitle="Double-Entry Bookkeeping Ledger" requiredTier="PRO" />
+      )}
       
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0">

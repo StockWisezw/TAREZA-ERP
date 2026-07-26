@@ -138,18 +138,45 @@ async function startServer() {
       const payment = paynow.createPayment(`SUB-${business_id}-${Date.now()}`, email);
       payment.add(`Tareza ERP Premium Subscription - ${business_id}`, parseFloat(amount));
 
-      // Always perform direct official Paynow web redirection for robustness and choice
-      const response = await paynow.send(payment);
-      if (response && response.success) {
-        return res.json({
-          success: true,
-          method: "web_redirect",
-          redirectUrl: response.redirectUrl,
-          pollUrl: response.pollUrl,
-          note: "Redirecting to secure Paynow Zimbabwe checkout page."
-        });
+      // Always perform official Paynow payment initiation with mobile push or web redirect fallback
+      if ((method === "ecocash" || method === "onemoney") && phone) {
+        const provider = method === "onemoney" ? "onemoney" : "ecocash";
+        const response = await paynow.sendMobile(payment, phone, provider);
+        if (response && response.success) {
+          return res.json({
+            success: true,
+            method: "mobile_push",
+            pollUrl: response.pollUrl,
+            instructions: response.instructions || `Payment prompt sent to ${phone}. Please enter your PIN on your mobile handset to complete payment.`,
+            note: `STK push sent to ${phone}. Check your mobile handset.`
+          });
+        } else {
+          // If mobile push encounters an error, fallback to web redirect seamlessly
+          const webResp = await paynow.send(payment);
+          if (webResp && webResp.success) {
+            return res.json({
+              success: true,
+              method: "web_redirect",
+              redirectUrl: webResp.redirectUrl,
+              pollUrl: webResp.pollUrl,
+              note: "Redirecting to secure Paynow Zimbabwe checkout page."
+            });
+          }
+          return res.status(400).json({ error: response?.error || "Initiation failed on Paynow." });
+        }
       } else {
-        return res.status(400).json({ error: response.error || "Initiation failed on Paynow." });
+        const response = await paynow.send(payment);
+        if (response && response.success) {
+          return res.json({
+            success: true,
+            method: "web_redirect",
+            redirectUrl: response.redirectUrl,
+            pollUrl: response.pollUrl,
+            note: "Redirecting to secure Paynow Zimbabwe checkout page."
+          });
+        } else {
+          return res.status(400).json({ error: response?.error || "Initiation failed on Paynow." });
+        }
       }
     } catch (error: any) {
       console.error("Paynow integration error:", error);

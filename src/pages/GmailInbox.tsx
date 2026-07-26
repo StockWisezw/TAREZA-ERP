@@ -30,6 +30,8 @@ import {
   FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSubscription } from '../hooks/useSubscription';
+import { PremiumLockBanner } from '../components/common/PremiumBadge';
 
 interface EmailMessage {
   id: string;
@@ -298,8 +300,14 @@ export default function GmailInbox() {
     );
   }
 
+  const { isUnlocked } = useSubscription();
+  const locked = !isUnlocked('gmail');
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] animate-fade-in space-y-4" id="gmail-inbox-dashboard">
+      {locked && (
+        <PremiumLockBanner featureTitle="Gmail Workspace Integration" requiredTier="ENTERPRISE" />
+      )}
       {/* Header Panel */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-zinc-150 dark:border-zinc-800">
         <div>
