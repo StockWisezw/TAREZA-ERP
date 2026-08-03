@@ -69,12 +69,12 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
 
 export function usePermission() {
   const { user } = useAuth();
-  const [roleName, setRoleName] = useState<string>('staff');
+  const [roleName, setRoleName] = useState<string>('admin');
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     if (!user) {
-      setRoleName('staff');
+      setRoleName('admin');
       setLoading(false);
       return;
     }
@@ -85,23 +85,23 @@ export function usePermission() {
     async function loadUserRole() {
       try {
         setLoading(true);
-        // Look up the business_users table linkage
+        // Look up the business_users table linkage for manually assigned role
         const { data: userLink, error: linkErr } = await supabase
           .from('business_users')
           .select('role_id')
           .eq('user_id', userId)
           .single();
 
-        if (linkErr || !userLink) {
+        if (linkErr || !userLink || !userLink.role_id) {
           if (isMounted) {
-            setRoleName('staff');
+            setRoleName('admin');
             setLoading(false);
           }
           return;
         }
 
         if (userLink.role_id) {
-          // Look up full role name definition
+          // Look up manually assigned role definition
           const { data: roleDef, error: roleErr } = await supabase
             .from('roles')
             .select('name')
@@ -118,8 +118,10 @@ export function usePermission() {
               setRoleName('accountant');
             } else if (rawName.includes('cashier')) {
               setRoleName('cashier');
-            } else {
+            } else if (rawName.includes('staff')) {
               setRoleName('staff');
+            } else {
+              setRoleName(rawName);
             }
           }
         }
@@ -145,7 +147,7 @@ export function usePermission() {
     if (user.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(user.email.toLowerCase())) {
       return true;
     }
-    const permissions = ROLE_PERMISSIONS[roleName] || ROLE_PERMISSIONS['staff'];
+    const permissions = ROLE_PERMISSIONS[roleName] || ROLE_PERMISSIONS['admin'];
     return permissions.includes(permission);
   };
 

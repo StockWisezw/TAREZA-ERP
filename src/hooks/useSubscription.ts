@@ -116,18 +116,8 @@ export function useSubscription() {
 
   const isUnlocked = (featureKey: FeatureKey): boolean => {
     if (isSuperAdmin) return true;
-
-    const req = FEATURE_TIERS[featureKey]?.tier || 'STARTER';
-    if (req === 'STARTER') return true;
-
-    if (req === 'PRO') {
-      return plan === 'pro' || plan === 'enterprise';
-    }
-
-    if (req === 'ENTERPRISE') {
-      return plan === 'enterprise';
-    }
-
+    if ((plan as string) === 'expired') return false;
+    // Enable all features as long as that account is subscribed
     return true;
   };
 

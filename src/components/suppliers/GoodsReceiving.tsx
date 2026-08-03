@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
-import { Search, Filter, Plus, Package, Check, RefreshCw, Layers, ArrowDownLeft, Trash2, Calendar, WifiOff, CloudLightning, Database, AlertCircle, Printer } from 'lucide-react';
+import { Search, Filter, Plus, Package, Check, RefreshCw, Layers, ArrowDownLeft, Trash2, Calendar, WifiOff, CloudLightning, Database, AlertCircle, Printer, Download } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -148,7 +148,6 @@ export default function GoodsReceiving() {
       setBranches(brs);
       setProducts(prods);
       setSuppliers(sups);
-      setGrnBatches(grns);
 
       // Select defaults
       if (pos.length > 0 && !selectedPOId) setSelectedPOId(pos[0].id);
@@ -169,6 +168,65 @@ export default function GoodsReceiving() {
           };
         });
       setGrnHistory(mappedMovements);
+
+      // Synthesize missing GRN Batches from stock movements if not present in goods_received_notes
+      const existingGrnNumbers = new Set((grns || []).map((g: any) => (g.grn_number || '').toLowerCase()));
+      const unlinkedMovements = mappedMovements.filter((m: any) => {
+        const ref = (m.batch_number || m.notes || '').toLowerCase();
+        return !Array.from(existingGrnNumbers).some(num => num && ref.includes(num));
+      });
+
+      const synthesizedMap: Record<string, any> = {};
+      unlinkedMovements.forEach((m: any) => {
+        const dateKey = (m.created_at || new Date().toISOString()).split('T')[0];
+        const groupKey = `${dateKey}_${m.branch_id || 'default'}_${m.batch_number || 'BATCH'}`;
+        
+        if (!synthesizedMap[groupKey]) {
+          const prod = prods.find((p: any) => p.id === m.product_id);
+          const br = brs.find((b: any) => b.id === m.branch_id);
+          synthesizedMap[groupKey] = {
+            id: `synth-${groupKey}`,
+            grn_number: m.batch_number || `GRN-${dateKey.replace(/-/g, '')}`,
+            purchase_order_id: null,
+            purchase_order_number: null,
+            supplier_id: 'cash-supplier',
+            supplier_name: 'Received Stock Batch',
+            branch_id: m.branch_id,
+            branch_name: br ? br.name : 'Main Warehouse',
+            received_date: m.created_at,
+            created_at: m.created_at,
+            created_by: 'system',
+            notes: m.notes || 'Automated Stock Movement Arrival Batch',
+            items: [],
+            total_units: 0,
+            total_value: 0
+          };
+        }
+
+        const prod = prods.find((p: any) => p.id === m.product_id);
+        const costPrice = Number(prod?.cost_price || 0);
+        const qty = Number(m.quantity || 0);
+
+        synthesizedMap[groupKey].items.push({
+          product_id: m.product_id,
+          product_name: prod ? prod.name : 'Received Product',
+          sku: prod ? prod.sku : '-',
+          quantityOrdered: qty,
+          quantityReceived: qty,
+          batchNumber: m.batch_number || 'N/A',
+          expiryDate: m.expiry_date || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          costPrice: costPrice
+        });
+        synthesizedMap[groupKey].total_units += qty;
+        synthesizedMap[groupKey].total_value += (qty * costPrice);
+      });
+
+      const synthesizedBatches = Object.values(synthesizedMap);
+      const combinedBatches = [...(grns || []), ...synthesizedBatches].sort((a, b) => 
+        new Date(b.received_date || b.created_at).getTime() - new Date(a.received_date || a.created_at).getTime()
+      );
+
+      setGrnBatches(combinedBatches);
 
     } catch (err: any) {
       console.error(err);
@@ -596,6 +654,61 @@ export default function GoodsReceiving() {
     }
   };
 
+  const exportGRNBatchesCSV = () => {
+    if (!grnBatches || grnBatches.length === 0) {
+      toast.error('No GRN batches available to export');
+      return;
+    }
+    const headers = ['GRN Number', 'Date Received', 'Supplier', 'Warehouse Branch', 'Total Items', 'Total Units', 'Total Cost ($)', 'Notes'];
+    const rows = grnBatches.map(b => [
+      `"${b.grn_number || ''}"`,
+      `"${b.received_date ? new Date(b.received_date).toLocaleDateString() : ''}"`,
+      `"${b.supplier_name || 'Cash Supplier'}"`,
+      `"${b.branch_name || ''}"`,
+      b.items?.length || 0,
+      b.total_units || 0,
+      (b.total_value || 0).toFixed(2),
+      `"${(b.notes || '').replace(/"/g, '""')}"`
+    ]);
+    const csvContent = "\uFEFF" + headers.join(',') + '\n' + rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `goods_received_notes_batches_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Goods Received Notes batches exported to Excel/CSV successfully');
+  };
+
+  const exportItemsLogCSV = () => {
+    if (!grnHistory || grnHistory.length === 0) {
+      toast.error('No receiving items log available to export');
+      return;
+    }
+    const headers = ['Date Time', 'Product Name', 'SKU', 'Supplier', 'Storage Location', 'Quantity Received', 'Notes'];
+    const rows = grnHistory.map(l => [
+      `"${new Date(l.created_at).toLocaleString()}"`,
+      `"${l.product_name || ''}"`,
+      `"${l.sku || ''}"`,
+      `"${l.supplier_name || 'Cash Supplier'}"`,
+      `"${l.branch_name || ''}"`,
+      l.quantity || 0,
+      `"${(l.notes || '').replace(/"/g, '""')}"`
+    ]);
+    const csvContent = "\uFEFF" + headers.join(',') + '\n' + rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `goods_received_items_log_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Goods Received items log exported to Excel/CSV successfully');
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -603,9 +716,14 @@ export default function GoodsReceiving() {
           <h3 className="text-xl font-bold text-zinc-900">Goods Receiving Notes (GRN)</h3>
           <p className="text-sm text-zinc-500 mt-0.5">Receive warehouse stock, balance incoming purchase orders instantly in batches, and specify old/historical date logs.</p>
         </div>
-        <Button onClick={() => setIsOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm font-semibold cursor-pointer">
-          <ArrowDownLeft className="mr-2 h-4 w-4 text-white" /> Create New Bulk GRN Receipt
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={exportGRNBatchesCSV} className="bg-white shadow-sm font-semibold cursor-pointer">
+            <Download className="mr-2 h-4 w-4" /> Export Excel
+          </Button>
+          <Button onClick={() => setIsOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm font-semibold cursor-pointer">
+            <ArrowDownLeft className="mr-2 h-4 w-4 text-white" /> Create New Bulk GRN Receipt
+          </Button>
+        </div>
       </div>
 
       {/* Offline Received Cargo Sync Dashboard Panel */}

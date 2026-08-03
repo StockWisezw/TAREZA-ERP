@@ -17,6 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { supabase } from '../../lib/firebaseClient';
 import { toast } from 'sonner';
+import { recordStockMovement } from '../../services/ledgerService';
 
 export function Procurement() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -294,6 +295,78 @@ export function Procurement() {
         .eq('id', po.id);
 
       if (error) throw error;
+
+      // If marking as RECEIVED, process stock movements and GRN note
+      if (nextStatus === 'RECEIVED' && po.items && po.items.length > 0) {
+        const { data: userData } = await supabase.auth.getUser();
+        let businessId = po.business_id || '';
+        if (!businessId && userData?.user) {
+          const { data: bUser } = await supabase
+            .from('business_users')
+            .select('business_id')
+            .eq('user_id', userData.user.id)
+            .limit(1)
+            .maybeSingle();
+          if (bUser) businessId = bUser.business_id;
+        }
+
+        const { data: branches } = await supabase.from('branches').select('id, name');
+        const targetBranchId = po.branch_id || (branches && branches.length > 0 ? branches[0].id : 'default_branch');
+        const targetBranchName = (branches && branches.find((b: any) => b.id === targetBranchId))?.name || 'Main Warehouse';
+
+        const itemsToProcess = po.items.map((it: any) => ({
+          product_id: it.product_id,
+          product_name: it.product_name,
+          quantityOrdered: Number(it.quantity || 0),
+          quantityReceived: Number(it.quantity || 0),
+          costPrice: Number(it.price || 0),
+          batchNumber: `B-PO-${po.po_number || 'GEN'}`,
+          expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        }));
+
+        for (const item of itemsToProcess) {
+          await recordStockMovement(
+            businessId || 'default_business',
+            targetBranchId,
+            item.product_id,
+            item.quantityReceived,
+            'GOODS_RECEIVED',
+            userData?.user?.id || 'system',
+            po.po_number || `PO-${po.id}`,
+            item.costPrice,
+            `PO Clearance: ${po.po_number}`,
+            new Date().toISOString(),
+            item.batchNumber,
+            item.expiryDate
+          );
+        }
+
+        const supObj = suppliers.find(s => s.id === po.supplier_id);
+        const totalValue = itemsToProcess.reduce((sum: number, i: any) => sum + (i.quantityReceived * i.costPrice), 0);
+        const totalUnits = itemsToProcess.reduce((sum: number, i: any) => sum + i.quantityReceived, 0);
+
+        const grnId = 'grn-po-' + po.id.slice(0, 8) + '-' + Date.now().toString().slice(-4);
+        const grnPayload = {
+          id: grnId,
+          grn_number: po.po_number || `GRN-${po.id.slice(0, 6)}`,
+          purchase_order_id: po.id,
+          purchase_order_number: po.po_number,
+          supplier_id: po.supplier_id || 'cash-supplier',
+          supplier_name: po.suppliers_advanced?.name || supObj?.name || 'PO Supplier',
+          branch_id: targetBranchId,
+          branch_name: targetBranchName,
+          received_date: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          created_by: userData?.user?.id || 'system',
+          notes: `Received via Procurement PO Approval (${po.po_number})`,
+          items: itemsToProcess,
+          total_units: totalUnits,
+          total_value: totalValue
+        };
+
+        await supabase.from('goods_received_notes').insert([grnPayload]);
+      }
+
       toast.success(`Updated status of ${po.po_number} to ${nextStatus}`);
       fetchData();
     } catch (err: any) {
