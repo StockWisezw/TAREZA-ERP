@@ -1,8 +1,8 @@
 import nodemailer from "nodemailer";
 
 // Configuration defaults with fallback systems
-const TARGET_WHATSAPP_PHONE = process.env.NOTIFICATION_WHATSAPP_PHONE || "263784553570"; // Country code 263 for Zimbabwe as default for 0784553570
-const TARGET_EMAIL = process.env.NOTIFICATION_RECEIVER_EMAIL || "admin@tarezaerp.co.zw, sales@tarezaerp.co.zw";
+const TARGET_WHATSAPP_PHONE = process.env.NOTIFICATION_WHATSAPP_PHONE || "263784553570"; // Country code 263 for Zimbabwe as default
+const TARGET_EMAIL = process.env.NOTIFICATION_RECEIVER_EMAIL || "tapsforex@gmail.com, tapiwagahadza54@gmail.com, sales@tarezaerp.co.zw";
 
 export interface LoggedNotification {
   timestamp: string;
@@ -107,7 +107,8 @@ export async function sendWhatsAppNotification(message: string): Promise<{ succe
 /**
  * Sends a real Email notification
  */
-export async function sendEmailNotification(subject: string, htmlContent: string, plainText: string): Promise<{ success: boolean; notes: string }> {
+export async function sendEmailNotification(subject: string, htmlContent: string, plainText: string, targetRecipient?: string): Promise<{ success: boolean; notes: string }> {
+  const recipient = targetRecipient || TARGET_EMAIL;
   const smtpHost = process.env.SMTP_HOST;
   const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
   const smtpUser = process.env.SMTP_USER;
@@ -127,7 +128,7 @@ export async function sendEmailNotification(subject: string, htmlContent: string
 
       const info = await transporter.sendMail({
         from: `"Tareza ERP Alerts" <${smtpUser}>`,
-        to: TARGET_EMAIL,
+        to: recipient,
         subject: subject,
         text: plainText,
         html: htmlContent
@@ -135,19 +136,19 @@ export async function sendEmailNotification(subject: string, htmlContent: string
 
       return { 
         success: true, 
-        notes: `SMTP delivery successful. MsgID: ${info.messageId}` 
+        notes: `SMTP delivery successful to ${recipient}. MsgID: ${info.messageId}` 
       };
     } catch (err: any) {
       console.error("[SMTP Mailer Error]", err);
-      return { success: false, notes: `SMTP failed: ${err.message}` };
+      return { success: false, notes: `SMTP failed for ${recipient}: ${err.message}` };
     }
   }
 
   // Mock standard developer setup log
-  console.log(`[Email Simulation] To ${TARGET_EMAIL}: "${subject}"`);
+  console.log(`[Email Simulation] To ${recipient}: "${subject}"`);
   return { 
     success: true, 
-    notes: "Simulation. Configure SMTP_HOST, SMTP_USER, SMTP_PASS to send real emails via your own server." 
+    notes: `Simulation. Target: ${recipient}. Configure SMTP_HOST, SMTP_USER, SMTP_PASS to send real emails via your own server.` 
   };
 }
 
@@ -170,14 +171,15 @@ export async function dispatchAlert(
     const biz = businessName || "N/A";
     const chosenPlan = plan || "Trial Plan";
 
-    emailSubject = `🚀 [Tareza ERP] New User Signup Alert! - ${name}`;
-    emailText = `Hello,
+    // 1. Admin Confirmation Email to tapsforex@gmail.com and tapiwagahadza54@gmail.com
+    emailSubject = `🚀 [Tareza ERP] New User Signup Confirmation: ${name}`;
+    emailText = `Hello Administrator,
 
-A new user register has been completed on Tareza ERP:
+A new user registration has been initiated on Tareza ERP:
 - Registered Name: ${name}
 - Email Account: ${email}
 - Company Workspace: ${biz}
-- Choice Plan Option: ${chosenPlan}
+- Plan Option: ${chosenPlan}
 - Registration Time: ${timestamp}
 
 Best Regards,
@@ -185,8 +187,8 @@ Tareza Automated ERP Monitor`;
 
     emailHtml = `
       <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e4e4e7; border-radius: 12px; max-width: 600px; margin: 0 auto; color: #18181b;">
-        <h2 style="color: #4f46e5; margin-top: 0; font-weight: 800;">🚀 New User Registrations Activation</h2>
-        <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">A brand-new corporate workspace and administrator account have been initialized:</p>
+        <h2 style="color: #4f46e5; margin-top: 0; font-weight: 800;">🚀 New User Registration Confirmation</h2>
+        <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">A new user account and corporate workspace have been created:</p>
         <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
           <tr>
             <td style="padding: 8px 0; border-bottom: 1px solid #f4f4f5; font-weight: bold; font-size: 13px; color: #71717a;">Name</td>
@@ -197,11 +199,11 @@ Tareza Automated ERP Monitor`;
             <td style="padding: 8px 0; border-bottom: 1px solid #f4f4f5; font-size: 13px; font-family: monospace;">${email}</td>
           </tr>
           <tr>
-            <td style="padding: 8px 0; border-bottom: 1px solid #f4f4f5; font-weight: bold; font-size: 13px; color: #71717a;">Business Tenant</td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #f4f4f5; font-weight: bold; font-size: 13px; color: #71717a;">Business Workspace</td>
             <td style="padding: 8px 0; border-bottom: 1px solid #f4f4f5; font-size: 13px; font-weight: bold;">${biz}</td>
           </tr>
           <tr>
-            <td style="padding: 8px 0; border-bottom: 1px solid #f4f4f5; font-weight: bold; font-size: 13px; color: #71717a;">Package Plan</td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #f4f4f5; font-weight: bold; font-size: 13px; color: #71717a;">Plan</td>
             <td style="padding: 8px 0; border-bottom: 1px solid #f4f4f5; font-size: 13px;"><span style="background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold;">${chosenPlan}</span></td>
           </tr>
           <tr>
@@ -209,11 +211,70 @@ Tareza Automated ERP Monitor`;
             <td style="padding: 8px 0; border-bottom: 1px solid #f4f4f5; font-size: 13px; font-family: monospace;">${timestamp}</td>
           </tr>
         </table>
-        <p style="font-size: 11px; color: #a1a1aa; margin-top: 25px; border-top: 1px solid #e4e4e7; padding-top: 10px;">This alert is dispatched to tapsforex@gmail.com on Tareza ERP platform activities.</p>
+        <p style="font-size: 11px; color: #a1a1aa; margin-top: 25px; border-top: 1px solid #e4e4e7; padding-top: 10px;">This alert is dispatched to tapsforex@gmail.com & tapiwagahadza54@gmail.com.</p>
       </div>
     `;
 
     whatsappMsg = `*Tareza ERP - New Signup Alert!* 🚀\n\n👤 *Name:* ${name}\n📧 *Email:* ${email}\n🏢 *Business:* ${biz}\n📋 *Plan:* ${chosenPlan}\n⏰ *Time:* ${timestamp}`;
+
+    // 2. User Welcome Email sent directly to the newly registered user
+    if (email) {
+      const userSubject = `🎉 Welcome to Tareza ERP, ${firstName || name}! Account Registered Successfully`;
+      const userHtml = `
+        <div style="font-family: sans-serif; padding: 24px; border: 1px solid #e4e4e7; border-radius: 12px; max-width: 600px; margin: 0 auto; color: #18181b; background-color: #ffffff;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #4f46e5; margin: 0; font-size: 24px; font-weight: 800;">Welcome to Tareza ERP!</h1>
+            <p style="color: #616161; font-size: 14px; margin-top: 4px;">Smart Cloud ERP for Growth-Minded Enterprises</p>
+          </div>
+          
+          <p style="font-size: 15px; line-height: 1.6; color: #27272a;">Dear <strong>${firstName || name}</strong>,</p>
+          
+          <p style="font-size: 14px; line-height: 1.6; color: #3f3f46;">
+            Thank you for registering your corporate account on <strong>Tareza ERP</strong>! Your business workspace <strong>${biz}</strong> (${chosenPlan}) has been initialized and is ready for action.
+          </p>
+
+          <div style="background-color: #f4f4f5; border-left: 4px solid #4f46e5; padding: 16px; border-radius: 6px; margin: 20px 0;">
+            <p style="margin: 0; font-size: 14px; font-weight: bold; color: #18181b;">✉️ Please Confirm Your Email Address</p>
+            <p style="margin: 6px 0 0 0; font-size: 13px; color: #52525b; line-height: 1.5;">
+              A verification email link has been dispatched to <strong>${email}</strong>. Please check your inbox and click the confirmation link to complete your email verification and enable full workspace features.
+            </p>
+          </div>
+
+          <h3 style="font-size: 15px; color: #18181b; margin-top: 20px;">What you can do next in your workspace:</h3>
+          <ul style="font-size: 13px; color: #52525b; line-height: 1.8; padding-left: 20px;">
+            <li><strong>Point of Sale (POS):</strong> Process sales smoothly offline and online with multi-currency support (USD & ZiG).</li>
+            <li><strong>Inventory & Stock:</strong> Track stock batches, automated reorder thresholds, and warehouse transfers.</li>
+            <li><strong>Procurement & Suppliers:</strong> Issue Purchase Orders, generate Goods Received Notes (GRN), and manage supplier ledgers.</li>
+            <li><strong>Financial Reports:</strong> Access Profit & Loss statements, Tax summaries, and real-time ledger accounting.</li>
+          </ul>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="https://ais-dev-yomq4geujvg6dnkjv7dhkz-48947626128.europe-west2.run.app/login" style="background-color: #4f46e5; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: bold; font-size: 14px; display: inline-block;">
+              Log In to Tareza ERP Workspace
+            </a>
+          </div>
+
+          <hr style="border: none; border-top: 1px solid #e4e4e7; margin: 25px 0;" />
+          <p style="font-size: 12px; color: #71717a; line-height: 1.5; margin: 0;">
+            If you need any support or have questions, contact our support team at <a href="mailto:sales@tarezaerp.co.zw" style="color: #4f46e5;">sales@tarezaerp.co.zw</a> or WhatsApp us at <strong>+263 78 455 3570</strong>.
+          </p>
+        </div>
+      `;
+      const userText = `Dear ${firstName || name},\n\nWelcome to Tareza ERP! Your workspace ${biz} has been registered.\nPlease check your inbox to confirm your email address.\n\nBest regards,\nThe Tareza ERP Team`;
+
+      // Dispatch welcome email asynchronously to user
+      sendEmailNotification(userSubject, userHtml, userText, email).then(res => {
+        notificationAuditLogs.unshift({
+          timestamp,
+          type: "signup",
+          channel: "email",
+          recipient: email,
+          message: userSubject,
+          success: res.success,
+          notes: `User Welcome Email: ${res.notes}`
+        });
+      }).catch(err => console.error("Error sending welcome email to user:", err));
+    }
 
   } else if (type === "ticket") {
     const { id, user_email, business_name, subject, category, priority, description } = payload;

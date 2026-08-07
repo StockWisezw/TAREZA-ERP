@@ -322,6 +322,9 @@ export default function Login() {
         
         const user = { id: firebaseUser.uid, email: firebaseUser.email };
 
+        // Send Firebase email verification to the newly registered user
+        await sendEmailVerification(firebaseUser).catch(err => console.error("Could not send Firebase email verification on signup:", err));
+
         // Setup Firebase Data
         await supabase.from('profiles').insert([
           { id: user.id, first_name: firstName, last_name: lastName, email: user.email, phone: phone || null, pin: '1234' }
@@ -440,7 +443,7 @@ export default function Login() {
           })
         }).catch(err => console.error("Signup notification dispatch failed", err));
 
-        toast.success(`Signup successful! Welcome to Tareza ERP! ${isSuperAdminEmail ? 'Forever Free Developer trial configured.' : (planChoice === 'STARTER_TRIAL' || planChoice === 'STARTER_PAID') ? 'Your Starter branch has been pre-configured.' : 'Your multiple branches are pre-configured.'}`);
+        toast.success(`Signup successful! A confirmation email has been sent to ${email}. Please check your inbox and confirm your email address. ${isSuperAdminEmail ? 'Forever Free Developer trial configured.' : (planChoice === 'STARTER_TRIAL' || planChoice === 'STARTER_PAID') ? 'Your Starter branch has been pre-configured.' : 'Your multiple branches are pre-configured.'}`, { duration: 10000 });
         navigate('/dashboard');
         setIsSignUp(false);
       } catch (error: any) {
@@ -465,11 +468,11 @@ export default function Login() {
         // Check if verified
         const isBypass = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(firebaseUser.email?.toLowerCase() || '');
 
-        if (false && !firebaseUser.emailVerified && !isBypass) {
-          // Block immediately, sign out, and advise
-          await sendEmailVerification(firebaseUser).catch(err => console.error("Could not send verification email on demand", err));
+        if (!firebaseUser.emailVerified && !isBypass) {
+          // Block unverified user, sign out, and resend verification email
+          await sendEmailVerification(firebaseUser).catch(err => console.error("Could not resend verification email", err));
           await fireSignOut(fireAuth);
-          toast.error("Email verification is required. We have sent a confirmation email to " + email + ". Please verify your email before logging in.");
+          toast.error(`Email confirmation is required. We have sent a verification link to ${email}. Please check your inbox and confirm your email before logging in.`, { duration: 8000 });
           setLoading(false);
           return;
         }

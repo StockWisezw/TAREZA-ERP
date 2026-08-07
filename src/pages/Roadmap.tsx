@@ -172,7 +172,6 @@ const INITIAL_ROADMAP: RoadmapItem[] = [
 export default function Roadmap() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const isDeveloper = user?.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(user.email.toLowerCase());
 
   const [items, setItems] = useState<RoadmapItem[]>(() => {
     const cached = localStorage.getItem('tareza_roadmap_items');
@@ -207,26 +206,7 @@ export default function Roadmap() {
     return (
       <div className="min-h-[400px] bg-white dark:bg-zinc-950 flex flex-col items-center justify-center font-sans">
         <RefreshCw className="w-8 h-8 animate-spin text-blue-500 mb-4" />
-        <p className="text-zinc-500 dark:text-zinc-400 text-xs font-medium">Verifying Developer Permissions...</p>
-      </div>
-    );
-  }
-
-  if (!isDeveloper) {
-    return (
-      <div className="min-h-[400px] bg-white dark:bg-zinc-950 flex flex-col items-center justify-center font-sans p-6 text-center">
-        <div className="bg-rose-50 dark:bg-rose-950/20 p-4 rounded-full w-14 h-14 flex items-center justify-center mb-5 border border-rose-100 dark:border-rose-905/30">
-          <ShieldAlert className="w-6 h-6 text-rose-600 dark:text-rose-400" />
-        </div>
-        <h2 className="text-base font-bold font-sans text-zinc-900 dark:text-white mb-1.5">Restricted Developer Channel</h2>
-        <p className="text-zinc-500 dark:text-zinc-400 text-xs max-w-sm leading-relaxed mb-5 font-medium font-sans">
-          This future systems roadmap is restricted to authorized credentials belonging to Tareza Developers.
-        </p>
-        <Link to="/dashboard">
-          <Button variant="outline" className="rounded-full px-5 h-9 text-[11px] font-bold select-none cursor-pointer">
-            Return to Operating Dashboard
-          </Button>
-        </Link>
+        <p className="text-zinc-500 dark:text-zinc-400 text-xs font-medium">Loading Roadmap...</p>
       </div>
     );
   }

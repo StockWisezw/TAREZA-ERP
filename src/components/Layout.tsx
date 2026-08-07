@@ -405,19 +405,6 @@ export default function Layout() {
                 </div>
               )
             )}
-            {isDeveloper && (
-              <Button 
-                variant="ghost" 
-                className={`text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/25 rounded-md ${
-                  sidebarExpanded ? 'w-full justify-start px-3 h-8 text-xs font-semibold' : 'w-9 h-9 p-0 justify-center rounded-full'
-                }`}
-                onClick={() => navigate('/dev-portal')}
-                title={!sidebarExpanded ? "Developer Portal" : undefined}
-              >
-                <Lock className={`${sidebarExpanded ? 'mr-2.5' : ''} h-[16px] w-[16px] shrink-0`} />
-                {sidebarExpanded && "Developer Portal"}
-              </Button>
-            )}
             <Button 
               variant="ghost" 
               className={`text-zinc-600 hover:text-rose-600 hover:bg-rose-50 dark:text-zinc-400 dark:hover:bg-rose-950/20 rounded-md ${
@@ -667,11 +654,6 @@ export default function Layout() {
                       <DropdownMenuItem className="py-2 cursor-pointer">Profile Settings</DropdownMenuItem>
                       <DropdownMenuItem className="py-2 cursor-pointer">Branch Setup</DropdownMenuItem>
                     </>
-                  )}
-                  {isDeveloper && (
-                    <DropdownMenuItem onClick={() => navigate('/dev-portal')} className="py-2 font-semibold text-blue-600 dark:text-blue-400 cursor-pointer">
-                      <Lock className="w-4 h-4 mr-2" /> Developer Portal
-                    </DropdownMenuItem>
                   )}
 
                   <DropdownMenuSeparator />

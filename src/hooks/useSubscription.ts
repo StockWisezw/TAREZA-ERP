@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
-import { supabase } from '../lib/firebaseClient';
+import { supabase, db } from '../lib/firebaseClient';
+import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
 
-export type SubscriptionPlan = 'free' | 'free_trial' | 'starter' | 'pro' | 'enterprise';
+export type SubscriptionPlan = 'free' | 'free_trial' | 'starter' | 'pro' | 'enterprise' | 'expired' | 'suspended';
 
 export type FeatureKey = 
   | 'dashboard'
@@ -51,9 +52,11 @@ export const FEATURE_TIERS: Record<FeatureKey, { tier: 'STARTER' | 'PRO' | 'ENTE
 export function useSubscription() {
   const { user } = useAuth();
   const [plan, setPlan] = useState<SubscriptionPlan>('starter');
+  const [status, setStatus] = useState<string>('active');
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Check superadmin email override
+  // Superadmin email check
   const isSuperAdmin = !!user?.email && [
     'admin@tarezaerp.co.zw',
     'sales@tarezaerp.co.zw',
@@ -62,11 +65,14 @@ export function useSubscription() {
   ].includes(user.email.toLowerCase());
 
   useEffect(() => {
+    let unsubscribeFirestore: (() => void) | null = null;
     let isMounted = true;
-    async function loadPlan() {
+
+    async function subscribeToFirebaseSubscription() {
       if (!user) {
         if (isMounted) {
           setPlan('starter');
+          setStatus('active');
           setLoading(false);
         }
         return;
@@ -75,6 +81,7 @@ export function useSubscription() {
       if (isSuperAdmin) {
         if (isMounted) {
           setPlan('enterprise');
+          setStatus('active');
           setLoading(false);
         }
         return;
@@ -82,42 +89,90 @@ export function useSubscription() {
 
       try {
         setLoading(true);
-        // Find business for current user
-        const { data: bUser } = await supabase
-          .from('business_users')
-          .select('business_id')
-          .eq('user_id', user.$id)
-          .limit(1)
-          .maybeSingle();
 
-        if (bUser?.business_id) {
-          const { data: bData } = await supabase
-            .from('businesses')
-            .select('subscription_plan')
-            .eq('id', bUser.business_id)
-            .single();
+        const userId = user.$id;
+        
+        // Check Firestore subscriptions collection directly using user ID
+        const subDocRef = doc(db, 'subscriptions', userId);
 
-          if (bData?.subscription_plan && isMounted) {
-            setPlan(bData.subscription_plan as SubscriptionPlan);
+        unsubscribeFirestore = onSnapshot(subDocRef, async (docSnap) => {
+          if (!isMounted) return;
+
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            const subPlan = data.plan || data.subscription_plan || 'starter';
+            const subStatus = data.status || 'active';
+            const expDate = data.expires_at || data.expiresAt || null;
+
+            setPlan(subPlan as SubscriptionPlan);
+            setStatus(subStatus);
+            setExpiresAt(expDate);
+
+            // Check if subscription has expired by date
+            if (expDate && new Date(expDate) < new Date()) {
+              setStatus('expired');
+            }
+            setLoading(false);
+          } else {
+            // Check business_id level subscription in Firebase or Supabase fallback
+            const { data: bUser } = await supabase
+              .from('business_users')
+              .select('business_id')
+              .eq('user_id', userId)
+              .limit(1)
+              .maybeSingle();
+
+            if (bUser?.business_id) {
+              const bizSubRef = doc(db, 'subscriptions', bUser.business_id);
+              const bizSnap = await getDoc(bizSubRef);
+
+              if (bizSnap.exists()) {
+                const bData = bizSnap.data();
+                setPlan((bData.plan || bData.subscription_plan || 'starter') as SubscriptionPlan);
+                setStatus(bData.status || 'active');
+                setExpiresAt(bData.expires_at || null);
+              } else {
+                // Fallback to businesses table in DB
+                const { data: bData } = await supabase
+                  .from('businesses')
+                  .select('subscription_plan')
+                  .eq('id', bUser.business_id)
+                  .maybeSingle();
+
+                if (bData?.subscription_plan) {
+                  setPlan(bData.subscription_plan as SubscriptionPlan);
+                }
+              }
+            }
+            setLoading(false);
           }
-        }
+        }, (err) => {
+          console.warn('[Firebase Firestore Subscription Error]', err);
+          setLoading(false);
+        });
+
       } catch (err) {
-        console.error('Error fetching subscription plan:', err);
-      } finally {
+        console.error('Error fetching subscription plan from Firebase:', err);
         if (isMounted) setLoading(false);
       }
     }
 
-    loadPlan();
+    subscribeToFirebaseSubscription();
+
     return () => {
       isMounted = false;
+      if (unsubscribeFirestore) unsubscribeFirestore();
     };
   }, [user, isSuperAdmin]);
 
   const isUnlocked = (featureKey: FeatureKey): boolean => {
     if (isSuperAdmin) return true;
-    if ((plan as string) === 'expired') return false;
-    // Enable all features as long as that account is subscribed
+    if (status === 'suspended' || status === 'expired' || status === 'canceled' || plan === 'expired' || plan === 'suspended') {
+      return false;
+    }
+    if (expiresAt && new Date(expiresAt) < new Date()) {
+      return false;
+    }
     return true;
   };
 
@@ -131,12 +186,20 @@ export function useSubscription() {
     const title = customTitle || FEATURE_TIERS[featureKey]?.title || 'This feature';
     const reqTier = getFeatureTier(featureKey);
 
-    toast.error(`🔒 Premium Feature: "${title}" requires a ${reqTier} Plan Subscription. Please upgrade in Billing Settings to access this function.`);
+    if (status === 'suspended') {
+      toast.error(`🛑 Account Suspended: Your subscription has been paused in Firebase Console. Please contact sales@tarezaerp.co.zw to reactivate.`);
+    } else if (status === 'expired' || (expiresAt && new Date(expiresAt) < new Date())) {
+      toast.error(`⏰ Subscription Expired: Your plan validity has ended. Extend your subscription in Firebase or contact support.`);
+    } else {
+      toast.error(`🔒 Premium Feature: "${title}" requires a ${reqTier} Plan Subscription.`);
+    }
     return false;
   };
 
   return {
     plan,
+    status,
+    expiresAt,
     isSuperAdmin,
     loading,
     isUnlocked,

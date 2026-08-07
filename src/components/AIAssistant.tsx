@@ -129,12 +129,12 @@ export function AIAssistant() {
                 : `Awesome! All transactions are fully synchronized. Your database is up-to-date with Supabase / Firestore.`}`;
     }
     
-    if (text.includes('developer') || text.includes('diagnostic') || text.includes('terminal') || text.includes('panel')) {
-      return `🔧 **Developer Console Integration**\n\n` +
+    if (text.includes('diagnostic') || text.includes('terminal')) {
+      return `🔧 **System Diagnostics & Connectivity**\n\n` +
              `*   **Direct rest query endpoint:** \`https://firestore.googleapis.com\`\n` +
              `*   **Local system network adapter:** \`navigator.onLine = ${diag.isOnline}\`\n` +
              `*   **Theme state:** \`${diag.theme}-mode\`\n\n` +
-             `To test deep socket and ping connection speeds directly, navigate to the **[Open Diagnostic Terminal](/developer-panel)** in 'Developer Mode' or request support help. You can trigger an administrative SQLite backup there.`;
+             `Your Tareza ERP instance is connected to Firebase Firestore and real-time synchronization engines.`;
     }
 
     if (text.includes('pos') || text.includes('quantity') || text.includes('decimal') || text.includes('float')) {

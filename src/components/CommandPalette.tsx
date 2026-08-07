@@ -145,9 +145,6 @@ export function CommandPalette() {
     { name: 'Security parameters & database backups', category: 'Settings Info', icon: Lock, action: () => navigate('/settings?tab=security') },
     { name: 'Zapier, WooCommerce & payment API connections', category: 'Settings Info', icon: Compass, action: () => navigate('/settings?tab=integrations') },
     { name: 'Customer support, email & developer contacts', category: 'Settings Info', icon: Settings, action: () => navigate('/settings?tab=support') },
-    
-    // Developer Shortcut
-    { name: 'Systems Developer Command Headquarters', category: 'System Action', icon: Terminal, action: () => navigate('/dev-portal') },
   ];
 
   const filteredItems = items.filter(item => 

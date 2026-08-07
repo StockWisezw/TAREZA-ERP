@@ -1551,19 +1551,14 @@ export default function Dashboard() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                  <span><strong>Developer Support Coverage</strong>: Support line to engineering teams & API Diagnostic consoles</span>
+                  <span><strong>Dedicated Customer Support</strong>: Direct access to support team & Firebase cloud management</span>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-                <a href="https://wa.me/263776699950" target="_blank" rel="noopener noreferrer" className="block">
+              <div className="mt-2">
+                <a href="https://wa.me/263784553570" target="_blank" rel="noopener noreferrer" className="block">
                   <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white transition-all font-bold text-xs py-2.5 rounded-lg shadow-md">
-                    Inquire via WhatsApp
-                  </button>
-                </a>
-                <a href="/developer-panel" className="block">
-                  <button className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 hover:text-white transition-all font-bold text-xs py-2.5 rounded-lg shadow-md">
-                    Developer Portal Support
+                    Inquire & Support via WhatsApp
                   </button>
                 </a>
               </div>
