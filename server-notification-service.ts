@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 
 // Configuration defaults with fallback systems
 const TARGET_WHATSAPP_PHONE = process.env.NOTIFICATION_WHATSAPP_PHONE || "263784553570"; // Country code 263 for Zimbabwe as default
-const TARGET_EMAIL = process.env.NOTIFICATION_RECEIVER_EMAIL || "tapsforex@gmail.com, tapiwagahadza54@gmail.com, sales@tarezaerp.co.zw";
+const TARGET_EMAIL = process.env.NOTIFICATION_RECEIVER_EMAIL || "";
 
 export interface LoggedNotification {
   timestamp: string;
@@ -27,14 +27,10 @@ function formatPhoneForCallmebot(rawPhone: string): string {
 }
 
 /**
- * Sends a real WhatsApp message using Callmebot or Twilio REST endpoints
+ * Sends a real WhatsApp message using Callmebot REST endpoint
  */
 export async function sendWhatsAppNotification(message: string): Promise<{ success: boolean; notes: string }> {
   const callmebotApiKey = process.env.CALLMEBOT_API_KEY;
-  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-  const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioFrom = process.env.TWILIO_FROM || "+14155238886"; // Default Twilio Sandbox sender
-
   const phone = formatPhoneForCallmebot(TARGET_WHATSAPP_PHONE);
 
   // If Callmebot is enabled
@@ -57,50 +53,11 @@ export async function sendWhatsAppNotification(message: string): Promise<{ succe
     }
   }
 
-  // If Twilio is enabled
-  if (twilioSid && twilioAuthToken) {
-    try {
-      const authHeader = "Basic " + Buffer.from(`${twilioSid}:${twilioAuthToken}`).toString("base64");
-      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
-      
-      const toPhone = phone.startsWith("+") ? phone : `+${phone}`;
-      const fromPhone = twilioFrom.startsWith("whatsapp:") ? twilioFrom : `whatsapp:${twilioFrom}`;
-
-      const params = new URLSearchParams();
-      params.append("To", `whatsapp:${toPhone}`);
-      params.append("From", fromPhone);
-      params.append("Body", message);
-
-      const res = await fetch(twilioUrl, {
-        method: "POST",
-        headers: {
-          "Authorization": authHeader,
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: params.toString()
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        return { 
-          success: true, 
-          notes: `Twilio delivery success. SID: ${data.sid || "N/A"}` 
-        };
-      } else {
-        const errorText = await res.text();
-        throw new Error(`Twilio API responded with status ${res.status}: ${errorText}`);
-      }
-    } catch (err: any) {
-      console.error("[WhatsApp Twilio Error]", err);
-      return { success: false, notes: `Twilio delivery failed: ${err.message}` };
-    }
-  }
-
   // Fallback simulator for smooth sandboxed deployment
   console.log(`[WhatsApp Simulation] To ${phone}: "${message}"`);
   return { 
     success: true, 
-    notes: "Simulation. Set CALLMEBOT_API_KEY or TWILIO_ACCOUNT_SID inside secrets to send live WhatsApp." 
+    notes: "Simulation. Set CALLMEBOT_API_KEY inside secrets to send live WhatsApp." 
   };
 }
 

@@ -5,6 +5,7 @@ import { createServer as createViteServer } from "vite";
 import { Paynow } from "paynow";
 import { initializeApp as initAdminApp } from "firebase-admin/app";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
+import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { GoogleGenAI, Type } from "@google/genai";
 import { dispatchAlert, notificationAuditLogs } from "./server-notification-service.js";
 import { initBackgroundStockTracker, checkLowStockAndNotify } from "./server-stock-checker.js";
@@ -54,29 +55,346 @@ async function startServer() {
   // Apply API rate-limiting to all secure endpoints
   app.use("/api", rateLimiter);
 
-  // Load applet's Firebase configuration to connect securely on the backend
-  let firebaseConfig = {};
-  try {
-    const fileContent = fs.readFileSync(path.join(process.cwd(), "firebase-applet-config.json"), "utf8");
-    firebaseConfig = JSON.parse(fileContent);
-  } catch (err) {
-    firebaseConfig = {
-      apiKey: process.env.VITE_FIREBASE_API_KEY,
-      authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId: process.env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId: process.env.VITE_FIREBASE_APP_ID,
-    };
-  }
+  // Load applet's Firebase configuration exclusively from environment variables
+  const firebaseConfig = {
+    apiKey: process.env.VITE_FIREBASE_API_KEY,
+    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+    firestoreDatabaseId: process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID,
+    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.VITE_FIREBASE_APP_ID,
+  };
 
   const adminApp = initAdminApp({
-    projectId: (firebaseConfig as any).projectId,
+    projectId: firebaseConfig.projectId,
   });
-  const firestoreDb = getAdminFirestore(adminApp, (firebaseConfig as any).firestoreDatabaseId);
+  const dbId = firebaseConfig.firestoreDatabaseId;
+  const firestoreDb = (dbId && dbId !== '(default)' && !dbId.includes('://') && !dbId.includes('.firebaseio.com'))
+    ? getAdminFirestore(adminApp, dbId)
+    : getAdminFirestore(adminApp);
+  const adminAuth = getAdminAuth(adminApp);
 
   // Initialize automated background stock replenishment tracker
   initBackgroundStockTracker(firestoreDb);
+
+  // ==========================================
+  // FIREBASE ADMIN SDK USER & SUBSCRIPTION API
+  // ==========================================
+
+  // 1. List Users via Firebase Auth Admin SDK & enrich with Firestore Subscriptions/Profiles
+  app.get("/api/admin/users", async (req, res) => {
+    try {
+      // List up to 1000 users from Firebase Auth
+      const listResult = await adminAuth.listUsers(1000);
+      
+      // Fetch all subscription records from Firestore
+      const subSnapshot = await firestoreDb.collection("subscriptions").get();
+      const subscriptionsMap = new Map<string, any>();
+      subSnapshot.forEach(doc => {
+        subscriptionsMap.set(doc.id, doc.data());
+      });
+
+      // Fetch profiles from Firestore
+      const profileSnapshot = await firestoreDb.collection("profiles").get();
+      const profilesMap = new Map<string, any>();
+      profileSnapshot.forEach(doc => {
+        profilesMap.set(doc.id, doc.data());
+      });
+
+      // Fetch business links from Firestore if available
+      const bizSnapshot = await firestoreDb.collection("businesses").get();
+      const businessesMap = new Map<string, any>();
+      bizSnapshot.forEach(doc => {
+        businessesMap.set(doc.id, doc.data());
+      });
+
+      const users = listResult.users.map((u) => {
+        const sub = subscriptionsMap.get(u.uid) || {};
+        const profile = profilesMap.get(u.uid) || {};
+
+        const plan = sub.plan || sub.subscription_plan || 'starter';
+        const rawStatus = sub.status || (u.disabled ? 'disabled' : 'active');
+        const expiresAt = sub.expires_at || sub.expiresAt || null;
+
+        // Check if expired
+        let status = rawStatus;
+        if (u.disabled) {
+          status = 'disabled';
+        } else if (expiresAt && new Date(expiresAt) < new Date()) {
+          status = 'expired';
+        }
+
+        return {
+          uid: u.uid,
+          email: u.email || 'No Email',
+          displayName: u.displayName || (profile.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : null) || 'N/A',
+          photoURL: u.photoURL || null,
+          disabled: u.disabled || false,
+          emailVerified: u.emailVerified || false,
+          creationTime: u.metadata.creationTime,
+          lastSignInTime: u.metadata.lastSignInTime,
+          businessName: profile.business_name || profile.company || sub.businessName || 'Tareza Enterprise',
+          phone: u.phoneNumber || profile.phone || 'N/A',
+          plan,
+          status,
+          expiresAt,
+          updatedAt: sub.updated_at || null
+        };
+      });
+
+      return res.json({ success: true, count: users.length, users });
+    } catch (err: any) {
+      console.error("[Firebase Admin List Users Error]", err);
+      return res.status(500).json({ error: err.message || "Failed to list users from Firebase Auth" });
+    }
+  });
+
+  // 2. Enable / Disable / Suspend User in Firebase Auth & Firestore
+  app.post("/api/admin/users/toggle-status", async (req, res) => {
+    const { uid, disabled, status } = req.body;
+    if (!uid) {
+      return res.status(400).json({ error: "User UID is required" });
+    }
+
+    try {
+      // 1. Update Firebase Auth status if explicitly passed
+      if (typeof disabled === 'boolean') {
+        await adminAuth.updateUser(uid, { disabled });
+      }
+
+      // 2. Update Firestore Subscription state
+      const targetStatus = status || (disabled ? 'disabled' : 'active');
+      const subRef = firestoreDb.collection("subscriptions").doc(uid);
+      await subRef.set({
+        status: targetStatus,
+        updated_at: new Date().toISOString()
+      }, { merge: true });
+
+      return res.json({ 
+        success: true, 
+        message: `User ${uid} status updated to ${targetStatus} in Firebase.`,
+        disabled: typeof disabled === 'boolean' ? disabled : (targetStatus === 'disabled')
+      });
+    } catch (err: any) {
+      console.error("[Firebase Admin Status Toggle Error]", err);
+      return res.status(500).json({ error: err.message || "Failed to update user status" });
+    }
+  });
+
+  // 3. Update User Subscription Plan and Expiry Date
+  app.post("/api/admin/users/update-plan", async (req, res) => {
+    const { uid, plan, durationMonths, expiresAt, status } = req.body;
+    if (!uid || !plan) {
+      return res.status(400).json({ error: "User UID and Plan are required" });
+    }
+
+    try {
+      let finalExpiresAt = expiresAt;
+      if (!finalExpiresAt && durationMonths) {
+        const d = new Date();
+        d.setMonth(d.getMonth() + parseInt(durationMonths));
+        finalExpiresAt = d.toISOString();
+      }
+
+      const subRef = firestoreDb.collection("subscriptions").doc(uid);
+      await subRef.set({
+        plan,
+        status: status || 'active',
+        expires_at: finalExpiresAt || null,
+        updated_at: new Date().toISOString()
+      }, { merge: true });
+
+      // Re-enable in Firebase Auth if marked active
+      if (status === 'active') {
+        await adminAuth.updateUser(uid, { disabled: false }).catch(() => {});
+      }
+
+      return res.json({
+        success: true,
+        message: `User ${uid} subscription updated to ${plan} (${status || 'active'}).`,
+        plan,
+        expiresAt: finalExpiresAt
+      });
+    } catch (err: any) {
+      console.error("[Firebase Admin Update Plan Error]", err);
+      return res.status(500).json({ error: err.message || "Failed to update subscription plan" });
+    }
+  });
+
+  // 4. Send Password Reset Link or Trigger Reset Email
+  app.post("/api/admin/users/reset-password", async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "User Email is required" });
+    }
+
+    try {
+      const resetLink = await adminAuth.generatePasswordResetLink(email);
+      
+      // Dispatch alert/email
+      await dispatchAlert("subscription", {
+        type: "password_reset",
+        recipient: email,
+        subject: "🔒 Tareza ERP - Password Reset Instructions",
+        html: `
+          <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e4e4e7; border-radius: 12px; max-width: 550px; margin: 0 auto;">
+            <h2 style="color: #4f46e5; margin-top: 0;">Password Reset Requested</h2>
+            <p style="color: #3f3f46; font-size: 14px;">An administrator has initiated a password reset for your Tareza ERP account (${email}).</p>
+            <p style="text-align: center; margin: 25px 0;">
+              <a href="${resetLink}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Reset Password Now</a>
+            </p>
+            <p style="font-size: 11px; color: #a1a1aa;">If you did not request this, please contact support.</p>
+          </div>
+        `,
+        text: `Reset your password link: ${resetLink}`
+      }).catch(err => console.warn("Failed sending reset alert email:", err));
+
+      return res.json({ success: true, message: `Password reset link created for ${email}`, resetLink });
+    } catch (err: any) {
+      console.error("[Firebase Admin Reset Password Error]", err);
+      return res.status(500).json({ error: err.message || "Failed to generate password reset link" });
+    }
+  });
+
+  // 5. Create New User via Firebase Admin SDK
+  app.post("/api/admin/users/create", async (req, res) => {
+    const { email, password, displayName, businessName, plan } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    try {
+      const newUser = await adminAuth.createUser({
+        email,
+        password,
+        displayName: displayName || email.split("@")[0],
+        emailVerified: true
+      });
+
+      // Initialize Firestore profile and subscription
+      await firestoreDb.collection("profiles").doc(newUser.uid).set({
+        first_name: displayName || email.split("@")[0],
+        email,
+        business_name: businessName || 'Corporate Workspace',
+        created_at: new Date().toISOString()
+      }, { merge: true });
+
+      const defaultExpiry = new Date();
+      defaultExpiry.setDate(defaultExpiry.getDate() + 14); // 14-day default
+
+      await firestoreDb.collection("subscriptions").doc(newUser.uid).set({
+        plan: plan || 'starter',
+        status: 'active',
+        expires_at: defaultExpiry.toISOString(),
+        updated_at: new Date().toISOString()
+      }, { merge: true });
+
+      return res.json({
+        success: true,
+        message: `Created new user ${email} in Firebase Auth successfully!`,
+        uid: newUser.uid
+      });
+    } catch (err: any) {
+      console.error("[Firebase Admin Create User Error]", err);
+      return res.status(500).json({ error: err.message || "Failed to create user in Firebase Auth" });
+    }
+  });
+
+  // 6. Delete User via Firebase Admin SDK
+  app.post("/api/admin/users/delete", async (req, res) => {
+    const { uid } = req.body;
+    if (!uid) {
+      return res.status(400).json({ error: "User UID is required" });
+    }
+
+    try {
+      await adminAuth.deleteUser(uid);
+      await firestoreDb.collection("subscriptions").doc(uid).delete().catch(() => {});
+      await firestoreDb.collection("profiles").doc(uid).delete().catch(() => {});
+
+      return res.json({ success: true, message: `User ${uid} deleted from Firebase Auth and Firestore.` });
+    } catch (err: any) {
+      console.error("[Firebase Admin Delete User Error]", err);
+      return res.status(500).json({ error: err.message || "Failed to delete user" });
+    }
+  });
+
+  // 7. Bulk Action Endpoint via Firebase Admin SDK
+  app.post("/api/admin/users/bulk-action", async (req, res) => {
+    const { uids, action, plan, durationMonths } = req.body;
+    if (!Array.isArray(uids) || uids.length === 0) {
+      return res.status(400).json({ error: "At least one user UID is required for bulk action." });
+    }
+
+    try {
+      let processedCount = 0;
+      const errors: string[] = [];
+
+      for (const uid of uids) {
+        try {
+          if (action === 'disable') {
+            await adminAuth.updateUser(uid, { disabled: true });
+            await firestoreDb.collection("subscriptions").doc(uid).set({
+              status: 'disabled',
+              updated_at: new Date().toISOString()
+            }, { merge: true });
+          } else if (action === 'enable') {
+            await adminAuth.updateUser(uid, { disabled: false });
+            await firestoreDb.collection("subscriptions").doc(uid).set({
+              status: 'active',
+              updated_at: new Date().toISOString()
+            }, { merge: true });
+          } else if (action === 'suspend') {
+            await adminAuth.updateUser(uid, { disabled: true });
+            await firestoreDb.collection("subscriptions").doc(uid).set({
+              status: 'suspended',
+              updated_at: new Date().toISOString()
+            }, { merge: true });
+          } else if (action === 'reactivate') {
+            await adminAuth.updateUser(uid, { disabled: false });
+            await firestoreDb.collection("subscriptions").doc(uid).set({
+              status: 'active',
+              updated_at: new Date().toISOString()
+            }, { merge: true });
+          } else if (action === 'change_plan' && plan) {
+            let expiresAt: string | null = null;
+            if (durationMonths) {
+              const d = new Date();
+              d.setMonth(d.getMonth() + parseInt(durationMonths));
+              expiresAt = d.toISOString();
+            }
+            await firestoreDb.collection("subscriptions").doc(uid).set({
+              plan,
+              status: 'active',
+              expires_at: expiresAt || null,
+              updated_at: new Date().toISOString()
+            }, { merge: true });
+            await adminAuth.updateUser(uid, { disabled: false }).catch(() => {});
+          } else if (action === 'delete') {
+            await adminAuth.deleteUser(uid);
+            await firestoreDb.collection("subscriptions").doc(uid).delete().catch(() => {});
+            await firestoreDb.collection("profiles").doc(uid).delete().catch(() => {});
+          }
+          processedCount++;
+        } catch (err: any) {
+          console.error(`[Bulk action error for ${uid}]`, err);
+          errors.push(`UID ${uid}: ${err.message}`);
+        }
+      }
+
+      return res.json({
+        success: true,
+        message: `Successfully executed bulk '${action}' on ${processedCount} of ${uids.length} users.`,
+        processedCount,
+        totalRequested: uids.length,
+        errors: errors.length > 0 ? errors : undefined
+      });
+    } catch (err: any) {
+      console.error("[Firebase Admin Bulk Action Error]", err);
+      return res.status(500).json({ error: err.message || "Failed to execute bulk action" });
+    }
+  });
 
   // 0. Notifications Integration Endpoint
   app.post("/api/notifications/notify", async (req, res) => {

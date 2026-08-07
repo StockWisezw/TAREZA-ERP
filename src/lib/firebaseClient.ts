@@ -36,72 +36,26 @@ import {
   waitForPendingWrites
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
-import firebaseConfigPlaceholder from '../../firebase-applet-config.json';
 import { db as dexieDb } from './dexieDb';
 import { offlineSyncEngine } from '../services/offlineSyncEngine';
 
-// Use environment variables if present (especially useful for deploying and linking with Vercel),
-// otherwise fall back seamlessly to the local firebase-applet-config.json
-function isPlaceholderOrEmpty(val: string | undefined): boolean {
-  if (!val) return true;
-  const lower = val.toLowerCase();
-  return (
-    lower.includes('placeholder') ||
-    lower.includes('yourapikeyhere') ||
-    lower.includes('your-project') ||
-    lower.includes('your-sender-id') ||
-    lower.includes('your-app-id') ||
-    lower.includes('your-measurement-id')
-  );
-}
-
-const resolvedConfig = { ...firebaseConfigPlaceholder } as any;
-
-if (import.meta.env.VITE_FIREBASE_API_KEY && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_API_KEY)) {
-  resolvedConfig.apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-}
-if (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN)) {
-  resolvedConfig.authDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN;
-}
-if (import.meta.env.VITE_FIREBASE_DATABASE_URL && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_DATABASE_URL)) {
-  (resolvedConfig as any).databaseURL = import.meta.env.VITE_FIREBASE_DATABASE_URL;
-}
-if (import.meta.env.VITE_FIREBASE_PROJECT_ID && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_PROJECT_ID)) {
-  resolvedConfig.projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
-}
-if (
-  import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID &&
-  import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID !== '(default)' &&
-  !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID) &&
-  !import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID.includes('://') &&
-  !import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID.includes('.firebaseio.com') &&
-  !import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID.includes('firebaseio')
-) {
-  resolvedConfig.firestoreDatabaseId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID;
-}
-
-// Ensure the final resolved databaseId is not an RTDB URL
-if (
-  resolvedConfig.firestoreDatabaseId && (
-    resolvedConfig.firestoreDatabaseId.includes('://') ||
-    resolvedConfig.firestoreDatabaseId.includes('.firebaseio.com') ||
-    resolvedConfig.firestoreDatabaseId.includes('firebaseio')
-  )
-) {
-  resolvedConfig.firestoreDatabaseId = (firebaseConfigPlaceholder as any).firestoreDatabaseId;
-}
-if (import.meta.env.VITE_FIREBASE_STORAGE_BUCKET && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET)) {
-  resolvedConfig.storageBucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET;
-}
-if (import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID)) {
-  resolvedConfig.messagingSenderId = import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID;
-}
-if (import.meta.env.VITE_FIREBASE_APP_ID && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_APP_ID)) {
-  resolvedConfig.appId = import.meta.env.VITE_FIREBASE_APP_ID;
-}
-if (import.meta.env.VITE_FIREBASE_MEASUREMENT_ID && !isPlaceholderOrEmpty(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID)) {
-  resolvedConfig.measurementId = import.meta.env.VITE_FIREBASE_MEASUREMENT_ID;
-}
+// Load Firebase configuration exclusively from environment variables VITE_FIREBASE_*
+const resolvedConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || undefined,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+  firestoreDatabaseId: (
+    import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID &&
+    import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID !== '(default)' &&
+    !import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID.includes('://') &&
+    !import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID.includes('.firebaseio.com')
+  ) ? import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID : undefined,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || undefined
+};
 
 export const firebaseConfig = resolvedConfig;
 

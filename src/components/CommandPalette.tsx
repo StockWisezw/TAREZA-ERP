@@ -19,7 +19,8 @@ import {
   Compass,
   Coins,
   Store,
-  Palette
+  Palette,
+  ShieldCheck
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { supabase } from '../lib/firebaseClient';
@@ -131,6 +132,7 @@ export function CommandPalette() {
     { name: 'Suppliers Procurement & Vendors', category: 'Navigation', icon: Truck, action: () => navigate('/suppliers') },
     { name: 'Sales & profit reports', category: 'Navigation', icon: FileText, action: () => navigate('/reports') },
     { name: 'Helpdesk messenger chat', category: 'Navigation', icon: MessageSquare, action: () => navigate('/messenger') },
+    { name: 'Admin User & Subscription Headquarters', category: 'Navigation', icon: ShieldCheck, action: () => navigate('/admin-dashboard') },
     
     // Core Settings Tabs
     { name: 'Configure Business Profile', category: 'Settings Info', icon: Store, action: () => navigate('/settings?tab=business') },

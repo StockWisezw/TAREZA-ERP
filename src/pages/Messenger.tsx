@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase, db } from '../lib/firebaseClient';
-import { collection, addDoc, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
+import { supabase } from '../lib/firebaseClient';
 import { encryptMessage, decryptMessage } from '../lib/crypto';
 import { useAuth } from '../hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '../components/ui/card';
@@ -190,39 +189,39 @@ export default function Messenger() {
     }
   }, [searchTerm, staffList]);
 
-  // Dynamic FireStore Snapshot query for active conversation messages
+  // Query for active conversation messages using Supabase
   useEffect(() => {
     if (!currentAuthUser || !selectedRecipient) return;
 
     setLoadingMessages(true);
 
-    // Compound sorted conversation key to scale smoothly with private message snapshots
     const convId = [currentAuthUser.$id, selectedRecipient.userId].sort().join('_to_');
 
-    const qMessages = query(
-      collection(db, 'private_messages'),
-      where('conversation_id', '==', convId),
-      orderBy('created_at', 'asc')
-    );
+    const fetchMessages = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('private_messages')
+          .select('*')
+          .eq('conversation_id', convId)
+          .order('created_at', { ascending: true });
 
-    const unsubscribe = onSnapshot(qMessages, (snapshot) => {
-      const msgs: MessagePayload[] = [];
-      snapshot.forEach((doc) => {
-        msgs.push({ id: doc.id, ...doc.data() } as MessagePayload);
-      });
-      setActiveMessages(msgs);
-      setLoadingMessages(false);
-      
-      // Auto scroll
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    }, (error) => {
-      console.error('[Firestore Snapshot] Private message lookup permission failed:', error);
-      setLoadingMessages(false);
-    });
+        if (data) {
+          setActiveMessages(data as MessagePayload[]);
+        }
+      } catch (error) {
+        console.error('[Supabase] Private message lookup failed:', error);
+      } finally {
+        setLoadingMessages(false);
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      }
+    };
 
-    return () => unsubscribe();
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000);
+
+    return () => clearInterval(interval);
   }, [currentAuthUser, selectedRecipient]);
 
   // Dispatch direct message
@@ -243,7 +242,7 @@ export default function Messenger() {
     const encrypted = encryptMessage(rawText.trim(), senderId, targetRecipientId);
 
     try {
-      await addDoc(collection(db, 'private_messages'), {
+      await supabase.from('private_messages').insert({
         sender_id: senderId,
         receiver_id: targetRecipientId,
         conversation_id: convId,
@@ -251,8 +250,18 @@ export default function Messenger() {
         sender_name: senderDisplayName,
         created_at: new Date().toISOString()
       });
+
+      const { data } = await supabase
+        .from('private_messages')
+        .select('*')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: true });
+
+      if (data) {
+        setActiveMessages(data as MessagePayload[]);
+      }
     } catch (err) {
-      console.error('[Firestore Snapshots] Private message insertion rejected:', err);
+      console.error('[Supabase] Private message insertion rejected:', err);
       toast.error('Crypt message write access denied.');
     }
   };

@@ -1,4 +1,5 @@
-import { supabase, db, auth, collection, doc, writeBatch, query, where, getDocs, getDoc } from '../lib/firebaseClient';
+import { supabase, auth } from '../lib/firebaseClient';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface JournalLineInput {
   accountCode: string;
@@ -81,7 +82,7 @@ export async function logAuditEvent(
 ): Promise<void> {
   try {
     const email = auth.currentUser?.email || 'unknown@tareza.co.zw';
-    const cleanId = doc(collection(db, 'audit_logs')).id;
+    const cleanId = uuidv4();
     await supabase.from('audit_logs').insert({
       id: cleanId,
       business_id: businessId,
@@ -126,19 +127,19 @@ export async function postJournalEntry(
     await initializeChartOfAccounts(businessId);
 
     // Fetch accounts database IDs matching the codes
-    const q = query(collection(db, 'accounts'), where('business_id', '==', businessId));
-    const snap = await getDocs(q);
+    const { data: accountsData } = await supabase.from('accounts').select('*').eq('business_id', businessId);
     const accountsMap = new Map<string, { id: string; type: string; balance: number }>();
-    snap.forEach((doc) => {
-      const d = doc.data();
-      accountsMap.set(d.code, { id: doc.id, type: d.type, balance: Number(d.balance || 0) });
-    });
+    if (accountsData) {
+      accountsData.forEach((d: any) => {
+        accountsMap.set(d.code, { id: d.id, type: d.type, balance: Number(d.balance || 0) });
+      });
+    }
 
-    const batch = writeBatch(db);
-    const jeId = doc(collection(db, 'journal_entries')).id;
+    const jeId = uuidv4();
 
     // Create entry header
-    batch.set(doc(db, 'journal_entries', jeId), {
+    const { error: jeErr } = await supabase.from('journal_entries').insert({
+      id: jeId,
       business_id: businessId,
       branch_id: branchId,
       date: new Date().toISOString().split('T')[0],
@@ -147,6 +148,11 @@ export async function postJournalEntry(
       created_at: new Date().toISOString(),
       user_id: userId
     });
+
+    if (jeErr) {
+      console.error('[postJournalEntry] Journal entry header insert error:', jeErr);
+      return { success: false, error: jeErr.message };
+    }
 
     // Write posting lines and update general ledger account balances
     for (const line of lines) {
@@ -159,8 +165,9 @@ export async function postJournalEntry(
       }
 
       // Record Journal Line detail
-      const lineId = doc(collection(db, 'journal_lines')).id;
-      batch.set(doc(db, 'journal_lines', lineId), {
+      const lineId = uuidv4();
+      await supabase.from('journal_lines').insert({
+        id: lineId,
         business_id: businessId,
         journal_entry_id: jeId,
         account_id: targetAcct.id,
@@ -179,10 +186,6 @@ export async function postJournalEntry(
       }
 
       const updatedBalance = Number(targetAcct.balance) + change;
-      batch.update(doc(db, 'accounts', targetAcct.id), {
-        balance: updatedBalance,
-        updated_at: new Date().toISOString()
-      });
 
       // Synchronize changes directly with the Supabase accounts table
       try {
@@ -198,7 +201,6 @@ export async function postJournalEntry(
       }
     }
 
-    await batch.commit();
     return { success: true };
   } catch (error: any) {
     console.error('Failed to post journal entry:', error);
@@ -236,7 +238,7 @@ export async function openRegisterSession(
       return { success: false, error: 'A till session is already active for this cashier. Close it first before starting a new shift.' };
     }
 
-    const sessionId = doc(collection(db, 'register_sessions')).id;
+    const sessionId = uuidv4();
     const openedAt = customOpenedAt || new Date().toISOString();
     const item = {
       id: sessionId,
@@ -276,12 +278,16 @@ export async function closeRegisterSession(
   actualFloat: number
 ): Promise<{ success: boolean; session?: any; error?: string }> {
   try {
-    const snap = await getDoc(doc(db, 'register_sessions', sessionId));
-    if (!snap.exists()) {
+    const { data: s } = await supabase
+      .from('register_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    if (!s) {
       return { success: false, error: 'Shift records not found in ERP.' };
     }
 
-    const s = snap.data() as RegisterSession;
     if (s.status === 'CLOSED') {
       return { success: false, error: 'Shift register session has already been finalized.' };
     }

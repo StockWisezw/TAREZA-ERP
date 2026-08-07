@@ -23,7 +23,8 @@ import {
   Check,
   Compass,
   HelpCircle,
-  Mail
+  Mail,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePermission } from '../hooks/usePermission';
@@ -395,15 +396,19 @@ export default function Layout() {
             sidebarExpanded ? 'items-stretch' : 'items-center px-1'
           }`}>
             {(user?.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(user.email.toLowerCase())) && (
-              sidebarExpanded ? (
-                <div className="px-3 py-1 bg-indigo-500/10 rounded-full text-[9px] font-bold text-indigo-600 dark:text-indigo-400 uppercase text-center tracking-widest mx-2 mb-1.5 select-none">
-                  Super Admin
-                </div>
-              ) : (
-                <div className="h-4 w-4 rounded-full bg-indigo-500 flex items-center justify-center text-[7px] font-extrabold text-white select-none mb-1 shadow-sm" title="Super Admin mode">
-                  S
-                </div>
-              )
+              <>
+                <Button 
+                  variant="ghost" 
+                  className={`text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/25 rounded-md ${
+                    sidebarExpanded ? 'w-full justify-start px-3 h-8 text-xs font-bold' : 'w-9 h-9 p-0 justify-center rounded-full'
+                  }`}
+                  onClick={() => navigate('/admin-dashboard')}
+                  title={!sidebarExpanded ? "Admin Dashboard" : undefined}
+                >
+                  <ShieldCheck className={`${sidebarExpanded ? 'mr-2.5' : ''} h-[16px] w-[16px] shrink-0 text-indigo-600 dark:text-indigo-400`} />
+                  {sidebarExpanded && "Admin Dashboard"}
+                </Button>
+              </>
             )}
             <Button 
               variant="ghost" 
@@ -651,9 +656,14 @@ export default function Layout() {
                   <DropdownMenuSeparator />
                   {role !== 'cashier' && (
                     <>
-                      <DropdownMenuItem className="py-2 cursor-pointer">Profile Settings</DropdownMenuItem>
-                      <DropdownMenuItem className="py-2 cursor-pointer">Branch Setup</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate('/settings')} className="py-2 cursor-pointer">Profile Settings</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate('/settings?tab=branches')} className="py-2 cursor-pointer">Branch Setup</DropdownMenuItem>
                     </>
+                  )}
+                  {(user?.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(user.email.toLowerCase())) && (
+                    <DropdownMenuItem onClick={() => navigate('/admin-dashboard')} className="py-2 font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                      <ShieldCheck className="w-4 h-4 mr-2" /> Admin Dashboard
+                    </DropdownMenuItem>
                   )}
 
                   <DropdownMenuSeparator />

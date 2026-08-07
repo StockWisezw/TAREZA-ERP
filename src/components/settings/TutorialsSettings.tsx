@@ -26,8 +26,7 @@ import {
   ExternalLink,
   Film
 } from 'lucide-react';
-import { db } from '../../lib/firebaseClient';
-import { collection, getDocs } from 'firebase/firestore';
+import { supabase } from '../../lib/firebaseClient';
 import offlineDb from '../../lib/dexieDb';
 
 interface TutorialTopic {
@@ -109,12 +108,8 @@ export function TutorialsSettings() {
     const loadTutorialVideos = async () => {
       setLoadingVideos(true);
       try {
-        const colRef = collection(db, 'tutorial_videos');
-        const snap = await getDocs(colRef);
-        const list: any[] = [];
-        snap.forEach((docSnapshot) => {
-          list.push({ id: docSnapshot.id, ...docSnapshot.data() });
-        });
+        const { data } = await supabase.from('tutorial_videos').select('*');
+        const list: any[] = data || [];
 
         if (list.length > 0) {
           list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));

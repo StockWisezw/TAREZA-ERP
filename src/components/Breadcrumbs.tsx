@@ -27,6 +27,7 @@ export function Breadcrumbs() {
     messenger: 'Staff Chat Messenger',
     settings: 'Settings',
     roadmap: 'Active Sprints & Product Roadmap',
+    'admin-dashboard': 'Admin User & Subscription Headquarters',
   };
 
   // Map settings tabs to human labels

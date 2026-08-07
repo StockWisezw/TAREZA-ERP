@@ -29,6 +29,7 @@ const Messenger = React.lazy(() => import('./pages/Messenger'));
 const Roadmap = React.lazy(() => import('./pages/Roadmap'));
 const Support = React.lazy(() => import('./pages/Support'));
 const GmailInbox = React.lazy(() => import('./pages/GmailInbox'));
+const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -97,6 +98,7 @@ export default function App() {
                   <Route path="/roadmap" element={<Roadmap />} />
                   <Route path="/support" element={<Support />} />
                   <Route path="/gmail" element={<GmailInbox />} />
+                  <Route path="/admin-dashboard" element={<AdminDashboard />} />
                 </Route>
               </Routes>
             </React.Suspense>

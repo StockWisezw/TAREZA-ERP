@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
-import { supabase, db } from '../lib/firebaseClient';
-import { doc, onSnapshot, getDoc } from 'firebase/firestore';
+import { supabase } from '../lib/firebaseClient';
 import { toast } from 'sonner';
 
 export type SubscriptionPlan = 'free' | 'free_trial' | 'starter' | 'pro' | 'enterprise' | 'expired' | 'suspended';
@@ -92,64 +91,64 @@ export function useSubscription() {
 
         const userId = user.$id;
         
-        // Check Firestore subscriptions collection directly using user ID
-        const subDocRef = doc(db, 'subscriptions', userId);
+        // Check subscriptions table directly using user ID
+        const { data: subData } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
 
-        unsubscribeFirestore = onSnapshot(subDocRef, async (docSnap) => {
-          if (!isMounted) return;
+        if (subData) {
+          const subPlan = subData.plan || subData.subscription_plan || 'starter';
+          const subStatus = subData.status || 'active';
+          const expDate = subData.expires_at || subData.expiresAt || null;
 
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            const subPlan = data.plan || data.subscription_plan || 'starter';
-            const subStatus = data.status || 'active';
-            const expDate = data.expires_at || data.expiresAt || null;
-
+          if (isMounted) {
             setPlan(subPlan as SubscriptionPlan);
             setStatus(subStatus);
             setExpiresAt(expDate);
 
-            // Check if subscription has expired by date
             if (expDate && new Date(expDate) < new Date()) {
               setStatus('expired');
             }
             setLoading(false);
-          } else {
-            // Check business_id level subscription in Firebase or Supabase fallback
-            const { data: bUser } = await supabase
-              .from('business_users')
-              .select('business_id')
-              .eq('user_id', userId)
-              .limit(1)
+          }
+        } else {
+          // Check business_id level subscription
+          const { data: bUser } = await supabase
+            .from('business_users')
+            .select('business_id')
+            .eq('user_id', userId)
+            .limit(1)
+            .maybeSingle();
+
+          if (bUser?.business_id) {
+            const { data: bizSub } = await supabase
+              .from('subscriptions')
+              .select('*')
+              .eq('id', bUser.business_id)
               .maybeSingle();
 
-            if (bUser?.business_id) {
-              const bizSubRef = doc(db, 'subscriptions', bUser.business_id);
-              const bizSnap = await getDoc(bizSubRef);
+            if (bizSub) {
+              if (isMounted) {
+                setPlan((bizSub.plan || bizSub.subscription_plan || 'starter') as SubscriptionPlan);
+                setStatus(bizSub.status || 'active');
+                setExpiresAt(bizSub.expires_at || null);
+              }
+            } else {
+              const { data: bData } = await supabase
+                .from('businesses')
+                .select('subscription_plan')
+                .eq('id', bUser.business_id)
+                .maybeSingle();
 
-              if (bizSnap.exists()) {
-                const bData = bizSnap.data();
-                setPlan((bData.plan || bData.subscription_plan || 'starter') as SubscriptionPlan);
-                setStatus(bData.status || 'active');
-                setExpiresAt(bData.expires_at || null);
-              } else {
-                // Fallback to businesses table in DB
-                const { data: bData } = await supabase
-                  .from('businesses')
-                  .select('subscription_plan')
-                  .eq('id', bUser.business_id)
-                  .maybeSingle();
-
-                if (bData?.subscription_plan) {
-                  setPlan(bData.subscription_plan as SubscriptionPlan);
-                }
+              if (isMounted && bData?.subscription_plan) {
+                setPlan(bData.subscription_plan as SubscriptionPlan);
               }
             }
-            setLoading(false);
           }
-        }, (err) => {
-          console.warn('[Firebase Firestore Subscription Error]', err);
-          setLoading(false);
-        });
+          if (isMounted) setLoading(false);
+        }
 
       } catch (err) {
         console.error('Error fetching subscription plan from Firebase:', err);

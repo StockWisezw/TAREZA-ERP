@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { toast } from 'sonner';
-import { supabase, doc, db, getDoc, updateDoc } from '@/lib/firebaseClient';
+import { supabase } from '@/lib/firebaseClient';
 
 export function Stocktake() {
   const [stocktakes, setStocktakes] = useState<any[]>([]);
@@ -1489,14 +1489,17 @@ export function Stocktake() {
                     }
                     
                     try {
-                      const sessRef = doc(db, 'register_sessions', reviewItem.pos_session_id);
-                      const sessSnap = await getDoc(sessRef);
-                      if (!sessSnap.exists()) {
+                      const { data: sessData } = await supabase
+                        .from('register_sessions')
+                        .select('*')
+                        .eq('id', reviewItem.pos_session_id)
+                        .maybeSingle();
+
+                      if (!sessData) {
                         toast.error("Linked POS register session could not be retrieved from active database records.");
                         return;
                       }
 
-                      const sessData = sessSnap.data();
                       if (sessData.status !== 'OPEN') {
                         toast.error("Linked POS shift register session is closed. Stocktake adjustments can only be charged to open cashier shift sessions!");
                         return;
@@ -1530,11 +1533,14 @@ export function Stocktake() {
                       const currentCountSales = Number(sessData.sales_count || 0) + 1;
                       const currentExpectedObj = Number(sessData.expected_balance || 0) + totalDiscrepancyAmount;
 
-                      await updateDoc(sessRef, {
-                        sales_total: currentTotalSales,
-                        sales_count: currentCountSales,
-                        expected_balance: currentExpectedObj
-                      });
+                      await supabase
+                        .from('register_sessions')
+                        .update({
+                          sales_total: currentTotalSales,
+                          sales_count: currentCountSales,
+                          expected_balance: currentExpectedObj
+                        })
+                        .eq('id', reviewItem.pos_session_id);
 
                       // 3. Mark charge sales as posted inside advanced stocktake
                       await supabase

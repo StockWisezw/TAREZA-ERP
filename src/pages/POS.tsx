@@ -25,6 +25,7 @@ import {
 } from '../services/ledgerService';
 import { db, doc, getDoc, updateDoc, supabase } from '../lib/firebaseClient';
 import { usePOSSession } from '../hooks/usePOSSession';
+import { usePOSData } from '../hooks/usePOSData';
 import { indexedDbService } from '../services/indexedDbService';
 import { useCartCalculations } from '../hooks/useCartCalculations';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
@@ -35,6 +36,8 @@ import { ShiftsDashboard } from '../components/pos/ShiftsDashboard';
 import { QuotationManager } from '../components/pos/QuotationManager';
 import { PaymentFlow } from '../components/pos/PaymentFlow';
 import { TransactionHistoryManager } from '../components/pos/TransactionHistoryManager';
+import { POSHardwareSettingsDialog } from '../components/pos/POSHardwareSettingsDialog';
+import { OfflineModePromptDialog } from '../components/pos/OfflineModePromptDialog';
 import { Button } from '../components/ui/button';
 import { 
   Dialog, 
@@ -145,10 +148,9 @@ export default function POS() {
     backupActiveTransaction();
   }, [cart, payments, pricingTier, currentCustomer, globalDiscount]);
 
-  // Local States
-  const [products, setProducts] = useState<Product[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Load data via custom hook
+  const { products, setProducts, customers, categories, isLoading } = usePOSData(activeSession);
+  const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [showPayment, setShowPayment] = useState(false);
   const [showPostSale, setShowPostSale] = useState(false);
@@ -302,227 +304,11 @@ export default function POS() {
     }
   });
 
-  const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [categories, setCategories] = useState<{id: string, name: string, icon: any}[]>([
-    { id: 'all', name: 'All Menu', icon: <Package className="w-5 h-5" /> },
-    { id: 'beverages', name: 'Beverages', icon: <ShoppingCart className="w-5 h-5" /> },
-    { id: 'snacks', name: 'Snacks', icon: <Tag className="w-5 h-5" /> },
-    { id: 'pharmacy', name: 'Pharmacy', icon: <HelpCircle className="w-5 h-5" /> },
-  ]);
-
   // Load static constants or preference
   useEffect(() => {
     const isVat = localStorage.getItem('tareza_vat_enabled') === 'true';
     setVatEnabled(isVat);
   }, [setVatEnabled]);
-
-  // Fetch initial products and customers with local resolution
-  useEffect(() => {
-    let unsubscribeProducts: any = null;
-    let debounceTimeout: any = null;
-    
-    const loadData = async () => {
-      try {
-        setIsLoading(true);
-
-        // Load instantly from local cache
-        const localProds = await getLocalProducts();
-        if (localProds && localProds.length > 0) {
-          setProducts(localProds);
-          setIsLoading(false);
-        }
-        const localCusts = await getLocalCustomers();
-        if (localCusts && localCusts.length > 0) {
-          setCustomers(localCusts);
-        }
-        const localCats = await getLocalCategories();
-        if (localCats && localCats.length > 0) {
-          setCategories([
-            { id: 'all', name: 'All Menu', icon: <Package className="w-5 h-5" /> },
-            ...localCats.map((c: any) => ({ id: c.id, name: c.name, icon: <Tag className="w-5 h-5" /> }))
-          ]);
-        }
-
-        // Connect fetch with supabase
-        const { data: userData } = await supabase.auth.getUser();
-        let userBusinessId = '';
-        let userBranchId = '';
-        if (userData?.user) {
-          const { data: bData } = await supabase.from('business_users').select('business_id, branch_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
-          if (bData) {
-            userBusinessId = bData.business_id;
-            userBranchId = activeSession?.branch_id && activeSession.branch_id !== 'offline_branch_id' ? activeSession.branch_id : bData.branch_id;
-          }
-        }
-
-        let customersQuery = supabase.from('customers').select('*').order('name');
-        if (userBusinessId) {
-          customersQuery = customersQuery.eq('business_id', userBusinessId);
-        }
-
-        let categoriesQuery = supabase.from('categories').select('*');
-        if (userBusinessId) {
-          categoriesQuery = categoriesQuery.eq('business_id', userBusinessId);
-        }
-
-        const [custRes, catRes] = await Promise.all([
-          customersQuery,
-          categoriesQuery
-        ]);
-        
-        const customersData = custRes.data || [];
-        const catData = catRes.data || [];
-        
-        if (customersData.length > 0) {
-          const formattedCusts = customersData.map(c => ({
-            id: c.id,
-            name: c.name,
-            creditLimit: Number(c.credit_limit || 0),
-            balance: Number(c.balance || 0)
-          }));
-          setCustomers(formattedCusts);
-          await saveLocalCustomers(formattedCusts);
-        }
-
-        if (catData.length > 0) {
-          const formattedCats = catData.map(c => ({ id: c.id, name: c.name }));
-          await saveLocalCategories(formattedCats);
-
-          setCategories([
-            { id: 'all', name: 'All Menu', icon: <Package className="w-5 h-5" /> },
-            ...catData.map(c => ({ id: c.id, name: c.name, icon: <Tag className="w-5 h-5" /> }))
-          ]);
-        }
-        
-        const refreshPOSProducts = () => {
-          let productsQuery = supabase.from('products').select('*').eq('is_active', true);
-          if (userBusinessId) {
-            productsQuery = productsQuery.eq('business_id', userBusinessId);
-          }
-
-          let inventoryQuery = supabase.from('inventory').select('*');
-          if (userBusinessId) {
-            inventoryQuery = inventoryQuery.eq('business_id', userBusinessId);
-          }
-          if (userBranchId) {
-            inventoryQuery = inventoryQuery.eq('branch_id', userBranchId);
-          }
-
-          Promise.all([
-            productsQuery,
-            Promise.resolve(inventoryQuery).catch(() => ({ data: [] }))
-          ]).then(([pRes, iRes]) => {
-             const data = pRes.data || [];
-             const invData = iRes.data || [];
-             if (data && data.length > 0) {
-                const updatedProducts = data.map(p => {
-                  const productInventory = invData.filter((i: any) => i.product_id === p.id && (!userBranchId || i.branch_id === userBranchId));
-                  const totalStock = productInventory.reduce((acc: number, cur: any) => acc + (cur.quantity || 0), 0);
-                  return {
-                    id: p.id,
-                    name: p.name || 'Unnamed',
-                    barcode: p.barcode || '',
-                    sku: p.sku || '',
-                    retailPrice: p.retail_price || p.retailPrice || 0,
-                    wholesalePrice: p.wholesale_price || p.wholesalePrice || 0,
-                    costPrice: p.cost_price || 0,
-                    taxClass: p.tax_class || p.taxClass || 'standard',
-                    category: p.category_id || p.category || 'all',
-                    imageUrl: '', 
-                    stock: totalStock,
-                    bundles: p.bundles || []
-                  };
-                });
-                setProducts(updatedProducts);
-                saveLocalProducts(updatedProducts);
-             } else {
-                setProducts([]);
-                saveLocalProducts([]);
-             }
-          }).catch(err => {
-             console.error("Failed to refresh POS products dynamically:", err);
-          });
-        };
-
-        const debouncedRefreshPOSProducts = () => {
-          if (debounceTimeout) {
-            clearTimeout(debounceTimeout);
-          }
-          debounceTimeout = setTimeout(() => {
-            refreshPOSProducts();
-          }, 1500); // 1.5-second debounce to handle multi-item offline syncing without network congestion
-        };
-
-        // Setup real-time postgres subscriptions
-        const channel = supabase.channel('public:pos_sync')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, debouncedRefreshPOSProducts)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, debouncedRefreshPOSProducts)
-          .subscribe();
-          
-        unsubscribeProducts = () => {
-           supabase.removeChannel(channel);
-           if (debounceTimeout) {
-             clearTimeout(debounceTimeout);
-           }
-        };
-
-        let initProductsQuery = supabase.from('products').select('*').eq('is_active', true);
-        if (userBusinessId) {
-          initProductsQuery = initProductsQuery.eq('business_id', userBusinessId);
-        }
-
-        let initInventoryQuery = supabase.from('inventory').select('*');
-        if (userBusinessId) {
-          initInventoryQuery = initInventoryQuery.eq('business_id', userBusinessId);
-        }
-        if (userBranchId) {
-          initInventoryQuery = initInventoryQuery.eq('branch_id', userBranchId);
-        }
-
-        const [productsRes, inventoryRes] = await Promise.all([
-           initProductsQuery,
-           Promise.resolve(initInventoryQuery).catch(() => ({ data: [] }))
-        ]);
-        
-        const initProducts = productsRes.data || [];
-        const initInventory = inventoryRes.data || [];
-        
-        if (initProducts && initProducts.length > 0) {
-          const processedProducts = initProducts.map(p => {
-            const productInventory = initInventory.filter((i: any) => i.product_id === p.id && (!userBranchId || i.branch_id === userBranchId));
-            const totalStock = productInventory.reduce((acc: number, cur: any) => acc + (cur.quantity || 0), 0);
-            
-            return {
-              id: p.id,
-              name: p.name || 'Unnamed',
-              barcode: p.barcode || '',
-              sku: p.sku || '',
-              retailPrice: p.retail_price || p.retailPrice || 0,
-              wholesalePrice: p.wholesale_price || p.wholesalePrice || 0,
-              costPrice: p.cost_price || 0,
-              taxClass: p.tax_class || p.taxClass || 'standard',
-              category: p.category_id || p.category || 'all',
-              imageUrl: '', 
-              stock: totalStock,
-              bundles: p.bundles
-            };
-          });
-          setProducts(processedProducts);
-          await saveLocalProducts(processedProducts);
-        }
-      } catch (err) {
-        console.error('Core loading failed:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
-
-    return () => {
-      if (unsubscribeProducts) unsubscribeProducts();
-    };
-  }, [activeSession?.id, activeSession?.branch_id]);
 
   // Update voice assistant capability
   useEffect(() => {
@@ -1668,281 +1454,29 @@ export default function POS() {
       />
 
       {/* POS HARDWARE & DISPLAY OPTIMIZER MODAL */}
-      <Dialog open={showHwSettings} onOpenChange={setShowHwSettings}>
-        <DialogContent className="max-w-md bg-white border border-zinc-200 shadow-2xl rounded-2xl p-6">
-          <DialogHeader>
-            <DialogTitle className="text-sm font-black text-zinc-900 uppercase tracking-wide flex items-center gap-2">
-              <Sliders className="h-4 w-4 text-blue-600" />
-              POS Hardware & Display Optimizer
-            </DialogTitle>
-            <DialogDescription className="text-xs text-zinc-500 font-medium">
-              Fine-tune the interface, layout density, and contrast to perfectly match your terminal hardware.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 mt-4">
-            {/* 1. Scale Setting */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-baseline">
-                <label className="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
-                  <Monitor className="h-3.5 w-3.5 text-zinc-500" />
-                  Resolution Zoom & Scaling
-                </label>
-                <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
-                  {posScale}% Scale
-                </span>
-              </div>
-              <p className="text-[10px] text-zinc-400 leading-tight">
-                Shrink or expand the entire interface to perfectly fit low-resolution POS screens (such as 1024x768) or small tablet viewports.
-              </p>
-              <div className="grid grid-cols-5 gap-1 bg-zinc-100 p-1 rounded-xl border border-zinc-200">
-                {(['75', '85', '90', '100', '110'] as const).map((scale) => (
-                  <button
-                    key={scale}
-                    type="button"
-                    onClick={() => {
-                      setPosScale(scale);
-                      toast.success(`POS Workspace scaled to ${scale}%`);
-                    }}
-                    className={cn(
-                      "py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer text-center",
-                      posScale === scale
-                        ? "bg-white text-blue-600 shadow-xs border border-zinc-200"
-                        : "text-zinc-500 hover:text-zinc-800 hover:bg-white/50"
-                    )}
-                  >
-                    {scale}%
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 2. High Contrast Option */}
-            <div className="flex items-start justify-between p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl hover:bg-zinc-100/70 transition-all">
-              <div className="flex gap-3">
-                <div className="p-1.5 bg-purple-50 rounded-lg text-purple-600 shrink-0 mt-0.5">
-                  <Cpu className="h-4 w-4" />
-                </div>
-                <div className="space-y-0.5 pr-2">
-                  <label className="text-xs font-bold text-zinc-800 cursor-pointer block" htmlFor="hw-contrast">
-                    Legacy Hardware High-Contrast
-                  </label>
-                  <p className="text-[10px] text-zinc-400 leading-normal">
-                    Thicker solid borders, high contrast pure-black text, and disabled fine transparency effects to ensure readability on dim, dusty, or older resistive POS monitors.
-                  </p>
-                </div>
-              </div>
-              <input
-                id="hw-contrast"
-                type="checkbox"
-                checked={hardwareOptimize}
-                onChange={(e) => {
-                  setHardwareOptimize(e.target.checked);
-                  toast.success(e.target.checked ? 'High-Contrast Mode enabled' : 'Standard Contrast Mode restored');
-                }}
-                className="h-4.5 w-4.5 mt-1 cursor-pointer rounded border-zinc-300 text-blue-600 focus:ring-blue-500 shrink-0"
-              />
-            </div>
-
-            {/* 3. Touch Assist Option */}
-            <div className="flex items-start justify-between p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl hover:bg-zinc-100/70 transition-all">
-              <div className="flex gap-3">
-                <div className="p-1.5 bg-amber-50 rounded-lg text-amber-600 shrink-0 mt-0.5">
-                  <Fingerprint className="h-4 w-4" />
-                </div>
-                <div className="space-y-0.5 pr-2">
-                  <label className="text-xs font-bold text-zinc-800 cursor-pointer block" htmlFor="hw-touch">
-                    Touch Target Fingertip Assist
-                  </label>
-                  <p className="text-[10px] text-zinc-400 leading-normal">
-                    Increases row, button, and dropdown action heights to make precise fingertip clicking on old or uncalibrated touchscreen systems effortless.
-                  </p>
-                </div>
-              </div>
-              <input
-                id="hw-touch"
-                type="checkbox"
-                checked={touchOptimized}
-                onChange={(e) => {
-                  setTouchOptimized(e.target.checked);
-                  toast.success(e.target.checked ? 'Touch Target Assist enabled' : 'Standard Target sizes restored');
-                }}
-                className="h-4.5 w-4.5 mt-1 cursor-pointer rounded border-zinc-300 text-blue-600 focus:ring-blue-500 shrink-0"
-              />
-            </div>
-
-            {/* WebView Layout Header Collapse Option */}
-            <div className="flex items-start justify-between p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl hover:bg-zinc-100/70 transition-all">
-              <div className="flex gap-3">
-                <div className="p-1.5 bg-rose-50 rounded-lg text-rose-600 shrink-0 mt-0.5">
-                  <Layout className="h-4 w-4" />
-                </div>
-                <div className="space-y-0.5 pr-2">
-                  <label className="text-xs font-bold text-zinc-805 cursor-pointer block" htmlFor="hw-hide-header">
-                    Hide Main Layout Header
-                  </label>
-                  <p className="text-[10px] text-zinc-400 leading-normal">
-                    Collapses and hides the main ERP top header bar to reclaim 64px of vertical screen height. Highly recommended for handheld smart POS terminals (like Q2I).
-                  </p>
-                </div>
-              </div>
-              <input
-                id="hw-hide-header"
-                type="checkbox"
-                checked={hideHeader}
-                onChange={(e) => {
-                  setHideHeader(e.target.checked);
-                  toast.success(e.target.checked ? 'Main Header hidden to save screen space' : 'Main Header restored');
-                }}
-                className="h-4.5 w-4.5 mt-1 cursor-pointer rounded border-zinc-300 text-blue-600 focus:ring-blue-500 shrink-0"
-              />
-            </div>
-
-            {/* Scaling Engine Selector */}
-            <div className="space-y-2 p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl">
-              <div className="flex justify-between items-baseline">
-                <label className="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
-                  <Cpu className="h-3.5 w-3.5 text-zinc-500" />
-                  Scaling Rendering Engine
-                </label>
-              </div>
-              <p className="text-[10px] text-zinc-400 leading-tight">
-                Change the underlying CSS rendering logic if the screen layout appears misaligned, cut-off, or click locations are offset.
-              </p>
-              <div className="grid grid-cols-3 gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl border border-zinc-200 dark:border-zinc-800 mt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScaleMode('vector');
-                    toast.success('Scaling Engine: Crisp Native Vector');
-                  }}
-                  className={cn(
-                    "py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer text-center",
-                    scaleMode === 'vector'
-                      ? "bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs border border-zinc-200 dark:border-zinc-700"
-                      : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-250"
-                  )}
-                >
-                  Crisp Vector
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScaleMode('transform');
-                    toast.success('Scaling Engine: Standard CSS Transform');
-                  }}
-                  className={cn(
-                    "py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer text-center",
-                    scaleMode === 'transform'
-                      ? "bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs border border-zinc-200 dark:border-zinc-700"
-                      : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-250"
-                  )}
-                >
-                  Transform
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScaleMode('zoom');
-                    toast.success('Scaling Engine: Android WebView Zoom');
-                  }}
-                  className={cn(
-                    "py-1.5 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer text-center",
-                    scaleMode === 'zoom'
-                      ? "bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs border border-zinc-200 dark:border-zinc-700"
-                      : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-250"
-                  )}
-                >
-                  Zoom
-                </button>
-              </div>
-            </div>
-
-            {/* 4. Fullscreen Terminal Toggle */}
-            <div className="flex items-center justify-between p-3.5 bg-blue-50/20 border border-blue-100 rounded-xl">
-              <div className="space-y-0.5">
-                <span className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
-                  <Maximize className="h-3.5 w-3.5 text-blue-600" />
-                  Terminal Fullscreen Mode
-                </span>
-                <p className="text-[10px] text-blue-600/70 leading-tight">
-                  Hide browser address bar, back buttons, and menus to maximize vertical real estate.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={toggleFullscreen}
-                className="text-[11px] h-8.5 font-bold border-blue-200 bg-white hover:bg-blue-50 text-blue-700 cursor-pointer rounded-lg shrink-0 px-3"
-              >
-                {isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-              </Button>
-            </div>
-          </div>
-
-          <DialogFooter className="bg-zinc-50 dark:bg-zinc-900 p-4 border-t border-zinc-100 dark:border-zinc-800 -mx-6 -mb-6 mt-5 flex justify-end">
-            <Button
-              onClick={() => setShowHwSettings(false)}
-              className="bg-zinc-900 hover:bg-zinc-805 dark:bg-zinc-100 dark:hover:bg-zinc-250 text-white dark:text-zinc-950 rounded-xl px-5 text-xs font-bold select-none cursor-pointer h-9"
-            >
-              Apply Settings
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <POSHardwareSettingsDialog
+        open={showHwSettings}
+        onOpenChange={setShowHwSettings}
+        posScale={posScale}
+        setPosScale={setPosScale}
+        hardwareOptimize={hardwareOptimize}
+        setHardwareOptimize={setHardwareOptimize}
+        touchOptimized={touchOptimized}
+        setTouchOptimized={setTouchOptimized}
+        hideHeader={hideHeader}
+        setHideHeader={setHideHeader}
+        scaleMode={scaleMode}
+        setScaleMode={setScaleMode}
+        isFullscreen={isFullscreen}
+        toggleFullscreen={toggleFullscreen}
+      />
       
       {/* Offline Mode Switch Prompt Dialog */}
-      <Dialog open={showOfflinePrompt} onOpenChange={setShowOfflinePrompt}>
-        <DialogContent className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl rounded-2xl p-6">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-black text-zinc-900 dark:text-white tracking-tight flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400">
-                <Sliders className="h-5 w-5 animate-pulse" />
-              </span>
-              Internet Connection Lost!
-            </DialogTitle>
-            <DialogDescription className="text-xs text-zinc-500 leading-relaxed mt-2">
-              It looks like you are currently offline or your network has disconnected. Would you like to continue using **Offline Transaction Mode**?
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 my-4 bg-zinc-50 dark:bg-zinc-950 p-3.5 rounded-xl border border-zinc-150 dark:border-zinc-850 text-xs text-zinc-650 dark:text-zinc-350 leading-relaxed">
-            <p className="flex items-start gap-2">
-              <span className="text-amber-500 font-bold">✔</span>
-              <span>Transactions are saved securely in your browser's local cache.</span>
-            </p>
-            <p className="flex items-start gap-2">
-              <span className="text-amber-500 font-bold">✔</span>
-              <span>Stock level counts will be updated locally on this device.</span>
-            </p>
-            <p className="flex items-start gap-2">
-              <span className="text-amber-500 font-bold">✔</span>
-              <span>All offline sales will automatically synchronize to the ERP ledger once your internet connection is restored.</span>
-            </p>
-          </div>
-
-          <DialogFooter className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowOfflinePrompt(false)}
-              className="rounded-xl grow font-bold h-10 border-zinc-200"
-            >
-              Stay Online
-            </Button>
-            <Button
-              onClick={() => {
-                localStorage.setItem('tareza_offline_mode', 'true');
-                window.dispatchEvent(new Event('offline-mode-changed'));
-                setShowOfflinePrompt(false);
-                toast.success('Switched to Offline Transaction Mode. Happy selling!');
-              }}
-              className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl grow font-black h-10 flex items-center justify-center gap-2 shadow-md"
-            >
-              <span>Continue Offline</span>
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <OfflineModePromptDialog
+        open={showOfflinePrompt}
+        onOpenChange={setShowOfflinePrompt}
+        onToggleOfflineMode={handleToggleOfflineMode}
+      />
 
     </div>
   );

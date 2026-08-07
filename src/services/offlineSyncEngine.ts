@@ -361,29 +361,23 @@ export class OfflineSyncEngine {
       'exchange_rate_history'
     ];
 
-    const { getFirestore, collection, getDocs, query, where } = await import('firebase/firestore');
-    const firestoreInstance = getFirestore();
+    const { supabase } = await import('../lib/firebaseClient');
 
     for (const collName of collectionsToHydrate) {
       try {
-        const collRef = collection(firestoreInstance, collName);
-        let q;
-        
-        // Filter by business_id if applicable
+        let res;
         if (collName !== 'businesses' && collName !== 'profiles' && collName !== 'support_tickets') {
-          q = query(collRef, where('business_id', '==', businessId));
+          res = await supabase.from(collName).select('*').eq('business_id', businessId);
         } else {
-          q = collRef;
+          res = await supabase.from(collName).select('*');
         }
 
-        const querySnap = await getDocs(q);
-        
-        if (!querySnap.empty) {
+        const items = res.data || [];
+        if (items.length > 0) {
           const dexieTable = (db as any)[collName];
           if (dexieTable) {
-            const records = querySnap.docs.map(doc => ({
-              id: doc.id,
-              ...(doc.data() as any),
+            const records = items.map((row: any) => ({
+              ...row,
               syncStatus: 'synced',
               syncedAt: new Date().toISOString()
             }));
