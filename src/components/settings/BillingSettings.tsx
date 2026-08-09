@@ -673,7 +673,7 @@ export function BillingSettings() {
       )}
 
       {/* 🛠️ Developer System Administration Bypass Card */}
-      {userEmail && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(userEmail.toLowerCase()) && (
+      {userEmail && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(userEmail.toLowerCase()) && (
         <Card className="border border-indigo-500/30 bg-indigo-55/10 dark:bg-indigo-950/10 shadow-sm rounded-2xl overflow-hidden mb-6">
           <CardHeader className="bg-indigo-500/5 pb-4 border-b border-indigo-100/10">
             <div>

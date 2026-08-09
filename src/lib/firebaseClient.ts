@@ -532,7 +532,7 @@ export async function getActiveBusinessId(): Promise<string | null> {
   if (!user) return 'default_business';
 
   // Fast-path for developer/admin accounts to guarantee zero data loss
-  const isDevEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(user.email?.toLowerCase() || '');
+  const isDevEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(user.email?.toLowerCase() || '');
   if (isDevEmail) {
     cachedBusinessId = 'TZ-999999-DEV';
     safeSetLocalStorage('tareza_active_business_id', 'TZ-999999-DEV');
@@ -754,7 +754,8 @@ class SupabaseQueryBuilder {
         email === 'admin@tarezaerp.co.zw' ||
         email === 'sales@tarezaerp.co.zw' ||
         email === 'tapsforex@gmail.com' ||
-        email === 'tapiwagahadza54@gmail.com'
+        email === 'tapiwagahadza54@gmail.com' ||
+        email === 'petronellamutero@gmail.com'
       );
       
       const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
@@ -950,7 +951,8 @@ class SupabaseQueryBuilder {
       email === 'admin@tarezaerp.co.zw' ||
       email === 'sales@tarezaerp.co.zw' ||
       email === 'tapsforex@gmail.com' ||
-      email === 'tapiwagahadza54@gmail.com'
+      email === 'tapiwagahadza54@gmail.com' ||
+      email === 'petronellamutero@gmail.com'
     );
     
     const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
@@ -1066,7 +1068,8 @@ class SupabaseQueryBuilder {
       email === 'admin@tarezaerp.co.zw' ||
       email === 'sales@tarezaerp.co.zw' ||
       email === 'tapsforex@gmail.com' ||
-      email === 'tapiwagahadza54@gmail.com'
+      email === 'tapiwagahadza54@gmail.com' ||
+      email === 'petronellamutero@gmail.com'
     );
     
     const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];

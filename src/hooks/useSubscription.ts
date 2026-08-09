@@ -60,7 +60,8 @@ export function useSubscription() {
     'admin@tarezaerp.co.zw',
     'sales@tarezaerp.co.zw',
     'tapsforex@gmail.com',
-    'tapiwagahadza54@gmail.com'
+    'tapiwagahadza54@gmail.com',
+    'petronellamutero@gmail.com'
   ].includes(user.email.toLowerCase());
 
   useEffect(() => {

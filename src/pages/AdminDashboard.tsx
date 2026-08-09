@@ -73,7 +73,8 @@ export default function AdminDashboard() {
     'admin@tarezaerp.co.zw',
     'sales@tarezaerp.co.zw',
     'tapsforex@gmail.com',
-    'tapiwagahadza54@gmail.com'
+    'tapiwagahadza54@gmail.com',
+    'petronellamutero@gmail.com'
   ].includes(currentUser.email.toLowerCase());
 
   const fetchUsers = async () => {

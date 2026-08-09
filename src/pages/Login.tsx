@@ -330,7 +330,7 @@ export default function Login() {
           { id: user.id, first_name: firstName, last_name: lastName, email: user.email, phone: phone || null, pin: '1234' }
         ]);
 
-        const isSuperAdminEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(email.toLowerCase());
+        const isSuperAdminEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(email.toLowerCase());
         
         let planNameInDb: 'free_trial' | 'free' | 'starter' | 'pro' | 'enterprise' = 'free_trial';
         const endDate = new Date();
@@ -459,14 +459,14 @@ export default function Login() {
         return;
       }
 
-      const isDeveloperEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(email?.toLowerCase() || '');
+      const isDeveloperEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(email?.toLowerCase() || '');
 
       try {
         const userCredential = await signInWithEmailAndPassword(fireAuth, email, password);
         const firebaseUser = userCredential.user;
 
         // Check if verified
-        const isBypass = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com'].includes(firebaseUser.email?.toLowerCase() || '');
+        const isBypass = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(firebaseUser.email?.toLowerCase() || '');
 
         if (!firebaseUser.emailVerified && !isBypass) {
           // Block unverified user, sign out, and resend verification email
