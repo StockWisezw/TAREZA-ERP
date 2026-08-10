@@ -237,3 +237,31 @@
   border-radius: 8px !important;
   border: 2px solid #ffffff !important;
 }
+
+/* Global Print Styles for Receipts and Closed Register Audit Reports */
+@media print {
+  @page {
+    margin: 10mm;
+  }
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 12pt;
+  }
+  .print\:hidden {
+    display: none !important;
+  }
+  .print\:block {
+    display: block !important;
+  }
+  /* Remove dark mode or modal backdrops when printing */
+  div[role="dialog"] {
+    position: static !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+  }
+}

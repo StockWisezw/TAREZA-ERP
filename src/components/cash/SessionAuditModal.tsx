@@ -11,6 +11,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { FileText, Printer, Check, RotateCcw } from 'lucide-react';
 import { RegisterSession, CashLog, Profile } from '../../hooks/useCashManagement';
+import { RegisterAuditPrint } from './RegisterAuditPrint';
 
 interface SessionAuditModalProps {
   open: boolean;
@@ -30,6 +31,10 @@ export function SessionAuditModal({
   if (!session) return null;
 
   const operatorName = profilesMap[session.user_id]?.full_name || 'System Operator';
+
+  const handlePrint = () => {
+    window.print();
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -91,15 +96,30 @@ export function SessionAuditModal({
           </div>
         </div>
 
-        <DialogFooter className="pt-2">
+        <DialogFooter className="pt-2 flex flex-row items-center justify-between">
+          <Button
+            variant="outline"
+            onClick={handlePrint}
+            className="text-xs font-bold rounded-xl gap-2 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 cursor-pointer"
+          >
+            <Printer className="h-4 w-4" />
+            Print Z-Report Audit Sheet
+          </Button>
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            className="text-xs font-semibold rounded-xl"
+            className="text-xs font-semibold rounded-xl cursor-pointer"
           >
             Close Audit
           </Button>
         </DialogFooter>
+
+        {/* Hidden Printable Document Container */}
+        <RegisterAuditPrint
+          session={session}
+          auditLogs={auditLogs}
+          operatorName={operatorName}
+        />
       </DialogContent>
     </Dialog>
   );

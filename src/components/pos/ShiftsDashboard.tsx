@@ -17,7 +17,8 @@ import {
   Search,
   Calendar,
   X,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Printer
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
@@ -26,6 +27,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { toast } from 'sonner';
 import { supabase } from '../../lib/firebaseClient';
 import { closeRegisterSession } from '../../services/ledgerService';
+import { RegisterAuditPrint } from '../cash/RegisterAuditPrint';
 
 interface ShiftsDashboardProps {
   activeSession: any;
@@ -576,6 +578,19 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
                               <Eye className="w-3.5 h-3.5" />
                               <span className="hidden sm:inline ml-1">View Audit</span>
                             </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setViewingDetailsShift(s);
+                                setTimeout(() => window.print(), 300);
+                              }}
+                              className="h-8 rounded-lg text-[11px] font-bold py-1 px-2 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 cursor-pointer"
+                              title="Print Closed Register Audit Report / Z-Report"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline ml-1">Print Report</span>
+                            </Button>
 
                              {isOpen ? (
                               <>
@@ -892,14 +907,32 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
             </div>
           )}
 
-          <DialogFooter className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+          <DialogFooter className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex flex-row items-center justify-between gap-2">
             <Button
-              className="w-full bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl py-2.5 text-xs font-bold cursor-pointer"
+              variant="outline"
+              onClick={() => window.print()}
+              className="bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 rounded-xl py-2 px-3 text-xs font-bold cursor-pointer gap-2"
+            >
+              <Printer className="w-4 h-4" />
+              Print Z-Report Audit Sheet
+            </Button>
+            <Button
+              className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl py-2 px-4 text-xs font-bold cursor-pointer"
               onClick={() => setViewingDetailsShift(null)}
             >
               Dismiss
             </Button>
           </DialogFooter>
+
+          {/* Hidden Printable Document Container */}
+          {viewingDetailsShift && (
+            <RegisterAuditPrint
+              session={viewingDetailsShift}
+              operatorName={getProfileName(viewingDetailsShift.cashier_id)}
+              supervisorName={getProfileName(viewingDetailsShift.user_id)}
+              branchName={getBranchName(viewingDetailsShift.branch_id)}
+            />
+          )}
         </DialogContent>
       </Dialog>
 

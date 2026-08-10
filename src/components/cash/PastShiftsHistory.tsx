@@ -119,15 +119,29 @@ export function PastShiftsHistory({
                         </Badge>
                       </td>
                       <td className="p-3 text-right">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => onViewAudit(s)}
-                          className="h-7 text-xs font-semibold gap-1 text-blue-600 hover:text-blue-700 cursor-pointer rounded-lg"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                          Audit
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => onViewAudit(s)}
+                            className="h-7 text-xs font-semibold gap-1 text-blue-600 hover:text-blue-700 cursor-pointer rounded-lg"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            Audit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              onViewAudit(s);
+                              setTimeout(() => window.print(), 300);
+                            }}
+                            className="h-7 text-xs font-bold gap-1 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 cursor-pointer rounded-lg"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                            Print
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
