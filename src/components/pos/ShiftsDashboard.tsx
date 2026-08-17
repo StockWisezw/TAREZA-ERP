@@ -911,10 +911,10 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
             <Button
               variant="outline"
               onClick={() => window.print()}
-              className="bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 rounded-xl py-2 px-3 text-xs font-bold cursor-pointer gap-2"
+              className="bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 rounded-xl py-2 px-3 text-xs font-bold cursor-pointer gap-2"
             >
               <Printer className="w-4 h-4" />
-              Print Z-Report Audit Sheet
+              Print Audit Report
             </Button>
             <Button
               className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl py-2 px-4 text-xs font-bold cursor-pointer"

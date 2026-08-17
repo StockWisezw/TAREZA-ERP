@@ -100,10 +100,10 @@ export function SessionAuditModal({
           <Button
             variant="outline"
             onClick={handlePrint}
-            className="text-xs font-bold rounded-xl gap-2 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 cursor-pointer"
+            className="text-xs font-bold rounded-xl gap-2 border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
           >
             <Printer className="h-4 w-4" />
-            Print Z-Report Audit Sheet
+            Print Audit Report
           </Button>
           <Button
             variant="outline"
