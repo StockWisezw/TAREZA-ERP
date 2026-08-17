@@ -434,6 +434,7 @@ export default function CashManagement() {
         session={selectedAuditSession}
         auditLogs={auditLogs}
         profilesMap={profilesMap}
+        branchName={activeBranch?.name || 'Main Store Branch'}
       />
     </div>
   );

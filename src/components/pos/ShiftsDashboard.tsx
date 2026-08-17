@@ -18,7 +18,8 @@ import {
   Calendar,
   X,
   FileSpreadsheet,
-  Printer
+  Printer,
+  Download
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
@@ -28,6 +29,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../lib/firebaseClient';
 import { closeRegisterSession } from '../../services/ledgerService';
 import { RegisterAuditPrint } from '../cash/RegisterAuditPrint';
+import { exportZReportPDF } from '../../utils/exportZReportPDF';
 
 interface ShiftsDashboardProps {
   activeSession: any;
@@ -576,7 +578,24 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
                               title="View Shift Ledger Details"
                             >
                               <Eye className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline ml-1">View Audit</span>
+                              <span className="hidden sm:inline ml-1">View</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                exportZReportPDF({
+                                  session: s,
+                                  operatorName: getProfileName(s.cashier_id),
+                                  supervisorName: getProfileName(s.user_id),
+                                  branchName: getBranchName(s.branch_id)
+                                });
+                              }}
+                              className="h-8 rounded-lg text-[11px] font-bold py-1 px-2 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer"
+                              title="Export Official Z-Report PDF"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline ml-1">PDF</span>
                             </Button>
                             <Button
                               size="sm"
@@ -589,7 +608,7 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
                               title="Print Closed Register Audit Report / Z-Report"
                             >
                               <Printer className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline ml-1">Print Report</span>
+                              <span className="hidden sm:inline ml-1">Print</span>
                             </Button>
 
                              {isOpen ? (
@@ -908,14 +927,33 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
           )}
 
           <DialogFooter className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex flex-row items-center justify-between gap-2">
-            <Button
-              variant="outline"
-              onClick={() => window.print()}
-              className="bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 rounded-xl py-2 px-3 text-xs font-bold cursor-pointer gap-2"
-            >
-              <Printer className="w-4 h-4" />
-              Print Audit Report
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (viewingDetailsShift) {
+                    exportZReportPDF({
+                      session: viewingDetailsShift,
+                      operatorName: getProfileName(viewingDetailsShift.cashier_id),
+                      supervisorName: getProfileName(viewingDetailsShift.user_id),
+                      branchName: getBranchName(viewingDetailsShift.branch_id)
+                    });
+                  }
+                }}
+                className="bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 rounded-xl py-2 px-3 text-xs font-bold cursor-pointer gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Export PDF
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => window.print()}
+                className="bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 rounded-xl py-2 px-3 text-xs font-bold cursor-pointer gap-2"
+              >
+                <Printer className="w-4 h-4" />
+                Print Audit Report
+              </Button>
+            </div>
             <Button
               className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl py-2 px-4 text-xs font-bold cursor-pointer"
               onClick={() => setViewingDetailsShift(null)}

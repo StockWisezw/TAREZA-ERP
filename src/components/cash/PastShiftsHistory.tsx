@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { History, RefreshCw, Eye, Calendar, Printer } from 'lucide-react';
+import { History, RefreshCw, Eye, Calendar, Printer, Download } from 'lucide-react';
+import { exportZReportPDF } from '../../utils/exportZReportPDF';
 
 interface PastShiftsHistoryProps {
   pastSessions: RegisterSession[];
@@ -125,9 +126,25 @@ export function PastShiftsHistory({
                             variant="ghost"
                             onClick={() => onViewAudit(s)}
                             className="h-7 text-xs font-semibold gap-1 text-blue-600 hover:text-blue-700 cursor-pointer rounded-lg"
+                            title="View Shift Audit Details"
                           >
                             <Eye className="h-3.5 w-3.5" />
                             Audit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              exportZReportPDF({
+                                session: s,
+                                operatorName: operator
+                              });
+                            }}
+                            className="h-7 text-xs font-bold gap-1 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer rounded-lg"
+                            title="Export Official Z-Report PDF"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            PDF
                           </Button>
                           <Button
                             size="sm"
@@ -137,6 +154,7 @@ export function PastShiftsHistory({
                               setTimeout(() => window.print(), 300);
                             }}
                             className="h-7 text-xs font-bold gap-1 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 cursor-pointer rounded-lg"
+                            title="Print Audit Report"
                           >
                             <Printer className="h-3.5 w-3.5" />
                             Print
