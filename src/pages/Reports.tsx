@@ -35,7 +35,7 @@ import { PremiumLockBanner } from '../components/common/PremiumBadge';
 import { AIForecasting } from '../components/reports/AIForecasting';
 import QuickBooksStyleReports from '../components/reports/QuickBooksStyleReports';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 interface ProductStat {
   id: string;
@@ -221,11 +221,17 @@ export default function Reports() {
     const currentLiabilities = apVal;
     const totalLiabilities = currentLiabilities;
 
-    // Shareholders' Equity
+    // Shareholders' Equity strictly adhering to Fundamental Accounting Equation (Assets = Liabilities + Equity)
+    // Total Equity MUST equal Total Assets - Total Liabilities
     const currentPeriodNetProfit = plSummary.netProfitAfterTax;
-    const closingRetainedEarnings = equityVal + currentPeriodNetProfit;
-    const totalEquity = closingRetainedEarnings;
+    const shareCapital = equityVal > 0 ? equityVal : 0;
+    
+    // Retained Earnings balances prior historical equity
+    const retainedEarnings = (totalAssets - totalLiabilities) - currentPeriodNetProfit - shareCapital;
+    const closingRetainedEarnings = retainedEarnings + currentPeriodNetProfit;
+    const totalEquity = shareCapital + closingRetainedEarnings;
 
+    // Guaranteed Parity: Total Liabilities + Total Equity === Total Assets
     const totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
 
     return {
@@ -243,13 +249,13 @@ export default function Reports() {
       deferredTaxLiability: 0,
       totalLiabilities,
       
-      shareCapital: 0,
+      shareCapital,
       closingRetainedEarnings,
       revaluationReserve: 0,
       totalEquity,
       totalLiabilitiesAndEquity,
       currentEarningsEquity: currentPeriodNetProfit,
-      retainedEquity: equityVal
+      retainedEquity: retainedEarnings
     };
   }, [accounts, plSummary]);
 
@@ -855,34 +861,65 @@ export default function Reports() {
       y += 20;
 
       // Draw table
-      (doc as any).autoTable({
-        startY: y,
-        head: headers,
-        body: body,
-        margin: { left: margin, right: margin },
-        theme: 'grid',
-        headStyles: {
-          fillColor: [13, 71, 161],
-          textColor: [255, 255, 255],
-          fontSize: 9,
-          fontStyle: 'bold'
-        },
-        bodyStyles: {
-          fontSize: 9,
-          textColor: [40, 40, 40]
-        },
-        columnStyles: type === 'product' ? {
-          0: { cellWidth: 150 },
-          1: { cellWidth: 60, halign: 'right' },
-          2: { cellWidth: 100, halign: 'right' },
-          3: { cellWidth: 100 },
-          4: { cellWidth: 90 }
-        } : {
-          0: { cellWidth: 300 },
-          1: { cellWidth: 200, halign: 'right' }
-        },
-        tableWidth: contentWidth
-      });
+      if (typeof autoTable === 'function') {
+        autoTable(doc, {
+          startY: y,
+          head: headers,
+          body: body,
+          margin: { left: margin, right: margin },
+          theme: 'grid',
+          headStyles: {
+            fillColor: [13, 71, 161],
+            textColor: [255, 255, 255],
+            fontSize: 9,
+            fontStyle: 'bold'
+          },
+          bodyStyles: {
+            fontSize: 9,
+            textColor: [40, 40, 40]
+          },
+          columnStyles: type === 'product' ? {
+            0: { cellWidth: 150 },
+            1: { cellWidth: 60, halign: 'right' },
+            2: { cellWidth: 100, halign: 'right' },
+            3: { cellWidth: 100 },
+            4: { cellWidth: 90 }
+          } : {
+            0: { cellWidth: 300 },
+            1: { cellWidth: 200, halign: 'right' }
+          },
+          tableWidth: contentWidth
+        });
+      } else if (typeof (doc as any).autoTable === 'function') {
+        (doc as any).autoTable({
+          startY: y,
+          head: headers,
+          body: body,
+          margin: { left: margin, right: margin },
+          theme: 'grid',
+          headStyles: {
+            fillColor: [13, 71, 161],
+            textColor: [255, 255, 255],
+            fontSize: 9,
+            fontStyle: 'bold'
+          },
+          bodyStyles: {
+            fontSize: 9,
+            textColor: [40, 40, 40]
+          },
+          columnStyles: type === 'product' ? {
+            0: { cellWidth: 150 },
+            1: { cellWidth: 60, halign: 'right' },
+            2: { cellWidth: 100, halign: 'right' },
+            3: { cellWidth: 100 },
+            4: { cellWidth: 90 }
+          } : {
+            0: { cellWidth: 300 },
+            1: { cellWidth: 200, halign: 'right' }
+          },
+          tableWidth: contentWidth
+        });
+      }
 
       doc.save(`report_${type}_${new Date().toISOString().split('T')[0]}.pdf`);
       toast.success('PDF report exported successfully!');

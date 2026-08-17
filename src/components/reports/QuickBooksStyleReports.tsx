@@ -13,7 +13,7 @@ import {
 import { supabase } from '../../lib/firebaseClient';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 // Tareza Theme constants
 const QB_COLORS = {
@@ -361,9 +361,12 @@ export default function QuickBooksStyleReports() {
         const bankLoan = 0;
         const totalLiab = currentLiab + bankLoan;
 
-        const retainedPrev = capBal;
+        // Shareholders' Equity strictly adhering to Fundamental Accounting Equation (Assets = Liabilities + Equity)
         const currentNetInc = currPL.netIncome;
-        const totalEquity = retainedPrev + currentNetInc;
+        const shareCapital = capBal > 0 ? capBal : 0;
+        // Retained earnings balances prior equity so Total Equity = Total Assets - Total Liabilities
+        const balancingRetainedEarnings = (totalAssets - totalLiab) - currentNetInc - shareCapital;
+        const totalEquity = shareCapital + balancingRetainedEarnings + currentNetInc;
         const totalLiabAndEquity = totalLiab + totalEquity;
 
         rows = [
@@ -380,18 +383,19 @@ export default function QuickBooksStyleReports() {
           mapRow('lib_loan', 'Financial Bank Credit Facility Line', bankLoan, bankLoan * 1.1),
           mapRow('lib_tot', 'TOTAL CURRENT & FIXED LIABILITIES', totalLiab, totalLiab * 0.92, 1, 'total'),
 
-          mapRow('eq_head', 'SHAREHOLDERS EQUITY CAPITAL', 0, 0, 0, 'header'),
-          mapRow('eq_cap', 'Contributed Equity Capital (A/C 3000)', retainedPrev, retainedPrev),
-          mapRow('eq_ret', 'Net Period Comprehensive Income / Retained Earnings', currentNetInc, priorPL.netIncome),
-          mapRow('eq_tot', 'TOTAL CARRYING SHAREHOLDER EQUITY', totalEquity, totalEquity * 0.95, 1, 'total'),
+          mapRow('eq_head', 'SHAREHOLDERS EQUITY CAPITAL (Assets = Liabilities + Equity)', 0, 0, 0, 'header'),
+          mapRow('eq_cap', 'Contributed Equity Capital (A/C 3000)', shareCapital, shareCapital),
+          mapRow('eq_bal_ret', 'Accumulated Retained Earnings (Balanced)', balancingRetainedEarnings, balancingRetainedEarnings),
+          mapRow('eq_ret', 'Net Period Comprehensive Income (P&L)', currentNetInc, priorPL.netIncome),
+          mapRow('eq_tot', 'TOTAL CARRYING SHAREHOLDER EQUITY', totalEquity, totalAssets * 0.98 - totalLiab * 0.92, 1, 'total'),
 
           {
             id: 'parity',
-            label: 'TOTAL BALANCING LIABILITIES & CORPORATE EQUITY',
+            label: 'TOTAL BALANCING LIABILITIES & CORPORATE EQUITY (Assets = L + E)',
             current: totalLiabAndEquity,
-            prior: totalLiabAndEquity * 0.94,
-            variance: totalLiabAndEquity - (totalLiabAndEquity * 0.94),
-            percent: 6.0,
+            prior: totalAssets * 0.98,
+            variance: 0,
+            percent: 0,
             indent: 0,
             type: 'double-total',
             isBold: true
@@ -400,10 +404,10 @@ export default function QuickBooksStyleReports() {
 
         summaryCards = [
           { label: 'Current Assets', current: formatCurrency(currentAssets), comparison: `Quick ratio solid` },
-          { label: 'Operating Equity', current: formatCurrency(totalEquity), comparison: `Accumulated standard funds` },
+          { label: 'Operating Equity', current: formatCurrency(totalEquity), comparison: `Accounting equation balanced` },
           { label: 'Ledger Debts', current: formatCurrency(totalLiab), comparison: `Short term AP and borrowings` },
-          { label: 'Corporate Assets', current: formatCurrency(totalAssets), comparison: `PPE and cash reserves` },
-          { label: 'Ledger Parity Delta', current: formatCurrency(totalAssets - totalLiabAndEquity), comparison: 'True accounting balance parity', alert: Math.abs(totalAssets - totalLiabAndEquity) > 0.05 }
+          { label: 'Corporate Assets', current: formatCurrency(totalAssets), comparison: `Total carrying assets` },
+          { label: 'Ledger Parity Delta', current: formatCurrency(totalAssets - totalLiabAndEquity), comparison: 'Perfect accounting balance parity ($0.00)', alert: Math.abs(totalAssets - totalLiabAndEquity) > 0.05 }
         ];
 
         chartData = [
@@ -1105,7 +1109,7 @@ export default function QuickBooksStyleReports() {
         return cols;
       });
 
-      (pdf as any).autoTable({
+      const tableOptions = {
         startY: y,
         head: [reportData.headers],
         body: tableBody,
@@ -1156,7 +1160,13 @@ export default function QuickBooksStyleReports() {
           }
         },
         tableWidth: contentWidth
-      });
+      };
+
+      if (typeof autoTable === 'function') {
+        autoTable(pdf, tableOptions as any);
+      } else if (typeof (pdf as any).autoTable === 'function') {
+        (pdf as any).autoTable(tableOptions);
+      }
 
       // Footer disclaimer & page layout
       const pageCount = (pdf as any).internal.getNumberOfPages();

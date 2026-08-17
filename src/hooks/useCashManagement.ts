@@ -28,6 +28,8 @@ export interface RegisterSession {
   sales_total?: number;
   refunds_total?: number;
   payouts_total?: number;
+  cogs_total?: number;
+  cogs?: number;
   created_at: string;
 }
 

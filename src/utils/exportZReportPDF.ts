@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { toast } from 'sonner';
 import { RegisterSession, CashLog } from '../hooks/useCashManagement';
 
@@ -32,6 +32,19 @@ export function exportZReportPDF({
       format: 'a4'
     });
 
+    const callAutoTable = (options: any) => {
+      if (typeof autoTable === 'function') {
+        autoTable(doc, options);
+      } else if (typeof (doc as any).autoTable === 'function') {
+        (doc as any).autoTable(options);
+      }
+    };
+
+    const getFinalY = (fallbackY: number): number => {
+      return (doc as any).lastAutoTable?.finalY ?? fallbackY;
+    };
+
+    // Financial Values
     const openingFloat = Number(session.opening_balance || 0);
     const closingBalance = Number(session.closing_balance || 0);
     const expectedBalance = Number(session.expected_balance || 0);
@@ -39,6 +52,56 @@ export function exportZReportPDF({
     const salesTotal = Number(session.sales_total || 0);
     const salesCount = Number(session.sales_count || 0);
     const payoutsTotal = Number(session.payouts_total || 0);
+
+    // Filter cash management movement logs into Operating Expenses vs Owner Cash Drops
+    let operatingExpensesTotal = 0;
+    let ownerDropsTotal = 0;
+    let cashInsTotal = 0;
+
+    if (auditLogs && auditLogs.length > 0) {
+      auditLogs.forEach((log: any) => {
+        const amt = Math.abs(Number(log.amount || 0));
+        const tType = String(log.transaction_type || '').toLowerCase();
+        const lType = String(log.type || '').toLowerCase();
+
+        // Categorize Owner Cash Drops (Non-expense, Equity / Safe Transfer)
+        if (
+          tType === 'owner_collection' || 
+          tType === 'drop' || 
+          tType === 'drawer_drop' || 
+          tType === 'safe_drop' || 
+          lType === 'drop'
+        ) {
+          ownerDropsTotal += amt;
+        } 
+        // Categorize Operating Till Expenses (Recorded in Cash Management)
+        else if (
+          tType === 'expense' || 
+          tType === 'payout' || 
+          tType === 'restock' || 
+          (lType === 'payout' && tType !== 'owner_collection')
+        ) {
+          operatingExpensesTotal += amt;
+        } 
+        else if (tType === 'cash_in' || lType === 'payin' || lType === 'inflow') {
+          cashInsTotal += amt;
+        }
+      });
+    } else {
+      // Fallback if raw logs are not passed
+      operatingExpensesTotal = payoutsTotal;
+    }
+
+    // Perpetual Inventory Method for Cost of Goods Sold (COGS)
+    // In perpetual inventory, COGS is matched continuously per transaction
+    const cogsTotal = Number(session.cogs_total || session.cogs || 0);
+    const grossProfit = salesTotal - cogsTotal;
+    const grossMarginPct = salesTotal > 0 ? (grossProfit / salesTotal) * 100 : 0;
+
+    // Operating Net Profit = Gross Profit (Perpetual Method) - Operating Expenses (Cash Management)
+    // Note: Owner cash drops are excluded from expenses
+    const netProfit = grossProfit - operatingExpensesTotal;
+    const netMarginPct = salesTotal > 0 ? (netProfit / salesTotal) * 100 : 0;
 
     const referenceCode = session.id 
       ? (session.id.startsWith('off-shift-') 
@@ -57,26 +120,26 @@ export function exportZReportPDF({
     // Title & Branding
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.text(businessName.toUpperCase(), 14, 12);
+    doc.setFontSize(15);
+    doc.text(businessName.toUpperCase(), 14, 11);
 
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(212, 212, 216);
-    doc.text(`BRANCH: ${branchName.toUpperCase()} | CLOSED REGISTER AUDIT REPORT (Z-REPORT)`, 14, 18);
-    doc.text(`AUDIT REF: ${referenceCode} | STATUS: ${session.status || 'CLOSED'}`, 14, 24);
+    doc.text(`BRANCH: ${branchName.toUpperCase()} | CLOSED REGISTER AUDIT REPORT (Z-REPORT)`, 14, 17);
+    doc.text(`AUDIT REF: ${referenceCode} | STATUS: ${session.status || 'CLOSED'}`, 14, 23);
 
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setFont('helvetica', 'normal');
-    doc.text(`ISSUED: ${generatedAtStr}`, 196, 24, { align: 'right' });
+    doc.text(`ISSUED: ${generatedAtStr}`, 196, 23, { align: 'right' });
 
     // 2. Metadata Box
-    let y = 38;
+    let y = 36;
     doc.setFillColor(248, 250, 252);
     doc.setDrawColor(226, 232, 240);
     doc.roundedRect(14, y, 182, 22, 2, 2, 'FD');
 
-    doc.setFontSize(8.5);
+    doc.setFontSize(8);
     doc.setTextColor(51, 65, 85);
 
     // Left Column
@@ -86,14 +149,14 @@ export function exportZReportPDF({
     doc.text(operatorName, 55, y + 6);
 
     doc.setFont('helvetica', 'bold');
-    doc.text('Supervisor / Auditor:', 18, y + 12);
+    doc.text('Supervisor / Auditor:', 18, y + 11.5);
     doc.setFont('helvetica', 'normal');
-    doc.text(supervisorName, 55, y + 12);
+    doc.text(supervisorName, 55, y + 11.5);
 
     doc.setFont('helvetica', 'bold');
-    doc.text('Register Shift ID:', 18, y + 18);
+    doc.text('Register Shift ID:', 18, y + 17);
     doc.setFont('helvetica', 'normal');
-    doc.text(session.id || 'N/A', 55, y + 18);
+    doc.text(session.id || 'N/A', 55, y + 17);
 
     // Right Column
     doc.setFont('helvetica', 'bold');
@@ -102,29 +165,93 @@ export function exportZReportPDF({
     doc.text(openedAtStr, 140, y + 6);
 
     doc.setFont('helvetica', 'bold');
-    doc.text('Closed At:', 115, y + 12);
+    doc.text('Closed At:', 115, y + 11.5);
     doc.setFont('helvetica', 'normal');
-    doc.text(closedAtStr, 140, y + 12);
+    doc.text(closedAtStr, 140, y + 11.5);
 
     doc.setFont('helvetica', 'bold');
-    doc.text('Document Type:', 115, y + 18);
+    doc.text('Accounting Method:', 115, y + 17);
     doc.setFont('helvetica', 'normal');
-    doc.text('Certified Z-Report', 140, y + 18);
+    doc.text('Perpetual Inventory / Cash Reconciled', 140, y + 17);
 
-    y += 28;
+    y += 26;
 
-    // 3. Financial Reconciliation Section Title
+    // 3. Section 1: Shift Financial Profitability (Perpetual Method)
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(10);
     doc.setTextColor(15, 23, 42);
-    doc.text('1. SHIFT CASH RECONCILIATION FINANCIAL SUMMARY', 14, y);
-    y += 3;
+    doc.text('1. SHIFT OPERATIONAL PROFITABILITY (PERPETUAL METHOD)', 14, y);
+    y += 2.5;
 
-    // Financial Reconciliation Table
+    const profitabilityRows = [
+      ['Gross Sales Revenue (Point of Sale)', `$${salesTotal.toFixed(2)}`, '100.0%'],
+      ['Cost of Goods Sold (Perpetual Inventory Method)', `-$${cogsTotal.toFixed(2)}`, salesTotal > 0 ? `${((cogsTotal / salesTotal) * 100).toFixed(1)}%` : '0.0%'],
+      ['GROSS PROFIT MARGIN', `$${grossProfit.toFixed(2)}`, `${grossMarginPct.toFixed(1)}%`],
+      ['Operating Expenses Recorded in Cash Management', `-$${operatingExpensesTotal.toFixed(2)}`, salesTotal > 0 ? `${((operatingExpensesTotal / salesTotal) * 100).toFixed(1)}%` : '0.0%'],
+      ['NET OPERATING PROFIT FOR SHIFT', `$${netProfit.toFixed(2)}`, `${netMarginPct.toFixed(1)}%`],
+      ['* Cash Drops Collected by Owner (Equity Drawing / Safe Transfer - Not an Expense)', `$${ownerDropsTotal.toFixed(2)}`, 'Excluded']
+    ];
+
+    callAutoTable({
+      startY: y,
+      margin: { left: 14, right: 14 },
+      head: [['Financial Profitability Line Item', 'Amount (USD)', 'Margin %']],
+      body: profitabilityRows,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [30, 41, 59],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 8
+      },
+      styles: {
+        fontSize: 8,
+        cellPadding: 1.8,
+        textColor: [30, 41, 59]
+      },
+      columnStyles: {
+        0: { cellWidth: 120, fontStyle: 'normal' },
+        1: { cellWidth: 38, halign: 'right', fontStyle: 'bold' },
+        2: { cellWidth: 24, halign: 'right', fontStyle: 'normal' }
+      },
+      didParseCell: (data: any) => {
+        if (data.row.index === 2) { // Gross profit
+          data.cell.styles.fillColor = [240, 253, 244];
+          data.cell.styles.textColor = [22, 101, 52];
+          data.cell.styles.fontStyle = 'bold';
+        }
+        if (data.row.index === 4) { // Net profit
+          if (netProfit >= 0) {
+            data.cell.styles.fillColor = [236, 253, 245];
+            data.cell.styles.textColor = [6, 95, 70];
+          } else {
+            data.cell.styles.fillColor = [254, 242, 242];
+            data.cell.styles.textColor = [153, 27, 27];
+          }
+          data.cell.styles.fontStyle = 'bold';
+        }
+        if (data.row.index === 5) { // Owner collection note
+          data.cell.styles.fillColor = [248, 250, 252];
+          data.cell.styles.textColor = [100, 116, 139];
+          data.cell.styles.fontStyle = 'italic';
+        }
+      }
+    });
+
+    y = getFinalY(y + 35) + 6;
+
+    // 4. Section 2: Cash Drawer Reconciliation Summary
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.text('2. SHIFT CASH DRAWER RECONCILIATION SUMMARY', 14, y);
+    y += 2.5;
+
     const reconciliationRows = [
       ['Opening Cash Float', `$${openingFloat.toFixed(2)}`],
-      [`Total Gross Cash Sales (${salesCount} transactions)`, `+$${salesTotal.toFixed(2)}`],
-      ['Total Till Payouts / Micro-Expenses', `-$${payoutsTotal.toFixed(2)}`],
+      [`Total Cash Sales Collected (${salesCount} transactions)`, `+$${salesTotal.toFixed(2)}`],
+      ['Total Till Operating Payouts / Expenses', `-$${operatingExpensesTotal.toFixed(2)}`],
+      ['Cash Drops Collected by Owner / Safe Transfer', `-$${ownerDropsTotal.toFixed(2)}`],
       ['Expected Drawer Balance', `$${expectedBalance.toFixed(2)}`],
       ['Actual Counted Cash at Closure', `$${closingBalance.toFixed(2)}`],
       [
@@ -137,21 +264,21 @@ export function exportZReportPDF({
       ]
     ];
 
-    (doc as any).autoTable({
+    callAutoTable({
       startY: y,
       margin: { left: 14, right: 14 },
-      head: [['Reconciliation Item / Metric', 'Amount (USD)']],
+      head: [['Reconciliation Item / Cash Metric', 'Amount (USD)']],
       body: reconciliationRows,
       theme: 'grid',
       headStyles: {
         fillColor: [39, 39, 42],
         textColor: [255, 255, 255],
         fontStyle: 'bold',
-        fontSize: 8.5
+        fontSize: 8
       },
       styles: {
-        fontSize: 8.5,
-        cellPadding: 2.2,
+        fontSize: 8,
+        cellPadding: 1.8,
         textColor: [30, 41, 59]
       },
       columnStyles: {
@@ -159,12 +286,11 @@ export function exportZReportPDF({
         1: { cellWidth: 52, halign: 'right', fontStyle: 'bold' }
       },
       didParseCell: (data: any) => {
-        // Style specific rows
-        if (data.row.index === 3 || data.row.index === 4) {
+        if (data.row.index === 4 || data.row.index === 5) {
           data.cell.styles.fillColor = [241, 245, 249];
           data.cell.styles.fontStyle = 'bold';
         }
-        if (data.row.index === 5) { // Variance row
+        if (data.row.index === 6) { // Variance row
           if (variance < 0) {
             data.cell.styles.fillColor = [254, 226, 226];
             data.cell.styles.textColor = [153, 27, 27];
@@ -180,15 +306,21 @@ export function exportZReportPDF({
       }
     });
 
-    y = (doc as any).lastAutoTable.finalY + 8;
+    y = getFinalY(y + 35) + 6;
 
-    // 4. Cash Movement Audit Trail Table (if logs exist)
+    // 5. Section 3: Cash Movement Audit Trail Table (if logs exist)
     if (auditLogs && auditLogs.length > 0) {
+      // Check space
+      if (y > 215) {
+        doc.addPage();
+        y = 20;
+      }
+
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
+      doc.setFontSize(10);
       doc.setTextColor(15, 23, 42);
-      doc.text('2. TILL CASH MOVEMENT AUDIT TRAIL', 14, y);
-      y += 3;
+      doc.text('3. TILL CASH MOVEMENT AUDIT TRAIL', 14, y);
+      y += 2.5;
 
       const logRows = auditLogs.map((log: any) => {
         const timeStr = log.created_at ? new Date(log.created_at).toLocaleTimeString() : '—';
@@ -200,7 +332,7 @@ export function exportZReportPDF({
         return [timeStr, typeStr, notesStr, amountStr];
       });
 
-      (doc as any).autoTable({
+      callAutoTable({
         startY: y,
         margin: { left: 14, right: 14 },
         head: [['Time', 'Event / Type', 'Audit Notes / Reason', 'Amount']],
@@ -210,81 +342,81 @@ export function exportZReportPDF({
           fillColor: [51, 65, 85],
           textColor: [255, 255, 255],
           fontStyle: 'bold',
-          fontSize: 8
+          fontSize: 7.5
         },
         styles: {
-          fontSize: 8,
-          cellPadding: 2,
+          fontSize: 7.5,
+          cellPadding: 1.6,
           textColor: [51, 65, 85]
         },
         columnStyles: {
-          0: { cellWidth: 26 },
-          1: { cellWidth: 36, fontStyle: 'bold' },
-          2: { cellWidth: 88 },
-          3: { cellWidth: 32, halign: 'right', fontStyle: 'bold' }
+          0: { cellWidth: 24 },
+          1: { cellWidth: 38, fontStyle: 'bold' },
+          2: { cellWidth: 90 },
+          3: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
         }
       });
 
-      y = (doc as any).lastAutoTable.finalY + 8;
+      y = getFinalY(y + 30) + 6;
     }
 
-    // Check page space for signatures
-    if (y > 230) {
+    // Check space for signatures
+    if (y > 235) {
       doc.addPage();
-      y = 25;
+      y = 20;
     }
 
-    // 5. Signatures & Compliance Verification
+    // 6. Section 4: Signatures & Compliance Verification
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
+    doc.setFontSize(9.5);
     doc.setTextColor(15, 23, 42);
-    doc.text('3. COMPLIANCE SIGN-OFF & CERTIFICATION', 14, y);
-    y += 5;
+    doc.text('4. COMPLIANCE SIGN-OFF & DUAL CERTIFICATION', 14, y);
+    y += 4;
 
     // Box for signatures
     doc.setDrawColor(203, 213, 225);
-    doc.roundedRect(14, y, 182, 36, 2, 2, 'D');
+    doc.roundedRect(14, y, 182, 34, 2, 2, 'D');
 
     // Operator Sign Column
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
+    doc.setFontSize(8);
     doc.setTextColor(15, 23, 42);
-    doc.text('Cashier / Register Operator', 20, y + 6);
+    doc.text('Cashier / Register Operator', 20, y + 5.5);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFontSize(7);
     doc.setTextColor(100, 116, 139);
-    doc.text(`Name: ${operatorName}`, 20, y + 11);
-    doc.text('I certify that counted cash and drawer movements are true.', 20, y + 15);
+    doc.text(`Name: ${operatorName}`, 20, y + 10);
+    doc.text('I certify that counted cash and drawer movements are true.', 20, y + 14);
     doc.setDrawColor(100, 116, 139);
-    doc.line(20, y + 27, 95, y + 27);
-    doc.text('Signature & Date', 20, y + 31);
+    doc.line(20, y + 25, 95, y + 25);
+    doc.text('Signature & Date', 20, y + 29);
 
     // Supervisor Sign Column
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
+    doc.setFontSize(8);
     doc.setTextColor(15, 23, 42);
-    doc.text('Supervisor / Auditor', 110, y + 6);
+    doc.text('Supervisor / Auditor', 110, y + 5.5);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFontSize(7);
     doc.setTextColor(100, 116, 139);
-    doc.text(`Name: ${supervisorName}`, 110, y + 11);
-    doc.text('Verified for store accounting compliance & general ledger entry.', 110, y + 15);
-    doc.line(110, y + 27, 185, y + 27);
-    doc.text('Signature & Date', 110, y + 31);
+    doc.text(`Name: ${supervisorName}`, 110, y + 10);
+    doc.text('Verified for store accounting compliance & general ledger entry.', 110, y + 14);
+    doc.line(110, y + 25, 185, y + 25);
+    doc.text('Signature & Date', 110, y + 29);
 
-    // 6. Footer on all pages
+    // 7. Footer on all pages
     const pageCount = (doc as any).internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
+      doc.setFontSize(7);
       doc.setTextColor(148, 163, 184);
       doc.text(
         'Official Closed Register Z-Report Document • Tareza ERP Enterprise Audit & Compliance System',
         14,
-        288
+        289
       );
-      doc.text(`Page ${i} of ${pageCount}`, 196, 288, { align: 'right' });
+      doc.text(`Page ${i} of ${pageCount}`, 196, 289, { align: 'right' });
     }
 
     // Save File

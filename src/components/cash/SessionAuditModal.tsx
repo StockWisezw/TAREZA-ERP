@@ -71,7 +71,41 @@ export function SessionAuditModal({
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
-          {/* Summary Grid */}
+          {/* Shift Operational Profitability Grid */}
+          <div className="bg-zinc-50 dark:bg-zinc-800/50 p-3 rounded-xl border border-zinc-200 dark:border-zinc-700 space-y-2">
+            <span className="text-[11px] uppercase tracking-wider text-zinc-500 dark:text-zinc-400 font-bold block">
+              Shift Profitability (Perpetual Method)
+            </span>
+            <div className="grid grid-cols-4 gap-2 text-xs">
+              <div>
+                <span className="text-[10px] text-zinc-400 block font-semibold">Gross Sales</span>
+                <span className="font-bold text-zinc-900 dark:text-zinc-100">${Number(session.sales_total || 0).toFixed(2)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-zinc-400 block font-semibold">Perpetual COGS</span>
+                <span className="font-bold text-rose-600">-${Number(session.cogs_total || session.cogs || 0).toFixed(2)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-zinc-400 block font-semibold">Gross Profit</span>
+                <span className="font-bold text-emerald-600">
+                  ${(Number(session.sales_total || 0) - Number(session.cogs_total || session.cogs || 0)).toFixed(2)}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-zinc-400 block font-semibold">Net Profit</span>
+                <span className="font-bold text-blue-600">
+                  ${(
+                    (Number(session.sales_total || 0) - Number(session.cogs_total || session.cogs || 0)) -
+                    auditLogs
+                      .filter(l => ['expense', 'payout', 'restock'].includes(String(l.transaction_type || '').toLowerCase()) && String(l.transaction_type) !== 'owner_collection')
+                      .reduce((sum, l) => sum + Number(l.amount || 0), 0)
+                  ).toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Cash Reconciliation Grid */}
           <div className="grid grid-cols-3 gap-2 bg-zinc-50 dark:bg-zinc-800/50 p-3 rounded-xl border border-zinc-200 dark:border-zinc-700">
             <div>
               <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-bold block">Opening Float</span>
