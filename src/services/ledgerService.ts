@@ -39,13 +39,25 @@ export async function initializeChartOfAccounts(businessId: string): Promise<voi
 
     const defaultAccounts = [
       { code: '1000', name: 'Main POS Cash Till', type: 'Asset', balance: 0, is_system: true },
-      { code: '1100', name: 'Accounts Receivable', type: 'Asset', balance: 0, is_system: true },
+      { code: '1050', name: 'Bank Operating Current Account', type: 'Asset', balance: 0, is_system: true },
+      { code: '1100', name: 'Accounts Receivable (A/R)', type: 'Asset', balance: 0, is_system: true },
       { code: '1200', name: 'Merchandise Inventory Account', type: 'Asset', balance: 0, is_system: true },
-      { code: '2000', name: 'Accounts Payable', type: 'Liability', balance: 0, is_system: true },
+      { code: '1500', name: 'Fixed Assets - Property, Plant & Equipment', type: 'Asset', balance: 0, is_system: true },
+      { code: '1510', name: 'Accumulated Depreciation Allowance', type: 'Asset', balance: 0, is_system: true },
+      { code: '2000', name: 'Accounts Payable (A/P)', type: 'Liability', balance: 0, is_system: true },
+      { code: '2100', name: 'VAT & Sales Tax Payable', type: 'Liability', balance: 0, is_system: true },
+      { code: '2200', name: 'Payroll Tax & PAYE Payable', type: 'Liability', balance: 0, is_system: true },
+      { code: '2210', name: 'Pension & NSSA Social Security Payable', type: 'Liability', balance: 0, is_system: true },
+      { code: '2300', name: 'Accrued Expenses & Benefits Payable', type: 'Liability', balance: 0, is_system: true },
       { code: '3000', name: 'Shareholders Retained Equity', type: 'Equity', balance: 0, is_system: true },
       { code: '4000', name: 'Sales Revenue Account', type: 'Revenue', balance: 0, is_system: true },
+      { code: '4100', name: 'Service & Consultation Revenue', type: 'Revenue', balance: 0, is_system: true },
       { code: '5000', name: 'Cost of Goods Sold (COGS)', type: 'Expense', balance: 0, is_system: true },
-      { code: '6000', name: 'Operating and Cash Expenses', type: 'Expense', balance: 0, is_system: true }
+      { code: '6000', name: 'Operating and Administrative Expenses', type: 'Expense', balance: 0, is_system: true },
+      { code: '6100', name: 'Salaries & Wages Expense', type: 'Expense', balance: 0, is_system: true },
+      { code: '6120', name: 'Staff Allowances & Commuter Benefits', type: 'Expense', balance: 0, is_system: true },
+      { code: '6200', name: 'Rent & Municipal Utilities Expense', type: 'Expense', balance: 0, is_system: true },
+      { code: '6500', name: 'Depreciation & Amortization Expense', type: 'Expense', balance: 0, is_system: true }
     ];
 
     const accountsToInsert = defaultAccounts.map((acct) => ({

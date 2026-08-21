@@ -7,6 +7,7 @@ import { usePOSStore } from '../store/posStore';
 
 type AuthUser = {
   $id: string;
+  id?: string;
   email: string;
 };
 
@@ -47,6 +48,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (session?.user) {
         const newUser: AuthUser = {
           $id: session.user.id,
+          id: session.user.id,
           email: session.user.email || '',
         };
         setUser(newUser);
@@ -79,6 +81,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (session?.user) {
         const newUser: AuthUser = {
           $id: session.user.id,
+          id: session.user.id,
           email: session.user.email || '',
         };
         setUser(newUser);

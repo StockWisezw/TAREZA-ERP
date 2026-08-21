@@ -14,6 +14,7 @@ export type FeatureKey =
   | 'support'
   | 'cash'
   | 'accounting'
+  | 'hr'
   | 'coa'
   | 'reports'
   | 'messenger'
@@ -34,7 +35,8 @@ export const FEATURE_TIERS: Record<FeatureKey, { tier: 'STARTER' | 'PRO' | 'ENTE
   support: { tier: 'STARTER', title: 'Help & Support' },
 
   cash: { tier: 'PRO', title: 'Cash Management & Blind Till Audits' },
-  accounting: { tier: 'PRO', title: 'Double-Entry Journal Ledgers' },
+  accounting: { tier: 'PRO', title: 'Corporate Accounting & Double-Entry Ledgers' },
+  hr: { tier: 'PRO', title: 'Human Resources & Automated Payroll' },
   coa: { tier: 'PRO', title: 'Chart of Accounts' },
   reports: { tier: 'PRO', title: 'Financial Analytics & Profit Reports' },
   messenger: { tier: 'PRO', title: 'Staff Internal Messenger' },

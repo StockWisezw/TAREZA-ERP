@@ -25,6 +25,7 @@ const ChartOfAccounts = React.lazy(() => import('./pages/ChartOfAccounts'));
 const Reports = React.lazy(() => import('./pages/Reports'));
 const CashManagement = React.lazy(() => import('./pages/CashManagement'));
 const Accounting = React.lazy(() => import('./pages/Accounting'));
+const HRPayroll = React.lazy(() => import('./pages/HRPayroll'));
 const Messenger = React.lazy(() => import('./pages/Messenger'));
 const Roadmap = React.lazy(() => import('./pages/Roadmap'));
 const Support = React.lazy(() => import('./pages/Support'));
@@ -94,6 +95,7 @@ export default function App() {
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/cash" element={<CashManagement />} />
                   <Route path="/accounting" element={<Accounting />} />
+                  <Route path="/hr" element={<HRPayroll />} />
                   <Route path="/messenger" element={<Messenger />} />
                   <Route path="/roadmap" element={<Roadmap />} />
                   <Route path="/support" element={<Support />} />
