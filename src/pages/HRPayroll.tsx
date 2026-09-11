@@ -42,6 +42,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useBusinessStore } from '../store';
 import { useSubscription } from '../hooks/useSubscription';
 import { PremiumLockBanner } from '../components/common/PremiumBadge';
+import { triggerBrowserPrint } from '../utils/printManager';
 
 export default function HRPayroll() {
   const { user } = useAuth();
@@ -253,6 +254,15 @@ export default function HRPayroll() {
           </Button>
 
           <Button 
+            variant="outline" 
+            size="sm" 
+            className="bg-white text-zinc-800 cursor-pointer"
+            onClick={() => triggerBrowserPrint()}
+          >
+            <Printer className="w-4 h-4 mr-1.5 text-zinc-600" /> Print Summary
+          </Button>
+
+          <Button 
             size="sm" 
             variant="outline" 
             className="bg-white text-zinc-800"
@@ -449,6 +459,15 @@ export default function HRPayroll() {
                   <option value="Inventory & Logistics">Inventory & Logistics</option>
                   <option value="Management">Management</option>
                 </select>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="bg-white text-zinc-700 border-zinc-250 hover:bg-zinc-50 cursor-pointer h-8 text-xs"
+                  onClick={() => hrService.exportStaffDirectoryPDF(filteredEmployees, businessName)}
+                >
+                  <Download className="w-3.5 h-3.5 mr-1 text-indigo-600" /> Export Staff PDF
+                </Button>
               </div>
             </div>
 
@@ -545,6 +564,15 @@ export default function HRPayroll() {
               </div>
 
               <div className="flex items-center gap-2">
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  className="bg-white text-zinc-700 border-zinc-250 hover:bg-zinc-50 cursor-pointer h-8 text-xs"
+                  onClick={() => hrService.exportAttendanceSheetPDF(attendance, businessName)}
+                >
+                  <Download className="w-3.5 h-3.5 mr-1 text-indigo-600" /> Export Sheet PDF
+                </Button>
+
                 <Button 
                   size="sm" 
                   className="bg-zinc-900 text-white text-xs"
@@ -691,9 +719,19 @@ export default function HRPayroll() {
               </div>
 
               <div className="flex items-center gap-2">
+                {visiblePayslips.length > 0 && (
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="bg-white text-zinc-700 border-zinc-300 hover:bg-zinc-50 cursor-pointer h-8 text-xs font-semibold"
+                    onClick={() => hrService.exportPayrollBatchPDF(visiblePayslips, payrollMonth, businessName)}
+                  >
+                    <Download className="w-3.5 h-3.5 mr-1 text-indigo-600" /> Export Register PDF
+                  </Button>
+                )}
                 <Button 
                   size="sm" 
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer h-8 text-xs"
                   onClick={() => setShowPayrollModal(true)}
                 >
                   <DollarSign className="w-4 h-4 mr-1" /> Run Monthly Payroll

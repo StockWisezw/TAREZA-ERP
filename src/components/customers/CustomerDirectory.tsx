@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, MoreHorizontal, Mail, Phone, MapPin, Star, Building2, User, Plus, Download, Printer } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, Mail, Phone, MapPin, Star, Building2, User, Plus, Download, Printer, FileText } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -19,8 +19,12 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescri
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { supabase } from '../../lib/firebaseClient';
 import { toast } from 'sonner';
+import { useBusinessStore } from '../../store';
+import { exportCustomerStatementPDF } from '../../utils/exportCustomerStatementPDF';
+import { triggerBrowserPrint } from '../../utils/printManager';
 
 export function CustomerDirectory() {
+  const { currentBusiness, activeBranch } = useBusinessStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -186,6 +190,23 @@ export function CustomerDirectory() {
     setIsProfileOpen(true);
   };
 
+  const term = searchTerm.toLowerCase();
+  const filteredAndSorted = [...customers]
+    .filter(c => 
+      c.name?.toLowerCase().includes(term) ||
+      c.email?.toLowerCase().includes(term) ||
+      c.phone?.toLowerCase().includes(term)
+    )
+    .sort((a, b) => {
+      let valA = a[sortColumn];
+      let valB = b[sortColumn];
+      if (typeof valA === 'string') valA = valA.toLowerCase();
+      if (typeof valB === 'string') valB = valB.toLowerCase();
+      if (valA < valB) return sortAscending ? -1 : 1;
+      if (valA > valB) return sortAscending ? 1 : -1;
+      return 0;
+    });
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -211,8 +232,31 @@ export function CustomerDirectory() {
             </DropdownMenuContent>
           </DropdownMenu>
           
-          <Button variant="outline" className="bg-white shadow-sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Print</Button>
-          <Button variant="outline" className="bg-white shadow-sm" onClick={exportCSV}><Download className="mr-2 h-4 w-4" /> Export</Button>
+          <Button variant="outline" className="bg-white shadow-sm cursor-pointer" onClick={() => triggerBrowserPrint()}><Printer className="mr-2 h-4 w-4" /> Print</Button>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger 
+              render={
+                <Button variant="outline" className="bg-white shadow-sm cursor-pointer">
+                  <Download className="mr-2 h-4 w-4" /> Export
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem 
+                onClick={() => exportCustomerStatementPDF({
+                  customers: filteredAndSorted,
+                  businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
+                  branchName: activeBranch?.name || 'Main Branch'
+                })}
+              >
+                <Download className="w-4 h-4 mr-2 text-indigo-600" /> Customer Directory (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportCSV}>
+                <Download className="w-4 h-4 mr-2 text-emerald-600" /> Spreadsheet Data (CSV)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
@@ -278,37 +322,14 @@ export function CustomerDirectory() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(() => {
-                const term = searchTerm.toLowerCase();
-                const filteredAndSorted = [...customers]
-                  .filter(c => 
-                    c.name?.toLowerCase().includes(term) ||
-                    c.email?.toLowerCase().includes(term) ||
-                    c.phone?.toLowerCase().includes(term)
-                  )
-                  .sort((a, b) => {
-                    let valA = a[sortColumn];
-                    let valB = b[sortColumn];
-                    if (typeof valA === 'string') valA = valA.toLowerCase();
-                    if (typeof valB === 'string') valB = valB.toLowerCase();
-                    if (valA === undefined || valA === null) valA = '';
-                    if (valB === undefined || valB === null) valB = '';
-                    if (valA < valB) return sortAscending ? -1 : 1;
-                    if (valA > valB) return sortAscending ? 1 : -1;
-                    return 0;
-                  });
-
-                if (filteredAndSorted.length === 0) {
-                  return (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-zinc-500">
-                        No customers matches search criteria.
-                      </TableCell>
-                    </TableRow>
-                  );
-                }
-
-                return filteredAndSorted.map((cust) => (
+              {filteredAndSorted.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8 text-zinc-500">
+                    No customers matches search criteria.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredAndSorted.map((cust) => (
                   <TableRow key={cust.id} className="hover:bg-zinc-50/50 cursor-pointer group" onClick={() => openProfile(cust)}>
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -351,15 +372,23 @@ export function CustomerDirectory() {
                             </Button>
                           }
                         />
-                        <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onClick={() => openProfile(cust)}>View Profile</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDelete(cust.id)} className="text-red-600">Delete Customer</DropdownMenuItem>
-                      </DropdownMenuContent>
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuItem onClick={() => openProfile(cust)}>View Profile</DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => exportCustomerStatementPDF({
+                              specificCustomer: cust,
+                              businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
+                              branchName: activeBranch?.name || 'Main Branch'
+                            })}
+                          >
+                            <FileText className="w-4 h-4 mr-2 text-indigo-600" /> Statement of Account (PDF)
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDelete(cust.id)} className="text-red-600">Delete Customer</DropdownMenuItem>
+                        </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ));
-            })()}
+              )))}
             </TableBody>
           </ShadcnTable>
         </div>

@@ -238,30 +238,115 @@
   border: 2px solid #ffffff !important;
 }
 
-/* Global Print Styles for Receipts and Closed Register Audit Reports */
+/* Global Print Styles for Receipts, Documents, and Closed Register Audit Reports */
 @media print {
   @page {
-    margin: 10mm;
+    margin: 8mm;
+    size: auto;
   }
-  body {
+
+  /* Reset layout constraints so contents flow without clipping or overflow traps */
+  html, body {
     background-color: #ffffff !important;
     color: #000000 !important;
-    font-size: 12pt;
+    font-size: 11pt;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
-  .print\:hidden {
+
+  #root, #root > div, main {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+  }
+
+  /* Hide interactive application chrome */
+  header, aside, nav, footer,
+  [data-sonner-toaster],
+  .no-print,
+  .print\:hidden,
+  button:not(.print\:inline-block),
+  input:not([type="checkbox"]),
+  select,
+  .fixed.bottom-0 {
     display: none !important;
   }
+
+  /* Ensure print blocks are clearly displayed */
   .print\:block {
     display: block !important;
+    visibility: visible !important;
   }
+
+  .print\:flex {
+    display: flex !important;
+    visibility: visible !important;
+  }
+
+  .print\:inline-block {
+    display: inline-block !important;
+    visibility: visible !important;
+  }
+
   /* Remove dark mode or modal backdrops when printing */
+  [data-radix-dialog-overlay],
+  [data-radix-portal] > [data-state="open"]:not([role="dialog"]) {
+    display: none !important;
+    background: transparent !important;
+  }
+
   div[role="dialog"] {
     position: static !important;
     max-width: 100% !important;
+    width: 100% !important;
     box-shadow: none !important;
     border: none !important;
     background: #ffffff !important;
     color: #000000 !important;
     padding: 0 !important;
+    margin: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    transform: none !important;
+    left: auto !important;
+    top: auto !important;
+  }
+
+  /* Radix Dialog Content scrollable areas */
+  [data-radix-scroll-area-viewport] {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* High fidelity tabular printing */
+  table {
+    page-break-inside: auto;
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tfoot {
+    display: table-footer-group;
   }
 }

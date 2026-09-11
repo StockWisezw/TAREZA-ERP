@@ -21,6 +21,8 @@ import { supabase } from '../../lib/firebaseClient';
 import { toast } from 'sonner';
 import { ProductSchema } from '../../utils/validation';
 import { useBusinessStore } from '../../store';
+import { exportInventoryPDF } from '../../utils/exportInventoryPDF';
+import { triggerBrowserPrint } from '../../utils/printManager';
 
 const getPackSize = (sku: string | undefined): number => {
   if (!sku) return 1;
@@ -33,7 +35,7 @@ interface ProductListProps {
 }
 
 export function ProductList({ onImportClick }: ProductListProps) {
-  const { activeBranch } = useBusinessStore();
+  const { activeBranch, currentBusiness } = useBusinessStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1022,8 +1024,70 @@ export function ProductList({ onImportClick }: ProductListProps) {
             <Tag className="mr-2 h-4 w-4 text-indigo-500" />
             Print Price Labels {selectedProductIds.length > 0 && `(${selectedProductIds.length})`}
           </Button>
-          <Button variant="outline" className="bg-white shadow-sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Print</Button>
-          <Button variant="outline" className="bg-white shadow-sm" onClick={exportCSV}><Download className="mr-2 h-4 w-4" /> Export</Button>
+          <Button 
+            variant="outline" 
+            className="bg-white shadow-sm cursor-pointer" 
+            onClick={() => {
+              triggerBrowserPrint({
+                fallbackToPDF: () => {
+                  exportInventoryPDF({
+                    products: filteredProducts,
+                    businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
+                    branchName: activeBranch?.name || 'Main Warehouse',
+                    type: 'valuation'
+                  });
+                }
+              });
+            }}
+          >
+            <Printer className="mr-2 h-4 w-4" /> Print
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger render={
+              <Button variant="outline" className="bg-white shadow-sm hover:bg-zinc-50 flex items-center gap-1.5 cursor-pointer">
+                <Download className="mr-1.5 h-4 w-4 text-blue-600" />
+                <span>Export PDF / Data</span>
+              </Button>
+            } />
+            <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-1.5 shadow-xl rounded-xl">
+              <DropdownMenuItem 
+                className="cursor-pointer text-xs font-semibold py-2"
+                onClick={() => {
+                  exportInventoryPDF({
+                    products: filteredProducts,
+                    businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
+                    branchName: activeBranch?.name || 'Main Warehouse',
+                    type: 'valuation'
+                  });
+                }}
+              >
+                <Download className="mr-2 h-3.5 w-3.5 text-indigo-600" />
+                Stock Valuation Report (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                className="cursor-pointer text-xs font-semibold py-2"
+                onClick={() => {
+                  exportInventoryPDF({
+                    products: filteredProducts,
+                    businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
+                    branchName: activeBranch?.name || 'Main Warehouse',
+                    type: 'pricelist'
+                  });
+                }}
+              >
+                <Download className="mr-2 h-3.5 w-3.5 text-emerald-600" />
+                Retail Price Catalogue (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                className="cursor-pointer text-xs font-semibold py-2"
+                onClick={exportCSV}
+              >
+                <Download className="mr-2 h-3.5 w-3.5 text-zinc-500" />
+                Raw Spreadsheet (CSV)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" className="bg-white shadow-sm"><Filter className="mr-2 h-4 w-4" /> Filter</Button>
           <DropdownMenu>
             <DropdownMenuTrigger render={

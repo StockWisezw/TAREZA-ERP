@@ -940,5 +940,245 @@ export const hrService = {
       console.error('PDF Payslip export error:', e);
       toast.error('Failed to export PDF payslip.');
     }
+  },
+
+  exportStaffDirectoryPDF(employees: Employee[], businessName: string = 'TAREZA ENTERPRISE RETAIL (PVT) LTD') {
+    try {
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const callAutoTable = (options: any) => {
+        if (typeof autoTable === 'function') {
+          autoTable(doc, options);
+        } else if (typeof (doc as any).autoTable === 'function') {
+          (doc as any).autoTable(options);
+        }
+      };
+
+      // Header Banner
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, 297, 28, 'F');
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.text(businessName.toUpperCase(), 14, 12);
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(203, 213, 225);
+      doc.text(`OFFICIAL STAFF PERSONNEL DIRECTORY & HEADCOUNT AUDIT (${employees.length} EMPLOYEES)`, 14, 19);
+      doc.text(`DATE GENERATED: ${new Date().toLocaleDateString()}`, 14, 24);
+
+      const tableRows = employees.map(emp => [
+        emp.employee_code,
+        `${emp.first_name} ${emp.last_name}`,
+        emp.department,
+        emp.job_title,
+        emp.employment_type.replace('_', ' ').toUpperCase(),
+        `$${Number(emp.base_salary).toFixed(2)}`,
+        emp.phone || emp.email || 'N/A',
+        emp.status.toUpperCase()
+      ]);
+
+      callAutoTable({
+        startY: 34,
+        head: [['EMP ID', 'FULL NAME', 'DEPARTMENT', 'DESIGNATION', 'TYPE', 'BASE SALARY', 'CONTACT', 'STATUS']],
+        body: tableRows,
+        theme: 'striped',
+        headStyles: {
+          fillColor: [30, 41, 59],
+          textColor: [255, 255, 255],
+          fontSize: 8,
+          fontStyle: 'bold'
+        },
+        bodyStyles: {
+          fontSize: 7.5,
+          cellPadding: 2.5
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252]
+        }
+      });
+
+      doc.save(`Staff_Directory_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('Official Staff Directory PDF exported successfully!');
+    } catch (e: any) {
+      console.error('Staff Directory PDF export error:', e);
+      toast.error('Failed to export Staff Directory PDF: ' + e.message);
+    }
+  },
+
+  exportPayrollBatchPDF(payslips: Payslip[], payrollMonth: string = 'Current Month', businessName: string = 'TAREZA ENTERPRISE RETAIL (PVT) LTD') {
+    try {
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const callAutoTable = (options: any) => {
+        if (typeof autoTable === 'function') {
+          autoTable(doc, options);
+        } else if (typeof (doc as any).autoTable === 'function') {
+          (doc as any).autoTable(options);
+        }
+      };
+
+      // Header Banner
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, 297, 28, 'F');
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.text(businessName.toUpperCase(), 14, 12);
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(203, 213, 225);
+      doc.text(`MASTER PAYROLL SUMMARY REGISTER — PERIOD: ${payrollMonth.toUpperCase()}`, 14, 19);
+      doc.text(`DATE EXECUTED: ${new Date().toLocaleDateString()} | TOTAL PROCESSED: ${payslips.length} STAFF`, 14, 24);
+
+      let totalGross = 0;
+      let totalTax = 0;
+      let totalPension = 0;
+      let totalDeductions = 0;
+      let totalNet = 0;
+
+      const tableRows = payslips.map(ps => {
+        totalGross += ps.gross_earnings;
+        totalTax += ps.tax_paye;
+        totalPension += ps.pension_nssa;
+        totalDeductions += ps.total_deductions;
+        totalNet += ps.net_pay;
+
+        return [
+          ps.employee_code,
+          ps.employee_name,
+          ps.department,
+          `$${ps.base_salary.toFixed(2)}`,
+          `$${(ps.housing_allowance + ps.transport_allowance + ps.overtime_pay).toFixed(2)}`,
+          `$${ps.gross_earnings.toFixed(2)}`,
+          `$${ps.tax_paye.toFixed(2)}`,
+          `$${ps.pension_nssa.toFixed(2)}`,
+          `$${ps.total_deductions.toFixed(2)}`,
+          `$${ps.net_pay.toFixed(2)}`
+        ];
+      });
+
+      // Summary row
+      tableRows.push([
+        'TOTALS',
+        `${payslips.length} Staff`,
+        '—',
+        '—',
+        '—',
+        `$${totalGross.toFixed(2)}`,
+        `$${totalTax.toFixed(2)}`,
+        `$${totalPension.toFixed(2)}`,
+        `$${totalDeductions.toFixed(2)}`,
+        `$${totalNet.toFixed(2)}`
+      ]);
+
+      callAutoTable({
+        startY: 34,
+        head: [['EMP ID', 'STAFF NAME', 'DEPT', 'BASE', 'ALLOWANCES', 'GROSS', 'PAYE TAX', 'NSSA PENSION', 'DEDUCTIONS', 'NET PAY']],
+        body: tableRows,
+        theme: 'striped',
+        headStyles: {
+          fillColor: [30, 41, 59],
+          textColor: [255, 255, 255],
+          fontSize: 8,
+          fontStyle: 'bold'
+        },
+        bodyStyles: {
+          fontSize: 7.5,
+          cellPadding: 2.5
+        },
+        didParseCell: (data: any) => {
+          if (data.row.index === tableRows.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [226, 232, 240];
+            data.cell.styles.textColor = [15, 23, 42];
+          }
+        }
+      });
+
+      doc.save(`Payroll_Register_${payrollMonth.replace(/\s+/g, '_')}.pdf`);
+      toast.success(`Payroll register for ${payrollMonth} exported successfully!`);
+    } catch (e: any) {
+      console.error('Payroll Batch PDF export error:', e);
+      toast.error('Failed to export Payroll Register PDF: ' + e.message);
+    }
+  },
+
+  exportAttendanceSheetPDF(attendance: AttendanceRecord[], businessName: string = 'TAREZA ENTERPRISE RETAIL (PVT) LTD') {
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const callAutoTable = (options: any) => {
+        if (typeof autoTable === 'function') {
+          autoTable(doc, options);
+        } else if (typeof (doc as any).autoTable === 'function') {
+          (doc as any).autoTable(options);
+        }
+      };
+
+      // Header Banner
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, 210, 28, 'F');
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.text(businessName.toUpperCase(), 14, 12);
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(203, 213, 225);
+      doc.text('OFFICIAL STAFF SHIFT ATTENDANCE & PUNCH AUDIT SHEET', 14, 19);
+      doc.text(`DATE GENERATED: ${new Date().toLocaleDateString()} | ENTRIES: ${attendance.length}`, 14, 24);
+
+      const tableRows = attendance.map(a => [
+        a.employee_name || 'Staff Member',
+        a.date,
+        (a as any).shift_name || 'Standard Day',
+        a.clock_in ? (a.clock_in.includes('T') ? new Date(a.clock_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : a.clock_in) : '—',
+        a.clock_out ? (a.clock_out.includes('T') ? new Date(a.clock_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : a.clock_out) : 'In Progress',
+        `${Number(a.total_hours || (a as any).total_hours_worked || 0).toFixed(1)} hrs`,
+        (a.status || 'present').toUpperCase()
+      ]);
+
+      callAutoTable({
+        startY: 34,
+        head: [['EMPLOYEE', 'DATE', 'SHIFT', 'PUNCH IN', 'PUNCH OUT', 'HOURS', 'STATUS']],
+        body: tableRows,
+        theme: 'striped',
+        headStyles: {
+          fillColor: [30, 41, 59],
+          textColor: [255, 255, 255],
+          fontSize: 8,
+          fontStyle: 'bold'
+        },
+        bodyStyles: {
+          fontSize: 8,
+          cellPadding: 3
+        }
+      });
+
+      doc.save(`Attendance_Sheet_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('Attendance punch sheet exported successfully!');
+    } catch (e: any) {
+      console.error('Attendance Sheet PDF export error:', e);
+      toast.error('Failed to export Attendance Sheet PDF: ' + e.message);
+    }
   }
 };

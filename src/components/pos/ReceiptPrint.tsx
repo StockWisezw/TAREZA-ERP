@@ -112,8 +112,8 @@ export const ReceiptPrint = React.forwardRef<HTMLDivElement, ReceiptPrintProps>(
     const totalPaid = payments.reduce((acc, p) => acc + Number(p.amount || 0), 0);
 
     return (
-      <div className="hidden print:block">
-        <div ref={ref} className="w-[80mm] p-4 text-black font-mono text-xs bg-white mx-auto print:mx-0">
+      <div className="hidden print:block printable-receipt" style={{ color: '#000000', backgroundColor: '#ffffff' }}>
+        <div ref={ref} className="w-[80mm] p-4 text-black font-mono text-xs bg-white mx-auto print:mx-0" style={{ color: '#000000', backgroundColor: '#ffffff', width: '80mm', maxWidth: '80mm' }}>
           <div className="text-center mb-4">
             <h2 className="font-bold text-lg">{displayBusinessName}</h2>
             <p>{displayBranchName}</p>

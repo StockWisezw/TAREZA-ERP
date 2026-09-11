@@ -26,7 +26,8 @@ import {
   ArrowDownRight,
   Calculator,
   ShieldCheck,
-  Receipt
+  Receipt,
+  Printer
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -47,6 +48,11 @@ import { useSubscription } from '../hooks/useSubscription';
 import { PremiumLockBanner } from '../components/common/PremiumBadge';
 import { useBusinessStore } from '../store';
 import { useAuth } from '../hooks/useAuth';
+import { exportInvoicePDF } from '../utils/exportInvoicePDF';
+import { exportBillPDF } from '../utils/exportBillPDF';
+import { exportJournalPDF } from '../utils/exportJournalPDF';
+import { exportTaxReturnPDF } from '../utils/exportTaxReturnPDF';
+import { triggerBrowserPrint } from '../utils/printManager';
 
 interface Account {
   id: string;
@@ -432,6 +438,15 @@ export default function Accounting() {
           </Button>
 
           <Button 
+            variant="outline" 
+            size="sm" 
+            className="bg-white text-zinc-800 cursor-pointer"
+            onClick={() => triggerBrowserPrint()}
+          >
+            <Printer className="w-4 h-4 mr-1.5 text-zinc-600" /> Print Summary
+          </Button>
+
+          <Button 
             size="sm" 
             variant="outline"
             className="bg-white text-zinc-800"
@@ -628,11 +643,27 @@ export default function Accounting() {
                               </span>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <span className="text-xs text-zinc-400 block font-mono">Total Transaction Value</span>
-                            <span className="text-sm font-bold text-zinc-800 font-mono">
-                              ${computedTotalDebit.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                            </span>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <span className="text-xs text-zinc-400 block font-mono">Total Transaction Value</span>
+                              <span className="text-sm font-bold text-zinc-800 font-mono">
+                                ${computedTotalDebit.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <Button 
+                              size="xs" 
+                              variant="outline" 
+                              className="h-8 px-2.5 bg-white text-zinc-700 border-zinc-250 hover:bg-zinc-100 cursor-pointer text-xs"
+                              onClick={() => {
+                                exportJournalPDF({
+                                  entry,
+                                  lines: matchedLines,
+                                  businessName: currentBusiness?.name || 'TAREZA ENTERPRISE'
+                                });
+                              }}
+                            >
+                              <Download className="w-3.5 h-3.5 mr-1 text-indigo-600" /> Export PDF
+                            </Button>
                           </div>
                         </CardHeader>
                         <CardContent className="p-0">
@@ -720,24 +751,43 @@ export default function Accounting() {
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-right font-sans">
-                        {inv.balance_due > 0 ? (
-                          <Button 
-                            size="xs" 
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            className="bg-white text-zinc-700 border-zinc-250 hover:bg-zinc-50 cursor-pointer text-xs"
+                            title="Export Tax Invoice PDF"
                             onClick={() => {
-                              setPayTargetType('invoice');
-                              setPayTargetId(inv.id);
-                              setPayAmount(inv.balance_due);
-                              setShowPayModal(true);
+                              exportInvoicePDF({
+                                invoice: inv,
+                                businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
+                                branchName: activeBranch?.name || 'Main Branch',
+                                taxNumber: currentBusiness?.tax_number || 'VAT-10029384-ZW'
+                              });
                             }}
                           >
-                            Receive Payment
+                            <Download className="w-3 h-3 mr-1 text-indigo-600" /> PDF Invoice
                           </Button>
-                        ) : (
-                          <span className="text-emerald-600 font-semibold text-xs flex items-center justify-end gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Fully Settled
-                          </span>
-                        )}
+
+                          {inv.balance_due > 0 ? (
+                            <Button 
+                              size="xs" 
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                              onClick={() => {
+                                setPayTargetType('invoice');
+                                setPayTargetId(inv.id);
+                                setPayAmount(inv.balance_due);
+                                setShowPayModal(true);
+                              }}
+                            >
+                              Receive Payment
+                            </Button>
+                          ) : (
+                            <span className="text-emerald-600 font-semibold text-xs flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Settled
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -796,24 +846,43 @@ export default function Accounting() {
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-right font-sans">
-                        {bill.balance_due > 0 ? (
-                          <Button 
-                            size="xs" 
-                            className="bg-zinc-900 text-white"
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            className="bg-white text-zinc-700 border-zinc-250 hover:bg-zinc-50 cursor-pointer text-xs"
+                            title="Export Bill Payment Voucher PDF"
                             onClick={() => {
-                              setPayTargetType('bill');
-                              setPayTargetId(bill.id);
-                              setPayAmount(bill.balance_due);
-                              setShowPayModal(true);
+                              exportBillPDF({
+                                bill,
+                                businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
+                                branchName: activeBranch?.name || 'Main Branch',
+                                taxNumber: currentBusiness?.tax_number || 'VAT-10029384-ZW'
+                              });
                             }}
                           >
-                            Pay Vendor
+                            <Download className="w-3 h-3 mr-1 text-amber-600" /> Voucher PDF
                           </Button>
-                        ) : (
-                          <span className="text-emerald-600 font-semibold text-xs flex items-center justify-end gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Disbursed
-                          </span>
-                        )}
+
+                          {bill.balance_due > 0 ? (
+                            <Button 
+                              size="xs" 
+                              className="bg-zinc-900 text-white cursor-pointer"
+                              onClick={() => {
+                                setPayTargetType('bill');
+                                setPayTargetId(bill.id);
+                                setPayAmount(bill.balance_due);
+                                setShowPayModal(true);
+                              }}
+                            >
+                              Pay Vendor
+                            </Button>
+                          ) : (
+                            <span className="text-emerald-600 font-semibold text-xs flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Disbursed
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -986,9 +1055,25 @@ export default function Accounting() {
                   <CardHeader className="py-3 bg-slate-50 border-b">
                     <div className="flex justify-between items-center">
                       <CardTitle className="text-sm font-bold text-zinc-900">{tr.period_name}</CardTitle>
-                      <Badge className={tr.filing_status === 'settled' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}>
-                        {tr.filing_status.toUpperCase()}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge className={tr.filing_status === 'settled' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}>
+                          {tr.filing_status.toUpperCase()}
+                        </Badge>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          className="h-7 text-[11px] bg-white text-zinc-700 border-zinc-300 hover:bg-zinc-50 cursor-pointer"
+                          onClick={() => {
+                            exportTaxReturnPDF({
+                              taxReturn: tr,
+                              businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
+                              taxNumber: currentBusiness?.tax_number || 'VAT-10029384-ZW'
+                            });
+                          }}
+                        >
+                          <Download className="w-3 h-3 mr-1 text-indigo-600" /> Export PDF
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="p-4 space-y-3 font-mono text-xs">

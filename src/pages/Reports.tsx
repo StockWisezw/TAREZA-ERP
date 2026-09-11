@@ -36,6 +36,7 @@ import { AIForecasting } from '../components/reports/AIForecasting';
 import QuickBooksStyleReports from '../components/reports/QuickBooksStyleReports';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { triggerBrowserPrint } from '../utils/printManager';
 
 interface ProductStat {
   id: string;
@@ -950,7 +951,7 @@ export default function Reports() {
           <Button variant="outline" size="sm" onClick={fetchData} className="bg-white hover:bg-zinc-50 border-zinc-250">
             <RefreshCw className="mr-2 h-4 w-4 animate-spin-hover" /> Re-sync Ledger
           </Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()} className="bg-white hover:bg-zinc-50 border-zinc-250">
+          <Button variant="outline" size="sm" onClick={() => triggerBrowserPrint()} className="bg-white hover:bg-zinc-50 border-zinc-250 cursor-pointer">
             <Printer className="mr-2 h-4 w-4" /> Print ledger sheet
           </Button>
         </div>

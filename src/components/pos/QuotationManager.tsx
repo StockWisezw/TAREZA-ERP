@@ -5,7 +5,9 @@ import {
   Play, 
   Clock, 
   X, 
-  HelpCircle 
+  HelpCircle,
+  Printer,
+  Download
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -14,10 +16,13 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogFooter,
+  DialogFooter, 
   DialogTrigger 
 } from '../ui/dialog';
 import { ScrollArea } from '../ui/scroll-area';
+import { exportReceiptPDF } from '../../utils/exportReceiptPDF';
+import { printReceiptDirect } from '../../utils/printManager';
+import { useBusinessStore } from '../../store';
 
 interface QuotationManagerProps {
   isQuoteDialogOpen?: boolean;
@@ -54,6 +59,8 @@ export const QuotationManager: React.FC<QuotationManagerProps> = ({
   handleCreateQuotation,
   cartLength
 }) => {
+  const { currentBusiness, activeBranch } = useBusinessStore();
+
   return (
     <div className="flex items-center gap-1.5 shrink-0">
       
@@ -115,7 +122,41 @@ export const QuotationManager: React.FC<QuotationManagerProps> = ({
                           Saved: {new Date(q.created_at).toLocaleString()}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Print Quotation"
+                          onClick={() => {
+                            printReceiptDirect({ ...q, status: 'QUOTATION' }, {
+                              businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
+                              branchName: activeBranch?.name || 'Main Branch',
+                              taxNumber: currentBusiness?.tax_number || 'VAT-10029384-ZW',
+                              cashierName: 'POS Operator'
+                            });
+                          }}
+                          className="h-8 w-8 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 p-0 rounded-lg cursor-pointer"
+                        >
+                          <Printer className="w-3.5 h-3.5 shrink-0" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Export Quotation PDF (A4)"
+                          onClick={() => {
+                            exportReceiptPDF({
+                              sale: { ...q, status: 'QUOTATION' },
+                              businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
+                              branchName: activeBranch?.name || 'Main Branch',
+                              taxNumber: currentBusiness?.tax_number || 'VAT-10029384-ZW',
+                              cashierName: 'POS Operator',
+                              format: 'a4'
+                            });
+                          }}
+                          className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 p-0 rounded-lg cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5 shrink-0" />
+                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"

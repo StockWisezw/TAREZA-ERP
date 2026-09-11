@@ -10,7 +10,9 @@ import {
   XCircle, 
   RefreshCw,
   FileSpreadsheet,
-  AlertTriangle
+  AlertTriangle,
+  Printer,
+  Download
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -38,6 +40,9 @@ import { supabase } from '../../lib/firebaseClient';
 import { getItemPackSize, usePOSStore } from '../../store/posStore';
 import { recordStockMovement, logAuditEvent } from '../../services/ledgerService';
 import { toast } from 'sonner';
+import { exportReceiptPDF } from '../../utils/exportReceiptPDF';
+import { printReceiptDirect } from '../../utils/printManager';
+import { useBusinessStore } from '../../store';
 
 interface TransactionHistoryManagerProps {
   activeSession: any;
@@ -64,6 +69,7 @@ export const TransactionHistoryManager: React.FC<TransactionHistoryManagerProps>
   const [customReason, setCustomReason] = useState('');
   const [restockInventory, setRestockInventory] = useState(true);
   const [isProcessingRefund, setIsProcessingRefund] = useState(false);
+  const { currentBusiness, activeBranch } = useBusinessStore();
 
   const businessId = activeSession?.business_id || '';
   const branchId = activeSession?.branch_id || '';
@@ -478,27 +484,66 @@ export const TransactionHistoryManager: React.FC<TransactionHistoryManagerProps>
                                     <p className="font-black text-sm text-zinc-900 dark:text-white">${Number(sale.total || 0).toFixed(2)} USD</p>
                                   </div>
 
-                                  {isRefunded ? (
+                                  {isRefunded && (
                                     <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-2 max-w-xs text-left">
                                       <p className="text-[9px] font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                                         <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                                         <span>Refund Audit Notes</span>
                                       </p>
-                                      <p className="text-[10px] text-amber-700 dark:text-amber-300 italic mt-0.5 mt-0.2 leading-normal">
+                                      <p className="text-[10px] text-amber-700 dark:text-amber-300 italic mt-0.5 leading-normal">
                                         "{sale.refund_notes || 'No notes specified.'}"
                                       </p>
                                     </div>
-                                  ) : (
+                                  )}
+
+                                  <div className="flex flex-wrap items-center gap-1.5 justify-end mt-1">
                                     <Button
                                       size="sm"
-                                      variant="destructive"
-                                      className="rounded-lg h-8 text-[11px] font-black tracking-wide uppercase hover:bg-rose-600/95 cursor-pointer bg-red-650 hover:bg-red-700 flex items-center gap-1 mt-1 font-bold"
-                                      onClick={(e) => handleOpenRefundDialog(sale, e)}
+                                      variant="outline"
+                                      className="rounded-lg h-8 text-[11px] font-semibold gap-1 border-zinc-250 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                                      onClick={() => {
+                                        printReceiptDirect(sale, {
+                                          businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
+                                          branchName: activeBranch?.name || 'Main Branch',
+                                          taxNumber: currentBusiness?.tax_number || 'VAT-10029384-ZW',
+                                          cashierName: 'POS Operator'
+                                        });
+                                      }}
                                     >
-                                      <RotateCcw className="w-3 h-3 shrink-0" />
-                                      <span>Issue Instant Refund</span>
+                                      <Printer className="w-3.5 h-3.5 shrink-0" />
+                                      <span>Print</span>
                                     </Button>
-                                  )}
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="rounded-lg h-8 text-[11px] font-semibold gap-1 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-100 cursor-pointer"
+                                      onClick={() => {
+                                        exportReceiptPDF({
+                                          sale,
+                                          businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
+                                          branchName: activeBranch?.name || 'Main Branch',
+                                          taxNumber: currentBusiness?.tax_number || 'VAT-10029384-ZW',
+                                          cashierName: 'POS Operator',
+                                          format: '80mm'
+                                        });
+                                      }}
+                                    >
+                                      <Download className="w-3.5 h-3.5 shrink-0" />
+                                      <span>PDF</span>
+                                    </Button>
+
+                                    {!isRefunded && (
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        className="rounded-lg h-8 text-[11px] font-black tracking-wide uppercase hover:bg-rose-600/95 cursor-pointer bg-red-650 hover:bg-red-700 flex items-center gap-1 font-bold"
+                                        onClick={(e) => handleOpenRefundDialog(sale, e)}
+                                      >
+                                        <RotateCcw className="w-3 h-3 shrink-0" />
+                                        <span>Refund</span>
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>
