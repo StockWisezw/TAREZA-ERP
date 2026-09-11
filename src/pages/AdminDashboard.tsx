@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
+import { isAuthorizedAdminEmail } from '../constants/admin';
 
 export interface AdminUser {
   uid: string;
@@ -69,15 +70,10 @@ export default function AdminDashboard() {
   const [newPlan, setNewPlan] = useState<string>('starter');
   const [creating, setCreating] = useState<boolean>(false);
 
-  const isAuthorizedAdmin = !!currentUser?.email && [
-    'admin@tarezaerp.co.zw',
-    'sales@tarezaerp.co.zw',
-    'tapsforex@gmail.com',
-    'tapiwagahadza54@gmail.com',
-    'petronellamutero@gmail.com'
-  ].includes(currentUser.email.toLowerCase());
+  const isAuthorizedAdmin = isAuthorizedAdminEmail(currentUser?.email);
 
   const fetchUsers = async () => {
+    if (!isAuthorizedAdmin) return;
     try {
       setLoading(true);
       const response = await fetch('/api/admin/users');
@@ -99,8 +95,10 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (isAuthorizedAdmin) {
+      fetchUsers();
+    }
+  }, [isAuthorizedAdmin]);
 
   // Filtered Users
   const filteredUsers = users.filter((u) => {

@@ -13,6 +13,7 @@ import Landing from './pages/Landing';
 import Login from './pages/Login';
 import { Toaster } from './components/ui/sonner';
 import { syncRBZExchangeRates } from './services/currencyService';
+import { isAuthorizedAdminEmail } from './constants/admin';
 
 // Code-splitting via dynamic imports for optimized initial load sizes
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
@@ -39,6 +40,26 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   if (loading) return <div className="h-screen w-full flex items-center justify-center">Loading...</div>;
   if (!user) return <Navigate to="/login" />;
   
+  return <>{children}</>;
+};
+
+// Admin Route Wrapper: Strictly restrict Admin Dashboard to authorized administrative emails
+const AdminProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+        <div className="w-8 h-8 rounded-full border-4 border-zinc-200 border-t-indigo-600 animate-spin mb-4" />
+        <p className="text-zinc-500 text-sm font-medium">Verifying administrator credentials...</p>
+      </div>
+    );
+  }
+
+  if (!user || !isAuthorizedAdminEmail(user.email)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return <>{children}</>;
 };
 
@@ -100,7 +121,8 @@ export default function App() {
                   <Route path="/roadmap" element={<Roadmap />} />
                   <Route path="/support" element={<Support />} />
                   <Route path="/gmail" element={<GmailInbox />} />
-                  <Route path="/admin-dashboard" element={<AdminDashboard />} />
+                  <Route path="/admin" element={<Navigate to="/admin-dashboard" replace />} />
+                  <Route path="/admin-dashboard" element={<AdminProtectedRoute><AdminDashboard /></AdminProtectedRoute>} />
                 </Route>
               </Routes>
             </React.Suspense>

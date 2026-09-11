@@ -38,6 +38,7 @@ import { Input } from './ui/input';
 import { toast } from 'sonner';
 
 import { ThemeToggle } from './ThemeToggle';
+import { isAuthorizedAdminEmail } from '../constants/admin';
 import { SyncManager } from './pos/SyncManager';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
 import { OfflineStatusBadge } from './OfflineStatusBadge';
@@ -121,7 +122,7 @@ export default function Layout() {
       navigate('/pos', { replace: true });
     }
   }, [role, rbacLoading, location.pathname, navigate]);
-  const isDeveloper = user?.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(user.email.toLowerCase());
+  const isDeveloper = isAuthorizedAdminEmail(user?.email);
   // Screen lock removed per user request
   const isLocked = false;
   const { setBranches, activeBranch, setActiveBranch, branches, setCurrentBusiness } = useBusinessStore();
@@ -397,7 +398,7 @@ export default function Layout() {
           <div className={`p-4 flex flex-col gap-1.5 border-t border-zinc-150 dark:border-zinc-850 bg-zinc-100/10 dark:bg-[#0c0c0d] ${
             sidebarExpanded ? 'items-stretch' : 'items-center px-1'
           }`}>
-            {(user?.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(user.email.toLowerCase())) && (
+            {isAuthorizedAdminEmail(user?.email) && (
               <>
                 <Button 
                   variant="ghost" 
@@ -662,7 +663,7 @@ export default function Layout() {
                       <DropdownMenuItem onClick={() => navigate('/settings?tab=branches')} className="py-2 cursor-pointer">Branch Setup</DropdownMenuItem>
                     </>
                   )}
-                  {(user?.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(user.email.toLowerCase())) && (
+                  {isAuthorizedAdminEmail(user?.email) && (
                     <DropdownMenuItem onClick={() => navigate('/admin-dashboard')} className="py-2 font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
                       <ShieldCheck className="w-4 h-4 mr-2" /> Admin Dashboard
                     </DropdownMenuItem>

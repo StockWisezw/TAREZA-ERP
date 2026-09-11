@@ -22,65 +22,13 @@ export const accountingService = {
     const local = localStorage.getItem(key);
     if (local) {
       try {
-        return JSON.parse(local);
+        const parsed: ARInvoice[] = JSON.parse(local);
+        return parsed.filter(inv => !inv.id.startsWith('inv-00'));
       } catch (e) {
         // ignore
       }
     }
-
-    // Default sample corporate invoices
-    const defaults: ARInvoice[] = [
-      {
-        id: 'inv-001',
-        business_id: businessId,
-        customer_name: 'Delta Beverages Distribution',
-        customer_email: 'finance@deltabev.co.zw',
-        customer_phone: '+263 77 100 2000',
-        invoice_number: 'INV-2026-0081',
-        issue_date: '2026-08-01',
-        due_date: '2026-08-31',
-        subtotal: 3200.00,
-        tax_rate: 15.0,
-        tax_amount: 480.00,
-        discount_amount: 0,
-        total_amount: 3680.00,
-        amount_paid: 2000.00,
-        balance_due: 1680.00,
-        status: 'partially_paid',
-        notes: 'Monthly corporate wholesale supply consignment.',
-        items: [
-          { description: 'Premium Commercial Bulk Pack Supply', quantity: 20, unit_price: 120.00, tax_rate: 15, amount: 2400.00 },
-          { description: 'Logistics handling & Express Delivery', quantity: 1, unit_price: 800.00, tax_rate: 15, amount: 800.00 }
-        ],
-        created_at: new Date(Date.now() - 20 * 86400000).toISOString()
-      },
-      {
-        id: 'inv-002',
-        business_id: businessId,
-        customer_name: 'Meikles Hospitality Group',
-        customer_email: 'procurement@meikles.co.zw',
-        customer_phone: '+263 71 300 4000',
-        invoice_number: 'INV-2026-0082',
-        issue_date: '2026-08-10',
-        due_date: '2026-09-10',
-        subtotal: 1850.00,
-        tax_rate: 15.0,
-        tax_amount: 277.50,
-        discount_amount: 50.00,
-        total_amount: 2077.50,
-        amount_paid: 0,
-        balance_due: 2077.50,
-        status: 'sent',
-        notes: 'Hotel retail replenishment batch.',
-        items: [
-          { description: 'Specialty Retail Consumables (Grade A)', quantity: 50, unit_price: 37.00, tax_rate: 15, amount: 1850.00 }
-        ],
-        created_at: new Date(Date.now() - 11 * 86400000).toISOString()
-      }
-    ];
-
-    localStorage.setItem(key, JSON.stringify(defaults));
-    return defaults;
+    return [];
   },
 
   async createInvoice(
@@ -229,53 +177,13 @@ export const accountingService = {
     const local = localStorage.getItem(key);
     if (local) {
       try {
-        return JSON.parse(local);
+        const parsed: APBill[] = JSON.parse(local);
+        return parsed.filter(bill => !bill.id.startsWith('bill-00'));
       } catch (e) {
         // ignore
       }
     }
-
-    const defaults: APBill[] = [
-      {
-        id: 'bill-001',
-        business_id: businessId,
-        supplier_name: 'National Foods Holdings Ltd',
-        bill_number: 'NF-992318',
-        bill_date: '2026-08-05',
-        due_date: '2026-08-25',
-        expense_account_code: '5000',
-        expense_account_name: 'Cost of Goods Sold (Inventory Purchase)',
-        subtotal: 4100.00,
-        tax_amount: 615.00,
-        total_amount: 4715.00,
-        amount_paid: 4715.00,
-        balance_due: 0,
-        status: 'paid',
-        notes: 'Bulk flour and grain supply consignment.',
-        created_at: new Date(Date.now() - 16 * 86400000).toISOString()
-      },
-      {
-        id: 'bill-002',
-        business_id: businessId,
-        supplier_name: 'City of Harare Commercial Utilities',
-        bill_number: 'UTIL-HAR-AUG-26',
-        bill_date: '2026-08-12',
-        due_date: '2026-08-28',
-        expense_account_code: '6200',
-        expense_account_name: 'Rent & Utilities Expense',
-        subtotal: 580.00,
-        tax_amount: 87.00,
-        total_amount: 667.00,
-        amount_paid: 0,
-        balance_due: 667.00,
-        status: 'approved',
-        notes: 'Monthly power and municipal water service bill.',
-        created_at: new Date(Date.now() - 9 * 86400000).toISOString()
-      }
-    ];
-
-    localStorage.setItem(key, JSON.stringify(defaults));
-    return defaults;
+    return [];
   },
 
   async createBill(
@@ -417,45 +325,13 @@ export const accountingService = {
     const local = localStorage.getItem(key);
     if (local) {
       try {
-        return JSON.parse(local);
+        const parsed: BankAccount[] = JSON.parse(local);
+        return parsed.filter(bank => !bank.id.startsWith('bank-0'));
       } catch (e) {
         // ignore
       }
     }
-
-    const defaults: BankAccount[] = [
-      {
-        id: 'bank-01',
-        business_id: businessId,
-        account_name: 'Main Operating Current Account',
-        bank_name: 'Standard Chartered Bank',
-        account_number: '8700-1122-3344-01',
-        gl_account_code: '1000',
-        currency: 'USD',
-        book_balance: 14850.00,
-        statement_balance: 14850.00,
-        last_reconciled_date: '2026-08-15',
-        status: 'active',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'bank-02',
-        business_id: businessId,
-        account_name: 'Retail POS Cash Till Drawer',
-        bank_name: 'Physical Cash Till Float',
-        account_number: 'TILL-REG-01',
-        gl_account_code: '1000',
-        currency: 'USD',
-        book_balance: 1250.00,
-        statement_balance: 1250.00,
-        last_reconciled_date: '2026-08-20',
-        status: 'active',
-        created_at: new Date().toISOString()
-      }
-    ];
-
-    localStorage.setItem(key, JSON.stringify(defaults));
-    return defaults;
+    return [];
   },
 
   async getBankTransactions(bankAccountId: string): Promise<BankTransaction[]> {
@@ -463,67 +339,13 @@ export const accountingService = {
     const local = localStorage.getItem(key);
     if (local) {
       try {
-        return JSON.parse(local);
+        const parsed: BankTransaction[] = JSON.parse(local);
+        return parsed.filter(t => !t.id.startsWith('btx-00'));
       } catch (e) {
         // ignore
       }
     }
-
-    const defaults: BankTransaction[] = [
-      {
-        id: 'btx-001',
-        bank_account_id: bankAccountId,
-        date: '2026-08-18',
-        reference: 'DEP-POS-0818',
-        payee_payer: 'Daily POS Sales Settlement',
-        description: 'End-of-day credit card and cash banking deposit',
-        type: 'deposit',
-        amount: 2450.00,
-        is_reconciled: true,
-        reconciled_at: '2026-08-18T18:00:00Z',
-        created_at: '2026-08-18T18:00:00Z'
-      },
-      {
-        id: 'btx-002',
-        bank_account_id: bankAccountId,
-        date: '2026-08-19',
-        reference: 'EFT-SUP-441',
-        payee_payer: 'National Foods Holdings',
-        description: 'Supplier stock replenishment payment',
-        type: 'withdrawal',
-        amount: 1800.00,
-        is_reconciled: true,
-        reconciled_at: '2026-08-19T10:00:00Z',
-        created_at: '2026-08-19T10:00:00Z'
-      },
-      {
-        id: 'btx-003',
-        bank_account_id: bankAccountId,
-        date: '2026-08-20',
-        reference: 'FEE-CHRG-AUG',
-        payee_payer: 'Standard Chartered Bank',
-        description: 'Monthly electronic ledger maintenance & RTGS service fee',
-        type: 'fee',
-        amount: 35.00,
-        is_reconciled: false,
-        created_at: '2026-08-20T08:00:00Z'
-      },
-      {
-        id: 'btx-004',
-        bank_account_id: bankAccountId,
-        date: '2026-08-20',
-        reference: 'INT-CR-0820',
-        payee_payer: 'Commercial Overnight Deposit',
-        description: 'Monthly interest earned on positive cash reserves',
-        type: 'interest',
-        amount: 62.50,
-        is_reconciled: false,
-        created_at: '2026-08-20T09:00:00Z'
-      }
-    ];
-
-    localStorage.setItem(key, JSON.stringify(defaults));
-    return defaults;
+    return [];
   },
 
   async toggleReconcileTransaction(bankAccountId: string, txnId: string, isReconciled: boolean): Promise<boolean> {
@@ -546,77 +368,13 @@ export const accountingService = {
     const local = localStorage.getItem(key);
     if (local) {
       try {
-        return JSON.parse(local);
+        const parsed: FixedAsset[] = JSON.parse(local);
+        return parsed.filter(fa => !fa.id.startsWith('fa-00'));
       } catch (e) {
         // ignore
       }
     }
-
-    const defaults: FixedAsset[] = [
-      {
-        id: 'fa-001',
-        business_id: businessId,
-        asset_code: 'FA-POS-001',
-        name: 'Dual-Screen POS Terminal & Thermal Hardware',
-        category: 'Equipment',
-        purchase_date: '2024-01-10',
-        purchase_cost: 2400.00,
-        salvage_value: 200.00,
-        useful_life_years: 3,
-        depreciation_method: 'straight_line',
-        accumulated_depreciation: 1200.00,
-        current_book_value: 1200.00,
-        asset_account_code: '1500',
-        deprec_expense_account_code: '6500',
-        accum_deprec_account_code: '1510',
-        last_depreciation_date: '2026-07-31',
-        status: 'active',
-        created_at: '2024-01-10T08:00:00Z'
-      },
-      {
-        id: 'fa-002',
-        business_id: businessId,
-        asset_code: 'FA-VEH-002',
-        name: 'Toyota Hilux Logistics Delivery Van',
-        category: 'Vehicles',
-        purchase_date: '2023-05-15',
-        purchase_cost: 18500.00,
-        salvage_value: 3500.00,
-        useful_life_years: 5,
-        depreciation_method: 'straight_line',
-        accumulated_depreciation: 9000.00,
-        current_book_value: 9500.00,
-        asset_account_code: '1500',
-        deprec_expense_account_code: '6500',
-        accum_deprec_account_code: '1510',
-        last_depreciation_date: '2026-07-31',
-        status: 'active',
-        created_at: '2023-05-15T08:00:00Z'
-      },
-      {
-        id: 'fa-003',
-        business_id: businessId,
-        asset_code: 'FA-FRN-003',
-        name: 'Commercial Display Shelving & Glass Showcases',
-        category: 'Furniture & Fixtures',
-        purchase_date: '2023-08-20',
-        purchase_cost: 4800.00,
-        salvage_value: 400.00,
-        useful_life_years: 4,
-        depreciation_method: 'straight_line',
-        accumulated_depreciation: 3300.00,
-        current_book_value: 1500.00,
-        asset_account_code: '1500',
-        deprec_expense_account_code: '6500',
-        accum_deprec_account_code: '1510',
-        last_depreciation_date: '2026-07-31',
-        status: 'active',
-        created_at: '2023-08-20T08:00:00Z'
-      }
-    ];
-
-    localStorage.setItem(key, JSON.stringify(defaults));
-    return defaults;
+    return [];
   },
 
   async addFixedAsset(businessId: string, asset: Partial<FixedAsset>): Promise<FixedAsset> {
@@ -721,49 +479,13 @@ export const accountingService = {
     const local = localStorage.getItem(key);
     if (local) {
       try {
-        return JSON.parse(local);
+        const parsed: TaxReturnPeriod[] = JSON.parse(local);
+        return parsed.filter(tax => !tax.id.startsWith('tax-0'));
       } catch (e) {
         // ignore
       }
     }
-
-    const defaults: TaxReturnPeriod[] = [
-      {
-        id: 'tax-01',
-        business_id: businessId,
-        period_name: 'July 2026 (Monthly VAT Return)',
-        tax_type: 'VAT',
-        start_date: '2026-07-01',
-        end_date: '2026-07-31',
-        taxable_sales: 34500.00,
-        output_tax_collected: 5175.00,
-        taxable_purchases: 18200.00,
-        input_tax_paid: 2730.00,
-        net_tax_payable: 2445.00,
-        filing_status: 'settled',
-        filed_at: '2026-08-10T14:30:00Z',
-        payment_reference: 'ZIMRA-VAT-778921',
-        created_at: '2026-08-01T00:00:00Z'
-      },
-      {
-        id: 'tax-02',
-        business_id: businessId,
-        period_name: 'August 2026 (Current VAT Accrual)',
-        tax_type: 'VAT',
-        start_date: '2026-08-01',
-        end_date: '2026-08-31',
-        taxable_sales: 28900.00,
-        output_tax_collected: 4335.00,
-        taxable_purchases: 15400.00,
-        input_tax_paid: 2310.00,
-        net_tax_payable: 2025.00,
-        filing_status: 'pending',
-        created_at: new Date().toISOString()
-      }
-    ];
-
-    localStorage.setItem(key, JSON.stringify(defaults));
-    return defaults;
+    return [];
   },
 
   // ----------------------------------------------------
@@ -774,68 +496,12 @@ export const accountingService = {
     const local = localStorage.getItem(key);
     if (local) {
       try {
-        return JSON.parse(local);
+        const parsed: BudgetRecord[] = JSON.parse(local);
+        return parsed.filter(b => !b.id.startsWith('bdg-00'));
       } catch (e) {
         // ignore
       }
     }
-
-    const defaults: BudgetRecord[] = [
-      {
-        id: 'bdg-001',
-        business_id: businessId,
-        account_code: '4000',
-        account_name: 'Gross Retail Sales Revenue',
-        category: 'Revenue',
-        period_year: 2026,
-        budget_amount: 35000.00,
-        actual_amount: 38400.00,
-        variance_amount: 3400.00,
-        variance_percent: 9.71,
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'bdg-002',
-        business_id: businessId,
-        account_code: '5000',
-        account_name: 'Cost of Goods Sold (COGS)',
-        category: 'COGS',
-        period_year: 2026,
-        budget_amount: 21000.00,
-        actual_amount: 22800.00,
-        variance_amount: -1800.00,
-        variance_percent: -8.57,
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'bdg-003',
-        business_id: businessId,
-        account_code: '6100',
-        account_name: 'Salaries & Staff Remuneration',
-        category: 'Operating_Expense',
-        period_year: 2026,
-        budget_amount: 4500.00,
-        actual_amount: 4200.00,
-        variance_amount: 300.00,
-        variance_percent: 6.67,
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'bdg-004',
-        business_id: businessId,
-        account_code: '6200',
-        account_name: 'Store Rent & Commercial Utilities',
-        category: 'Operating_Expense',
-        period_year: 2026,
-        budget_amount: 1500.00,
-        actual_amount: 1480.00,
-        variance_amount: 20.00,
-        variance_percent: 1.33,
-        created_at: new Date().toISOString()
-      }
-    ];
-
-    localStorage.setItem(key, JSON.stringify(defaults));
-    return defaults;
+    return [];
   }
 };
