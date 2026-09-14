@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { supabase } from '../lib/firebaseClient';
+import { useAuth } from '../hooks/useAuth';
+import { isAuthorizedAdminEmail } from '../constants/admin';
 
 interface CommandItem {
   name: string;
@@ -34,6 +36,7 @@ interface CommandItem {
 }
 
 export function CommandPalette() {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
@@ -132,7 +135,9 @@ export function CommandPalette() {
     { name: 'Suppliers Procurement & Vendors', category: 'Navigation', icon: Truck, action: () => navigate('/suppliers') },
     { name: 'Sales & profit reports', category: 'Navigation', icon: FileText, action: () => navigate('/reports') },
     { name: 'Helpdesk messenger chat', category: 'Navigation', icon: MessageSquare, action: () => navigate('/messenger') },
-    { name: 'Admin User & Subscription Headquarters', category: 'Navigation', icon: ShieldCheck, action: () => navigate('/admin-dashboard') },
+    ...(isAuthorizedAdminEmail(user?.email) ? [
+      { name: 'Admin User & Subscription Headquarters', category: 'Navigation', icon: ShieldCheck, action: () => navigate('/admin-dashboard') }
+    ] : []),
     
     // Core Settings Tabs
     { name: 'Configure Business Profile', category: 'Settings Info', icon: Store, action: () => navigate('/settings?tab=business') },

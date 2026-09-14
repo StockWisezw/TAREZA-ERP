@@ -1034,6 +1034,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
                     products: filteredProducts,
                     businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
                     branchName: activeBranch?.name || 'Main Warehouse',
+                    branchId: selectedBranchId,
                     type: 'valuation'
                   });
                 }
@@ -1058,6 +1059,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
                     products: filteredProducts,
                     businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
                     branchName: activeBranch?.name || 'Main Warehouse',
+                    branchId: selectedBranchId,
                     type: 'valuation'
                   });
                 }}
@@ -1072,6 +1074,7 @@ export function ProductList({ onImportClick }: ProductListProps) {
                     products: filteredProducts,
                     businessName: currentBusiness?.name || 'TAREZA ENTERPRISE',
                     branchName: activeBranch?.name || 'Main Warehouse',
+                    branchId: selectedBranchId,
                     type: 'pricelist'
                   });
                 }}

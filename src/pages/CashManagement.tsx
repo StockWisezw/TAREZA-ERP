@@ -16,7 +16,7 @@ import { DenominationCalculatorModal } from '../components/cash/DenominationCalc
 import { SessionAuditModal } from '../components/cash/SessionAuditModal';
 
 export default function CashManagement() {
-  const { activeBranch } = useBusinessStore();
+  const { activeBranch, currentBusiness } = useBusinessStore();
   const [activeTab, setActiveTab] = useState('active-shift');
 
   const {
@@ -26,6 +26,9 @@ export default function CashManagement() {
     historyLoading,
     startingFloatAmount,
     sessionCashSales,
+    sessionGrossSales,
+    sessionCogs,
+    sessionSalesCount,
     sessionOutflows,
     expectedCash,
     cashLogs,
@@ -151,7 +154,10 @@ export default function CashManagement() {
           variance: calculatedVariance,
           status: 'CLOSED' as const,
           closed_at: new Date().toISOString(),
-          sales_total: sessionCashSales,
+          sales_total: sessionGrossSales || sessionCashSales,
+          sales_count: sessionSalesCount,
+          cogs_total: sessionCogs,
+          cogs: sessionCogs,
           payouts_total: sessionOutflows
         };
         await supabase.from('register_sessions').eq('id', activeSession.id).update(patches);
@@ -310,29 +316,102 @@ export default function CashManagement() {
   };
 
   const handleOpenAudit = async (session: RegisterSession) => {
-    setSelectedAuditSession(session);
+    let sessionCopy = { ...session };
     try {
       const startIso = new Date(session.opened_at).toISOString();
+      const endIso = session.closed_at ? new Date(session.closed_at).toISOString() : new Date().toISOString();
+
       let logQuery = supabase.from('cash_drawer_logs')
         .select('*')
         .gte('created_at', startIso)
+        .lte('created_at', endIso)
         .order('created_at', { ascending: true });
 
       if (businessId && businessId !== '00000000-0000-0000-0000-000000000000') {
         logQuery = logQuery.eq('business_id', businessId);
       }
 
-      const { data } = await logQuery;
-      const filtered = (data || []).filter(l => {
-        if (!session.closed_at) return true;
-        return new Date(l.created_at) <= new Date(session.closed_at);
-      });
+      const { data: logsData } = await logQuery;
+      setAuditLogs(logsData || []);
 
-      setAuditLogs(filtered);
+      // If cogs_total is 0 or missing, calculate perpetual COGS dynamically for the audit modal
+      if (!sessionCopy.cogs_total && !sessionCopy.cogs) {
+        let salesQ = supabase.from('sales')
+          .select('items, total, status')
+          .gte('created_at', startIso)
+          .lte('created_at', endIso);
+
+        if (businessId && businessId !== '00000000-0000-0000-0000-000000000000') {
+          salesQ = salesQ.eq('business_id', businessId);
+        }
+        const { data: sDocs } = await salesQ;
+
+        let pQuery = supabase.from('products').select('id, cost_price, costPrice, sku, pack_size');
+        if (businessId && businessId !== '00000000-0000-0000-0000-000000000000') {
+          pQuery = pQuery.eq('business_id', businessId);
+        }
+        const { data: pList } = await pQuery;
+        const pMap = new Map((pList || []).map((p: any) => [p.id, p]));
+
+        let computedCogs = 0;
+        let computedSales = 0;
+
+        (sDocs || []).forEach((s: any) => {
+          if (['REFUNDED', 'VOIDED', 'CANCELLED'].includes(String(s.status || '').toUpperCase())) return;
+          computedSales += Number(s.total || 0);
+
+          let items: any[] = [];
+          if (Array.isArray(s.items)) items = s.items;
+          else if (typeof s.items === 'string') {
+            try { items = JSON.parse(s.items); } catch { items = []; }
+          }
+
+          items.forEach((it: any) => {
+            const qty = Number(it.quantity || 1);
+            let cost = 0;
+            const emb = it.product?.cost_price ?? it.product?.costPrice ?? it.costPrice ?? it.cost_price;
+            if (emb !== undefined && emb !== null && Number(emb) > 0) {
+              cost = Number(emb);
+            } else {
+              const pId = it.product?.id || it.product_id || it.productId;
+              if (pId && pMap.has(pId)) {
+                cost = Number(pMap.get(pId).cost_price ?? pMap.get(pId).costPrice ?? 0);
+              }
+            }
+
+            let mult = 1;
+            const sku = it.product?.sku || it.sku || '';
+            const match = sku.match(/\|PK:(\d+)/i);
+            if (match) mult = parseInt(match[1], 10);
+            else if (it.tier === 'wholesale' || String(it.tier || '').toLowerCase().includes('wholesale')) {
+              const pObj = it.product || (it.product_id ? pMap.get(it.product_id) : null);
+              if (pObj?.pack_size) mult = Number(pObj.pack_size) || 1;
+            }
+
+            computedCogs += (qty * mult * cost);
+          });
+        });
+
+        sessionCopy.cogs_total = computedCogs;
+        sessionCopy.cogs = computedCogs;
+        if (!sessionCopy.sales_total && computedSales > 0) {
+          sessionCopy.sales_total = computedSales;
+        }
+
+        if (sessionCopy.id && !sessionCopy.id.startsWith('off-shift-')) {
+          supabase.from('register_sessions')
+            .update({ cogs_total: computedCogs, cogs: computedCogs, sales_total: sessionCopy.sales_total })
+            .eq('id', sessionCopy.id)
+            .then(() => {});
+        }
+      }
+
+      setSelectedAuditSession(sessionCopy);
       setIsAuditModalOpen(true);
     } catch (e) {
       console.error(e);
-      toast.error('Failed to load transaction logs for session');
+      setSelectedAuditSession(sessionCopy);
+      setIsAuditModalOpen(true);
     }
   };
 
@@ -407,6 +486,8 @@ export default function CashManagement() {
             onRefresh={fetchShiftHistory}
             onViewAudit={handleOpenAudit}
             profilesMap={profilesMap}
+            businessName={currentBusiness?.name || 'TAREZA ENTERPRISE WORKSPACE'}
+            branchName={activeBranch?.name || 'Main Store Branch'}
           />
         </TabsContent>
       </Tabs>
@@ -434,6 +515,7 @@ export default function CashManagement() {
         session={selectedAuditSession}
         auditLogs={auditLogs}
         profilesMap={profilesMap}
+        businessName={currentBusiness?.name || 'TAREZA ENTERPRISE WORKSPACE'}
         branchName={activeBranch?.name || 'Main Store Branch'}
       />
     </div>

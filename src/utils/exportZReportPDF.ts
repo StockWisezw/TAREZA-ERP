@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'sonner';
 import { RegisterSession, CashLog } from '../hooks/useCashManagement';
+import { supabase } from '../lib/firebaseClient';
 
 export interface ZReportPDFOptions {
   session: RegisterSession | any;
@@ -12,7 +13,7 @@ export interface ZReportPDFOptions {
   supervisorName?: string;
 }
 
-export function exportZReportPDF({
+export async function exportZReportPDF({
   session,
   auditLogs = [],
   businessName = 'TAREZA ENTERPRISE WORKSPACE',
@@ -45,21 +46,140 @@ export function exportZReportPDF({
     };
 
     // Financial Values
-    const openingFloat = Number(session.opening_balance || 0);
-    const closingBalance = Number(session.closing_balance || 0);
-    const expectedBalance = Number(session.expected_balance || 0);
-    const variance = Number(session.variance || 0);
-    const salesTotal = Number(session.sales_total || 0);
-    const salesCount = Number(session.sales_count || 0);
-    const payoutsTotal = Number(session.payouts_total || 0);
+    let openingFloat = Number(session.opening_balance || 0);
+    let closingBalance = Number(session.closing_balance || 0);
+    let expectedBalance = Number(session.expected_balance || 0);
+    let variance = Number(session.variance || 0);
+    let salesTotal = Number(session.sales_total || 0);
+    let salesCount = Number(session.sales_count || 0);
+    let payoutsTotal = Number(session.payouts_total || 0);
+    let cogsTotal = Number(session.cogs_total ?? session.cogs ?? 0);
+
+    // If COGS is missing or 0, dynamically query the shift's sales to compute exact perpetual COGS
+    if (cogsTotal === 0 && session.opened_at) {
+      try {
+        const startIso = new Date(session.opened_at).toISOString();
+        const endIso = session.closed_at ? new Date(session.closed_at).toISOString() : new Date().toISOString();
+
+        let salesQuery = supabase.from('sales')
+          .select('id, receipt_number, total, items, status, created_at')
+          .gte('created_at', startIso)
+          .lte('created_at', endIso);
+
+        if (session.business_id && session.business_id !== '00000000-0000-0000-0000-000000000000') {
+          salesQuery = salesQuery.eq('business_id', session.business_id);
+        }
+
+        const { data: shiftSales } = await salesQuery;
+
+        // Fetch products to resolve unit and pack cost prices
+        let prodQuery = supabase.from('products').select('id, cost_price, costPrice, price, retail_price, sku, pack_size');
+        if (session.business_id && session.business_id !== '00000000-0000-0000-0000-000000000000') {
+          prodQuery = prodQuery.eq('business_id', session.business_id);
+        }
+        const { data: prodList } = await prodQuery;
+        const prodMap = new Map((prodList || []).map((p: any) => [p.id, p]));
+
+        if (shiftSales && shiftSales.length > 0) {
+          let computedCogs = 0;
+          let computedSales = 0;
+          let count = 0;
+
+          shiftSales.forEach((s: any) => {
+            const stat = String(s.status || '').toUpperCase();
+            if (['REFUNDED', 'VOIDED', 'CANCELLED'].includes(stat)) return;
+
+            count++;
+            computedSales += Number(s.total || 0);
+
+            let items: any[] = [];
+            if (Array.isArray(s.items)) items = s.items;
+            else if (typeof s.items === 'string') {
+              try { items = JSON.parse(s.items); } catch { items = []; }
+            }
+
+            items.forEach((it: any) => {
+              const qty = Number(it.quantity || 1);
+              let cost = 0;
+              const embeddedCost = it.product?.cost_price ?? it.product?.costPrice ?? it.costPrice ?? it.cost_price;
+              if (embeddedCost !== undefined && embeddedCost !== null && Number(embeddedCost) > 0) {
+                cost = Number(embeddedCost);
+              } else {
+                const pId = it.product?.id || it.product_id || it.productId;
+                if (pId && prodMap.has(pId)) {
+                  cost = Number(prodMap.get(pId).cost_price ?? prodMap.get(pId).costPrice ?? 0);
+                }
+              }
+
+              let multiplier = 1;
+              const sku = it.product?.sku || it.sku || '';
+              const match = sku.match(/\|PK:(\d+)/i);
+              if (match) {
+                multiplier = parseInt(match[1], 10);
+              } else if (it.tier === 'wholesale' || String(it.tier || '').toLowerCase().includes('wholesale')) {
+                const pObj = it.product || (it.product_id ? prodMap.get(it.product_id) : null);
+                if (pObj?.pack_size) {
+                  multiplier = Number(pObj.pack_size) || 1;
+                }
+              }
+
+              computedCogs += (qty * multiplier * cost);
+            });
+          });
+
+          cogsTotal = computedCogs;
+          if (salesTotal === 0 && computedSales > 0) {
+            salesTotal = computedSales;
+          }
+          if (salesCount === 0 && count > 0) {
+            salesCount = count;
+          }
+
+          // Backfill computed cogs to database record for instant future reports
+          if (session.id && !session.id.startsWith('off-shift-')) {
+            supabase.from('register_sessions')
+              .update({ cogs_total: computedCogs, cogs: computedCogs, sales_total: salesTotal })
+              .eq('id', session.id)
+              .then(() => {});
+          }
+        }
+      } catch (calcErr) {
+        console.warn('Could not backfill session COGS for PDF:', calcErr);
+      }
+    }
+
+    // Backfill auditLogs if empty
+    let activeAuditLogs = [...auditLogs];
+    if (activeAuditLogs.length === 0 && session.opened_at) {
+      try {
+        const startIso = new Date(session.opened_at).toISOString();
+        const endIso = session.closed_at ? new Date(session.closed_at).toISOString() : new Date().toISOString();
+        let logQuery = supabase.from('cash_drawer_logs')
+          .select('*')
+          .gte('created_at', startIso)
+          .lte('created_at', endIso)
+          .order('created_at', { ascending: true });
+
+        if (session.business_id && session.business_id !== '00000000-0000-0000-0000-000000000000') {
+          logQuery = logQuery.eq('business_id', session.business_id);
+        }
+
+        const { data: logsDocs } = await logQuery;
+        if (logsDocs && logsDocs.length > 0) {
+          activeAuditLogs = logsDocs;
+        }
+      } catch (logErr) {
+        console.warn('Could not fetch audit logs for Z report:', logErr);
+      }
+    }
 
     // Filter cash management movement logs into Operating Expenses vs Owner Cash Drops
     let operatingExpensesTotal = 0;
     let ownerDropsTotal = 0;
     let cashInsTotal = 0;
 
-    if (auditLogs && auditLogs.length > 0) {
-      auditLogs.forEach((log: any) => {
+    if (activeAuditLogs && activeAuditLogs.length > 0) {
+      activeAuditLogs.forEach((log: any) => {
         const amt = Math.abs(Number(log.amount || 0));
         const tType = String(log.transaction_type || '').toLowerCase();
         const lType = String(log.type || '').toLowerCase();
@@ -94,7 +214,6 @@ export function exportZReportPDF({
 
     // Perpetual Inventory Method for Cost of Goods Sold (COGS)
     // In perpetual inventory, COGS is matched continuously per transaction
-    const cogsTotal = Number(session.cogs_total || session.cogs || 0);
     const grossProfit = salesTotal - cogsTotal;
     const grossMarginPct = salesTotal > 0 ? (grossProfit / salesTotal) * 100 : 0;
 

@@ -13,6 +13,8 @@ interface PastShiftsHistoryProps {
   onRefresh: () => void;
   onViewAudit: (session: RegisterSession) => void;
   profilesMap: Record<string, Profile>;
+  businessName?: string;
+  branchName?: string;
 }
 
 export function PastShiftsHistory({
@@ -20,7 +22,9 @@ export function PastShiftsHistory({
   historyLoading,
   onRefresh,
   onViewAudit,
-  profilesMap
+  profilesMap,
+  businessName = 'TAREZA ENTERPRISE WORKSPACE',
+  branchName = 'Main Store Branch'
 }: PastShiftsHistoryProps) {
   const [filterText, setFilterText] = useState('');
 
@@ -134,10 +138,12 @@ export function PastShiftsHistory({
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => {
-                              exportZReportPDF({
+                            onClick={async () => {
+                              await exportZReportPDF({
                                 session: s,
-                                operatorName: operator
+                                operatorName: operator,
+                                businessName,
+                                branchName
                               });
                             }}
                             className="h-7 text-xs font-bold gap-1 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer rounded-lg"

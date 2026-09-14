@@ -404,27 +404,9 @@ export default function Login() {
           { id: cashierRoleId, business_id: newBusinessId, name: 'Cashier', description: 'POS Cashier with checkout-only access' }
         ]);
 
-        // Seed Branches: Try not to give everything away on starter/free trials!
-        const branchesToSeed = [];
-        if ((planChoice === 'STARTER_TRIAL' || planChoice === 'STARTER_PAID') && !isSuperAdminEmail) {
-          branchesToSeed.push(
-            { id: mainBranchId, business_id: newBusinessId, name: 'Main Retail Branch', type: 'retail', address: '100 Samora Machel Ave, Harare', access_code: 'MAIN-HQ' }
-          );
-        } else {
-          branchesToSeed.push(
-            { id: mainBranchId, business_id: newBusinessId, name: 'Main Retail Branch', type: 'retail', address: '100 Samora Machel Ave, Harare', access_code: 'MAIN-HQ' },
-            { id: warehouseBranchId, business_id: newBusinessId, name: 'Harare Central Warehouse', type: 'warehouse', address: '12 Coventry Rd, Workington, Harare', access_code: null },
-            { id: bulawayoBranchId, business_id: newBusinessId, name: 'Bulawayo CBD Branch', type: 'retail', address: '55 Jason Moyo St, Bulawayo', access_code: 'BULAWAYO-HQ' }
-          );
-        }
-
-        await supabase.from('branches').insert(branchesToSeed);
-
-        // Seed Default Categories
-        await supabase.from('categories').insert([
-          { business_id: newBusinessId, name: 'General' },
-          { business_id: newBusinessId, name: 'Beverages' },
-          { business_id: newBusinessId, name: 'Dry Goods' }
+        // Create initial primary branch for the business
+        await supabase.from('branches').insert([
+          { id: mainBranchId, business_id: newBusinessId, name: 'Main Branch', type: 'retail', address: '', access_code: 'MAIN-01' }
         ]);
 
         // Trigger email and WhatsApp signup alerts in background securely

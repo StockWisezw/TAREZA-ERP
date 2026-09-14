@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
-import { Activity, CreditCard, DollarSign, Package, Sparkles, Clock, Lock, Unlock, Play, RefreshCw, AlertTriangle, CheckCircle2, BarChart3, PieChart as PieChartIcon, Check, TrendingUp, Coins } from 'lucide-react';
+import { Activity, CreditCard, DollarSign, Package, Sparkles, Clock, Lock, Unlock, Play, RefreshCw, AlertTriangle, CheckCircle2, BarChart3, PieChart as PieChartIcon, Check, TrendingUp, Coins, ShoppingCart, ArrowRight, Layers, Lightbulb, Store, BookOpen, PlusCircle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, Legend, PieChart, Pie, LineChart, Line } from 'recharts';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase, firebaseConfig, setActiveBusinessId } from '../lib/firebaseClient';
 import { DynamicBranchOverview } from '../components/dashboard/DynamicBranchOverview';
 import { toast } from 'sonner';
@@ -20,10 +21,12 @@ import {
 } from '../components/ui/dialog';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { activeBranch } = useBusinessStore();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
 
+  const [activeDashboardTab, setActiveDashboardTab] = useState<'overview' | 'operations' | 'branches' | 'ai'>('overview');
   const [loading, setLoading] = useState(true);
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(true);
@@ -676,66 +679,16 @@ export default function Dashboard() {
             { id: cashierRoleId, business_id: newBusinessId, name: 'Cashier', description: 'POS Cashier with checkout-only access' }
           ]);
 
-          // Seed Branches
+          // Initial primary branch for new business
           await supabase.from('branches').insert([
-            { id: mainBranchId, business_id: newBusinessId, name: 'Main Retail Branch', type: 'retail', address: '100 Samora Machel Ave, Harare' },
-            { id: warehouseBranchId, business_id: newBusinessId, name: 'Harare Central Warehouse', type: 'warehouse', address: '12 Coventry Rd, Workington, Harare' },
-            { id: bulawayoBranchId, business_id: newBusinessId, name: 'Bulawayo CBD Branch', type: 'retail', address: '55 Jason Moyo St, Bulawayo' }
+            { id: mainBranchId, business_id: newBusinessId, name: 'Main Branch', type: 'retail', address: '' }
           ]);
           finalBrId = mainBranchId;
 
-          // Default categories
-          await supabase.from('categories').insert([
-            { business_id: newBusinessId, name: 'General' },
-            { business_id: newBusinessId, name: 'Beverages' },
-            { business_id: newBusinessId, name: 'Dry Goods' }
-          ]);
-
           // Free trial sub
           await supabase.from('subscriptions').insert({ business_id: newBusinessId, plan_name: 'free_trial', status: 'active' });
-          
-          // Seed Default Staff Users (Manager, Cashier)
-          try {
-            const { initializeApp, deleteApp } = await import('firebase/app');
-            const { getAuth, createUserWithEmailAndPassword, signOut } = await import('firebase/auth');
-            
-            const managerEmail = `manager@${sanitizedRegNo.toLowerCase()}.tarezaerp.co.zw`;
-            const cashierEmail = `cashier@${sanitizedRegNo.toLowerCase()}.tarezaerp.co.zw`;
-            const staffPassword = 'Password123!';
 
-            const staffToCreate = [
-              { email: managerEmail, firstName: 'Tendai', lastName: 'Manager', roleId: managerRoleId, branchId: warehouseBranchId },
-              { email: cashierEmail, firstName: 'Chipo', lastName: 'Cashier', roleId: cashierRoleId, branchId: mainBranchId }
-            ];
-
-            for (const staff of staffToCreate) {
-              const tempApp = initializeApp(firebaseConfig, `TempStaffSeed-${crypto.randomUUID()}`);
-              const tempAuth = getAuth(tempApp);
-              try {
-                const cred = await createUserWithEmailAndPassword(tempAuth, staff.email, staffPassword);
-                const uid = cred.user.uid;
-                await signOut(tempAuth);
-
-                // Create Profile
-                await supabase.from('profiles').insert([
-                  { id: uid, first_name: staff.firstName, last_name: staff.lastName, email: staff.email, phone: '+263777000000' }
-                ]);
-
-                // Create link
-                await supabase.from('business_users').insert([
-                  { id: uid, business_id: newBusinessId, user_id: uid, branch_id: staff.branchId, role_id: staff.roleId, is_active: true }
-                ]);
-              } catch (staffErr) {
-                console.error(`Failed to register staff ${staff.email}:`, staffErr);
-              } finally {
-                await deleteApp(tempApp);
-              }
-            }
-          } catch (tempSetupErr) {
-            console.error("Staff seeding helper failed in dashboard:", tempSetupErr);
-          }
-
-          toast.success('Your business profile and default branches/staff have been initialized.');
+          toast.success('Your business workspace has been successfully created from scratch.');
         }
 
         const context = {
@@ -857,9 +810,85 @@ export default function Dashboard() {
             <span>{getGreeting()}!</span>
           </h2>
           <p className="text-zinc-500 font-medium mt-1">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} — Your business performance overview.
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} — Business performance & operational command.
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() => navigate('/pos')}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 px-3.5 rounded-xl shadow-sm flex items-center gap-1.5 cursor-pointer"
+          >
+            <ShoppingCart className="h-4 w-4" />
+            <span>Launch POS</span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => navigate('/cash')}
+            className="font-bold text-xs h-9 px-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-1.5 cursor-pointer text-zinc-800 dark:text-zinc-200"
+          >
+            <DollarSign className="h-4 w-4 text-emerald-500" />
+            <span>Cash Drawer</span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => navigate('/inventory')}
+            className="font-bold text-xs h-9 px-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-1.5 cursor-pointer text-zinc-800 dark:text-zinc-200"
+          >
+            <Package className="h-4 w-4 text-indigo-500" />
+            <span>Inventory</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* 🧭 Modern Organized Dashboard Tabs */}
+      <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2 overflow-x-auto no-scrollbar">
+        <button
+          onClick={() => setActiveDashboardTab('overview')}
+          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+            activeDashboardTab === 'overview'
+              ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm'
+              : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60'
+          }`}
+        >
+          <Layers className="h-4 w-4" />
+          <span>Overview & Shift</span>
+        </button>
+
+        <button
+          onClick={() => setActiveDashboardTab('operations')}
+          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+            activeDashboardTab === 'operations'
+              ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm'
+              : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60'
+          }`}
+        >
+          <TrendingUp className="h-4 w-4" />
+          <span>Daily Operations & Trends</span>
+        </button>
+
+        <button
+          onClick={() => setActiveDashboardTab('branches')}
+          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+            activeDashboardTab === 'branches'
+              ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm'
+              : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60'
+          }`}
+        >
+          <BarChart3 className="h-4 w-4" />
+          <span>Multi-Branch & Stock</span>
+        </button>
+
+        <button
+          onClick={() => setActiveDashboardTab('ai')}
+          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+            activeDashboardTab === 'ai'
+              ? 'bg-violet-600 text-white shadow-sm shadow-violet-500/20'
+              : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60'
+          }`}
+        >
+          <Sparkles className="h-4 w-4 text-violet-400" />
+          <span>Tareza GPT Advisor</span>
+        </button>
       </div>
 
       {/* 🔒 Subscription Verification Alert */}
@@ -916,102 +945,104 @@ export default function Dashboard() {
       )}
 
       {/* 🧾 Register Shift Summary Dashboard Widget */}
-      {sessionLoading ? (
-        <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl flex items-center gap-3 animate-pulse">
-          <RefreshCw className="h-4 w-4 text-zinc-400 animate-spin" />
-          <span className="text-xs text-zinc-500 font-medium">Syncing checkout shift session telemetry...</span>
-        </div>
-      ) : activeSession ? (
-        <Card className="border border-emerald-500/20 dark:border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/10 overflow-hidden relative group rounded-2xl shadow-sm">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors"></div>
-          <CardContent className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="flex flex-col md:flex-row md:items-center gap-4 flex-1">
-              {/* Badge Icon */}
-              <div className="p-3 bg-emerald-500/15 dark:bg-emerald-500/20 rounded-xl text-emerald-600 dark:text-emerald-400 shrink-0 select-none max-w-fit">
-                <Unlock className="h-5 w-5 animate-pulse" />
-              </div>
-              
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 uppercase tracking-wider">Active Register Shift</h4>
-                  <span className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full text-[10px] font-extrabold tracking-wide font-sans animate-pulse">
-                    OPEN
-                  </span>
+      {activeDashboardTab === 'overview' && (
+        sessionLoading ? (
+          <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl flex items-center gap-3 animate-pulse">
+            <RefreshCw className="h-4 w-4 text-zinc-400 animate-spin" />
+            <span className="text-xs text-zinc-500 font-medium">Syncing checkout shift session telemetry...</span>
+          </div>
+        ) : activeSession ? (
+          <Card className="border border-emerald-500/20 dark:border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/10 overflow-hidden relative group rounded-2xl shadow-sm">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors"></div>
+            <CardContent className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex flex-col md:flex-row md:items-center gap-4 flex-1">
+                {/* Badge Icon */}
+                <div className="p-3 bg-emerald-500/15 dark:bg-emerald-500/20 rounded-xl text-emerald-600 dark:text-emerald-400 shrink-0 select-none max-w-fit">
+                  <Unlock className="h-5 w-5 animate-pulse" />
                 </div>
-                <p className="text-xs text-zinc-500 max-w-sm">
-                  Active Shift ID: <span className="font-mono text-zinc-700 dark:text-zinc-300 font-bold bg-zinc-200/50 dark:bg-zinc-800 px-1.5 py-0.5 rounded">#{activeSession.id.substring(0, 8)}</span> — cashier register is online.
-                </p>
+                
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 uppercase tracking-wider">Active Register Shift</h4>
+                    <span className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full text-[10px] font-extrabold tracking-wide font-sans animate-pulse">
+                      OPEN
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 max-w-sm">
+                    Active Shift ID: <span className="font-mono text-zinc-700 dark:text-zinc-300 font-bold bg-zinc-200/50 dark:bg-zinc-800 px-1.5 py-0.5 rounded">#{activeSession.id.substring(0, 8)}</span> — cashier register is online.
+                  </p>
+                </div>
+
+                {/* Stat 1: Duration */}
+                <div className="md:border-l border-zinc-200 dark:border-zinc-800 md:pl-4 min-w-[120px]">
+                  <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Shift Duration</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Clock className="h-4 w-4 text-zinc-500" />
+                    <span className="text-sm font-extrabold font-mono text-zinc-800 dark:text-zinc-100">{sessionDuration}</span>
+                  </div>
+                </div>
+
+                {/* Stat 2: Expected Cash */}
+                <div className="md:border-l border-zinc-200 dark:border-zinc-800 md:pl-4 min-w-[150px]">
+                  <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block font-sans">Expected Cash-In-Hand</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-base font-black font-mono text-emerald-700 dark:text-emerald-400">
+                      ${Number(activeSession.expected_balance ?? activeSession.opening_balance ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              {/* Stat 1: Duration */}
-              <div className="md:border-l border-zinc-200 dark:border-zinc-800 md:pl-4 min-w-[120px]">
-                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Shift Duration</span>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <Clock className="h-4 w-4 text-zinc-500" />
-                  <span className="text-sm font-extrabold font-mono text-zinc-800 dark:text-zinc-100">{sessionDuration}</span>
+              <div className="flex gap-2 w-full lg:w-auto self-stretch lg:self-center items-center justify-end">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setClosingCashInput(Number(activeSession.expected_balance ?? activeSession.opening_balance ?? 0).toFixed(2));
+                    setIsClosingOpen(true);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white font-extrabold text-xs h-9.5 px-4 rounded-xl shadow-md cursor-pointer flex items-center gap-1.5 w-full sm:w-auto whitespace-nowrap border-0"
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  Quick-Close Register
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 overflow-hidden relative group rounded-2xl shadow-sm">
+            <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="p-3 bg-zinc-200 dark:bg-zinc-800 rounded-xl text-zinc-500 shrink-0 select-none">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">No Active Register Shift</h4>
+                    <span className="bg-zinc-200 text-zinc-600 dark:bg-zinc-850 dark:text-zinc-400 px-2 py-0.5 rounded-full text-[10px] font-bold font-sans">
+                      OFFLINE
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 max-w-xl">
+                    Retail checkout actions and stock audit adjustments are frozen when the register shift is offline. Start shift window below.
+                  </p>
                 </div>
               </div>
 
-              {/* Stat 2: Expected Cash */}
-              <div className="md:border-l border-zinc-200 dark:border-zinc-800 md:pl-4 min-w-[150px]">
-                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block font-sans">Expected Cash-In-Hand</span>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  <span className="text-base font-black font-mono text-emerald-700 dark:text-emerald-400">
-                    ${Number(activeSession.expected_balance ?? activeSession.opening_balance ?? 0).toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-2 w-full lg:w-auto self-stretch lg:self-center items-center justify-end">
               <Button
                 type="button"
                 onClick={() => {
-                  setClosingCashInput(Number(activeSession.expected_balance ?? activeSession.opening_balance ?? 0).toFixed(2));
-                  setIsClosingOpen(true);
+                  setOpeningFloatInput('0');
+                  setIsOpeningOpen(true);
                 }}
-                className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white font-extrabold text-xs h-9.5 px-4 rounded-xl shadow-md cursor-pointer flex items-center gap-1.5 w-full sm:w-auto whitespace-nowrap border-0"
+                className="bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white font-bold text-xs h-9.5 px-4 rounded-xl shadow-sm flex items-center gap-1.5 w-full sm:w-auto border-0 cursor-pointer"
               >
-                <Lock className="h-3.5 w-3.5" />
-                Quick-Close Register
+                <Play className="h-3.5 w-3.5" />
+                Open Cashier Register
               </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 overflow-hidden relative group rounded-2xl shadow-sm">
-          <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="p-3 bg-zinc-200 dark:bg-zinc-800 rounded-xl text-zinc-500 shrink-0 select-none">
-                <Lock className="h-5 w-5" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">No Active Register Shift</h4>
-                  <span className="bg-zinc-200 text-zinc-600 dark:bg-zinc-850 dark:text-zinc-400 px-2 py-0.5 rounded-full text-[10px] font-bold font-sans">
-                    OFFLINE
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-500 max-w-xl">
-                  Retail checkout actions and stock audit adjustments are frozen when the register shift is offline. Start shift window below.
-                </p>
-              </div>
-            </div>
-
-            <Button
-              type="button"
-              onClick={() => {
-                setOpeningFloatInput('0');
-                setIsOpeningOpen(true);
-              }}
-              className="bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white font-bold text-xs h-9.5 px-4 rounded-xl shadow-sm flex items-center gap-1.5 w-full sm:w-auto border-0"
-            >
-              <Play className="h-3.5 w-3.5" />
-              Open Cashier Register
-            </Button>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )
       )}
 
       {/* 🚀 Opening Register Dialog */}
@@ -1167,7 +1198,10 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* 🧭 TAB 1: OVERVIEW */}
+      {activeDashboardTab === 'overview' && (
+        <div className="space-y-6 animate-in fade-in-50 duration-200">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="border-border/60 shadow-sm shadow-zinc-200/50 dark:shadow-none hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold tracking-wide uppercase text-zinc-500">Total Sales (USD)</CardTitle>
@@ -1237,52 +1271,240 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* 🔮 Tareza GPT — Predictive AI Advisor */}
-      <Card className="border border-violet-500/20 bg-gradient-to-r from-violet-500/5 via-fuchsia-500/5 to-transparent dark:from-violet-950/15 dark:via-fuchsia-950/10 overflow-hidden relative rounded-2xl shadow-sm my-6">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-violet-500/5 rounded-full blur-3xl -mr-12 -mt-12"></div>
-        <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-          <div>
-            <CardTitle className="text-sm font-bold flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-              <div className="p-1.5 bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 rounded-lg shrink-0">
-                <Sparkles className="h-4 w-4 animate-pulse" />
+          {/* 🚀 Fresh Account Onboarding Checklist */}
+          {stats.transactions === 0 && stats.totalSales === 0 && (
+            <div className="p-5 rounded-2xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/70 via-purple-50/40 to-white dark:border-indigo-900/40 dark:from-indigo-950/25 dark:via-purple-950/15 dark:to-zinc-900 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                      <Sparkles className="h-4 w-4" />
+                    </span>
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">Clean Slate Initialized — 3 Quick Steps to Get Started</h3>
+                  </div>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1 max-w-xl">
+                    Every new business starts with a clean database. Follow these 3 easy steps to begin ringing sales and managing stock:
+                  </p>
+                </div>
               </div>
-              <span className="tracking-tight">Tareza GPT Predictive AI Advisor</span>
-            </CardTitle>
-            <CardDescription className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-              Dynamic demand forecasting and stock reordering priority models powered by Gemini 3.5.
-            </CardDescription>
-          </div>
-          <span className="bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase">
-            Active Predictor
-          </span>
-        </CardHeader>
-        <CardContent className="pb-5">
-          {aiLoading ? (
-            <div className="py-8 text-center space-y-2">
-              <RefreshCw className="h-5 w-5 text-violet-500 animate-spin mx-auto" />
-              <p className="text-xs text-zinc-400 dark:text-zinc-500 font-semibold animate-pulse">Running planning algorithms...</p>
-            </div>
-          ) : aiInsight ? (
-            <div className="space-y-4">
-              {renderFormattedInsight(aiInsight)}
-            </div>
-          ) : (
-            <div className="text-xs text-zinc-405 py-3">
-              No predictive insights has been compiled for this period yet. Try refreshing later.
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                <div className="p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-white/80 dark:bg-zinc-900/70 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                      <span className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 flex items-center justify-center text-[10px] font-mono">1</span>
+                      <span>Set Cash Float</span>
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-1.5">
+                      Open your cashier register shift and declare physical cash float.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setOpeningFloatInput('0');
+                      setIsOpeningOpen(true);
+                    }}
+                    className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-8 rounded-lg cursor-pointer"
+                  >
+                    <Unlock className="h-3.5 w-3.5 mr-1" /> Open Register
+                  </Button>
+                </div>
+
+                <div className="p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-white/80 dark:bg-zinc-900/70 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                      <span className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 flex items-center justify-center text-[10px] font-mono">2</span>
+                      <span>Add Products</span>
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-1.5">
+                      Register your products, retail selling prices, and barcode numbers.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate('/inventory')}
+                    className="mt-3 w-full border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 font-bold text-xs h-8 rounded-lg cursor-pointer"
+                  >
+                    <Package className="h-3.5 w-3.5 mr-1" /> Open Inventory
+                  </Button>
+                </div>
+
+                <div className="p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-white/80 dark:bg-zinc-900/70 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                      <span className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 flex items-center justify-center text-[10px] font-mono">3</span>
+                      <span>Ring First Sale</span>
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-1.5">
+                      Open touch & barcode POS terminal to checkout your customer orders.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => navigate('/pos')}
+                    className="mt-3 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8 rounded-lg cursor-pointer"
+                  >
+                    <ShoppingCart className="h-3.5 w-3.5 mr-1" /> Launch POS
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
-        </CardContent>
-      </Card>
 
-      {/* 📊 Dynamic Branch-wise Revenue vs Stock Valuation Overview */}
-      {businessContext?.business_id && (
-        <DynamicBranchOverview businessId={businessContext.business_id} />
+          {/* ⚡ Quick Navigation Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <button
+              onClick={() => navigate('/pos')}
+              className="p-4 rounded-xl border border-border/70 hover:border-emerald-500/50 bg-card hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-all text-left group cursor-pointer shadow-xs"
+            >
+              <div className="p-2 w-fit rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 group-hover:scale-105 transition-transform">
+                <ShoppingCart className="h-4 w-4" />
+              </div>
+              <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 mt-2.5">POS Checkout</h4>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">High-speed barcode & touch terminal</p>
+            </button>
+
+            <button
+              onClick={() => navigate('/cash')}
+              className="p-4 rounded-xl border border-border/70 hover:border-indigo-500/50 bg-card hover:bg-indigo-50/30 dark:hover:bg-indigo-950/10 transition-all text-left group cursor-pointer shadow-xs"
+            >
+              <div className="p-2 w-fit rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400 group-hover:scale-105 transition-transform">
+                <DollarSign className="h-4 w-4" />
+              </div>
+              <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 mt-2.5">Cash Register</h4>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">Drawer reconciliations & Z-Reports</p>
+            </button>
+
+            <button
+              onClick={() => navigate('/inventory')}
+              className="p-4 rounded-xl border border-border/70 hover:border-amber-500/50 bg-card hover:bg-amber-50/30 dark:hover:bg-amber-950/10 transition-all text-left group cursor-pointer shadow-xs"
+            >
+              <div className="p-2 w-fit rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400 group-hover:scale-105 transition-transform">
+                <Package className="h-4 w-4" />
+              </div>
+              <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 mt-2.5">Inventory Catalog</h4>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">Stock levels, barcodes & categories</p>
+            </button>
+
+            <button
+              onClick={() => navigate('/accounting')}
+              className="p-4 rounded-xl border border-border/70 hover:border-purple-500/50 bg-card hover:bg-purple-50/30 dark:hover:bg-purple-950/10 transition-all text-left group cursor-pointer shadow-xs"
+            >
+              <div className="p-2 w-fit rounded-lg bg-purple-100 text-purple-600 dark:bg-purple-950/50 dark:text-purple-400 group-hover:scale-105 transition-transform">
+                <BookOpen className="h-4 w-4" />
+              </div>
+              <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 mt-2.5">Accounting Ledger</h4>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">Double-entry journals & balance</p>
+            </button>
+          </div>
+
+          {/* 📈 7-Day Rolling Revenue Overview Area Chart */}
+          <Card className="border-border/60 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">Revenue Overview</CardTitle>
+              <CardDescription>7-day rolling revenue across all active branches.</CardDescription>
+            </CardHeader>
+            <CardContent className="pl-2">
+              <div className="h-[320px] w-full mt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={isDark ? "#a855f7" : "#7c3aed"} stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor={isDark ? "#a855f7" : "#7c3aed"} stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? "#27272a" : "#E5E7EB"} />
+                    <XAxis 
+                      dataKey="name" 
+                      stroke={isDark ? "#a1a1aa" : "#6B7280"}
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      className="font-medium"
+                      dy={10}
+                    />
+                    <YAxis
+                      stroke={isDark ? "#a1a1aa" : "#6B7280"}
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `$${value}`}
+                      className="font-mono"
+                      dx={-10}
+                    />
+                    <Tooltip 
+                      contentStyle={{
+                        borderRadius: '12px', 
+                        border: isDark ? '1px solid #27272a' : '1px solid #E5E7EB', 
+                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+                        backgroundColor: isDark ? '#18181b' : '#FFFFFF',
+                        color: isDark ? '#f4f4f5' : '#18181b'
+                      }}
+                      itemStyle={{
+                        fontFamily: 'JetBrains Mono', 
+                        fontSize: '14px', 
+                        fontWeight: 700, 
+                        color: isDark ? '#c084fc' : '#7c3aed'
+                      }}
+                    />
+                    <Area type="monotone" dataKey="sales" stroke={isDark ? "#c084fc" : "#7c3aed"} strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
-      {/* 🚀 Daily Operations Performance Summary Cards & Daily Revenue Trend Section */}
-      <div className="space-y-6 my-6">
-        <div>
-          <h3 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+      {/* 🧭 TAB 4: TAREZA GPT PREDICTIVE ADVISOR */}
+      {activeDashboardTab === 'ai' && (
+        <div className="space-y-6 animate-in fade-in-50 duration-200">
+          <Card className="border border-violet-500/20 bg-gradient-to-r from-violet-500/5 via-fuchsia-500/5 to-transparent dark:from-violet-950/15 dark:via-fuchsia-950/10 overflow-hidden relative rounded-2xl shadow-sm">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-violet-500/5 rounded-full blur-3xl -mr-12 -mt-12"></div>
+            <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+                  <div className="p-1.5 bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 rounded-lg shrink-0">
+                    <Sparkles className="h-4 w-4 animate-pulse" />
+                  </div>
+                  <span className="tracking-tight">Tareza GPT Predictive AI Advisor</span>
+                </CardTitle>
+                <CardDescription className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                  Dynamic demand forecasting and stock reordering priority models powered by Gemini 3.5.
+                </CardDescription>
+              </div>
+              <span className="bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase">
+                Active Predictor
+              </span>
+            </CardHeader>
+            <CardContent className="pb-5">
+              {aiLoading ? (
+                <div className="py-12 text-center space-y-2">
+                  <RefreshCw className="h-6 w-6 text-violet-500 animate-spin mx-auto" />
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500 font-semibold animate-pulse">Running planning algorithms...</p>
+                </div>
+              ) : aiInsight ? (
+                <div className="space-y-4">
+                  {renderFormattedInsight(aiInsight)}
+                </div>
+              ) : (
+                <div className="text-xs text-zinc-400 py-6 text-center">
+                  No predictive insights have been compiled for this period yet. As sales occur, AI models will forecast demand and stock reordering priorities automatically.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* 🧭 TAB 2: DAILY OPERATIONS & TRENDS */}
+      {activeDashboardTab === 'operations' && (
+        <div className="space-y-6 animate-in fade-in-50 duration-200">
+          <div>
+            <h3 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-indigo-500" />
             <span>Daily Performance & Operational Metrics</span>
           </h3>
@@ -1460,112 +1682,17 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
-      </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4 border-border/60 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg">Revenue Overview</CardTitle>
-            <CardDescription>7-day rolling revenue across all active branches.</CardDescription>
-          </CardHeader>
-          <CardContent className="pl-2">
-            <div className="h-[320px] w-full mt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={isDark ? "#a855f7" : "#7c3aed"} stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor={isDark ? "#a855f7" : "#7c3aed"} stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? "#27272a" : "#E5E7EB"} />
-                  <XAxis 
-                    dataKey="name" 
-                    stroke={isDark ? "#a1a1aa" : "#6B7280"}
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    className="font-medium"
-                    dy={10}
-                  />
-                  <YAxis
-                    stroke={isDark ? "#a1a1aa" : "#6B7280"}
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => `$${value}`}
-                    className="font-mono"
-                    dx={-10}
-                  />
-                  <Tooltip 
-                    contentStyle={{
-                      borderRadius: '12px', 
-                      border: isDark ? '1px solid #27272a' : '1px solid #E5E7EB', 
-                      boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
-                      backgroundColor: isDark ? '#18181b' : '#FFFFFF',
-                      color: isDark ? '#f4f4f5' : '#18181b'
-                    }}
-                    itemStyle={{
-                      fontFamily: 'JetBrains Mono', 
-                      fontSize: '14px', 
-                      fontWeight: 700, 
-                      color: isDark ? '#c084fc' : '#7c3aed'
-                    }}
-                  />
-                  <Area type="monotone" dataKey="sales" stroke={isDark ? "#c084fc" : "#7c3aed"} strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-        
-        {/* Enterprise Upgrade & Stock Take Audit Card */}
-        <Card className="col-span-3 border-0 shadow-xl bg-gradient-to-br from-indigo-900 to-indigo-950 text-white relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20"></div>
-          <CardHeader className="relative z-10">
-            <CardTitle className="flex items-center space-x-2 text-white">
-              <div className="p-1.5 bg-indigo-500/20 rounded-md">
-                 <Package className="h-5 w-5 text-indigo-300" />
-              </div>
-              <span className="tracking-tight">Enterprise Sync & Stock Take Auditing Hub</span>
-            </CardTitle>
-            <CardDescription className="text-zinc-400">Scale your retail chain with our comprehensive Stock Take Auditing Module and real-time Multi-Branch Sync engine built directly into the central cloud ledger.</CardDescription>
-          </CardHeader>
-          <CardContent className="relative z-10 w-full">
-            <div className="flex flex-col p-6 bg-white/5 rounded-xl border border-white/10 space-y-4">
-              <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold text-white">$15</span>
-                <span className="text-zinc-400 text-sm">/month plan fee</span>
-              </div>
-              <p className="text-xs text-zinc-300 leading-relaxed">
-                Connect your warehouses and physical retail branches automatically. Manage stocktakes, review discrepancies, and minimize cash or product leakages with easy physical-to-digital inventory reconciliations.
-              </p>
-              <div className="space-y-1.5 text-xs text-zinc-400 border-t border-white/5 pt-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                  <span><strong>Comprehensive Stock Taking</strong>: Automatic physical-to-digital inventory reconciling with margin protection</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                  <span><strong>Multi-Branch Sync Engine</strong>: Instantly link warehouses, brick-and-mortar storefronts, and offices</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                  <span><strong>Dedicated Customer Support</strong>: Direct access to support team & Firebase cloud management</span>
-                </div>
-              </div>
-              
-              <div className="mt-2">
-                <a href="https://wa.me/263784553570" target="_blank" rel="noopener noreferrer" className="block">
-                  <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white transition-all font-bold text-xs py-2.5 rounded-lg shadow-md">
-                    Inquire & Support via WhatsApp
-                  </button>
-                </a>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* 📊 Dynamic Branch-wise Revenue vs Stock Valuation Overview */}
+        {businessContext?.business_id && (
+          <DynamicBranchOverview businessId={businessContext.business_id} />
+        )}
       </div>
+    )}
+
+      {/* 🧭 TAB 3: MULTI-BRANCH & STOCK */}
+      {activeDashboardTab === 'branches' && (
+        <div className="space-y-6 animate-in fade-in-50 duration-200">
 
       {/* 📊 Multi-Branch Performance & Inventory Diagnostics */}
       <div className="grid gap-6 md:grid-cols-2">
@@ -1683,6 +1810,55 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+          {/* Enterprise Upgrade & Stock Take Audit Card */}
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-indigo-900 to-indigo-950 text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20"></div>
+            <CardHeader className="relative z-10">
+              <CardTitle className="flex items-center space-x-2 text-white">
+                <div className="p-1.5 bg-indigo-500/20 rounded-md">
+                   <Package className="h-5 w-5 text-indigo-300" />
+                </div>
+                <span className="tracking-tight">Enterprise Sync & Stock Take Auditing Hub</span>
+              </CardTitle>
+              <CardDescription className="text-zinc-400">Scale your retail chain with our comprehensive Stock Take Auditing Module and real-time Multi-Branch Sync engine built directly into the central cloud ledger.</CardDescription>
+            </CardHeader>
+            <CardContent className="relative z-10 w-full">
+              <div className="flex flex-col p-6 bg-white/5 rounded-xl border border-white/10 space-y-4">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-extrabold text-white">$15</span>
+                  <span className="text-zinc-400 text-sm">/month plan fee</span>
+                </div>
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  Connect your warehouses and physical retail branches automatically. Manage stocktakes, review discrepancies, and minimize cash or product leakages with easy physical-to-digital inventory reconciliations.
+                </p>
+                <div className="space-y-1.5 text-xs text-zinc-400 border-t border-white/5 pt-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                    <span><strong>Comprehensive Stock Taking</strong>: Automatic physical-to-digital inventory reconciling with margin protection</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                    <span><strong>Multi-Branch Sync Engine</strong>: Instantly link warehouses, brick-and-mortar storefronts, and offices</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                    <span><strong>Dedicated Customer Support</strong>: Direct access to support team & Firebase cloud management</span>
+                  </div>
+                </div>
+                
+                <div className="mt-2">
+                  <a href="https://wa.me/263784553570" target="_blank" rel="noopener noreferrer" className="block">
+                    <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white transition-all font-bold text-xs py-2.5 rounded-lg shadow-md cursor-pointer">
+                      Inquire & Support via WhatsApp
+                    </button>
+                  </a>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

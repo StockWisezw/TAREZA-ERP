@@ -142,10 +142,8 @@ export const hrService = {
       }
     }
 
-    // Initialize defaults
-    const defaults = DEFAULT_EMPLOYEES.map(e => ({ ...e, business_id: businessId }));
-    localStorage.setItem(key, JSON.stringify(defaults));
-    return defaults;
+    // For new accounts, start from scratch with no mock employees
+    return [];
   },
 
   async saveEmployee(businessId: string, employee: Partial<Employee>): Promise<Employee> {
@@ -230,45 +228,7 @@ export const hrService = {
         records = [];
       }
     } else {
-      // Seed sample attendance for today & yesterday
-      const employees = await this.getEmployees(businessId);
-      const todayStr = new Date().toISOString().split('T')[0];
-      const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-
-      records = employees.map((emp, i) => ({
-        id: `att-${emp.id}-${todayStr}`,
-        business_id: businessId,
-        employee_id: emp.id,
-        employee_name: `${emp.first_name} ${emp.last_name}`,
-        date: todayStr,
-        clock_in: i === 1 ? '08:15' : '07:55',
-        clock_out: i === 0 ? '17:05' : undefined,
-        total_hours: i === 0 ? 9.1 : 8.0,
-        overtime_hours: i === 0 ? 1.1 : 0,
-        status: i === 1 ? 'late' : 'present',
-        notes: i === 1 ? 'Traffic delay on Harare Road' : 'On-time shift arrival',
-        created_at: new Date().toISOString()
-      }));
-
-      // Add yesterday records
-      employees.forEach((emp) => {
-        records.push({
-          id: `att-${emp.id}-${yesterdayStr}`,
-          business_id: businessId,
-          employee_id: emp.id,
-          employee_name: `${emp.first_name} ${emp.last_name}`,
-          date: yesterdayStr,
-          clock_in: '08:00',
-          clock_out: '17:00',
-          total_hours: 9.0,
-          overtime_hours: 1.0,
-          status: 'present',
-          notes: 'Regular shift completed',
-          created_at: new Date(Date.now() - 86400000).toISOString()
-        });
-      });
-
-      localStorage.setItem(key, JSON.stringify(records));
+      records = [];
     }
 
     if (date) {
@@ -358,41 +318,8 @@ export const hrService = {
       }
     }
 
-    // Default sample leave requests
-    const defaults: LeaveRequest[] = [
-      {
-        id: 'lv-001',
-        business_id: businessId,
-        employee_id: 'emp-002',
-        employee_name: 'Farai Chidzero',
-        leave_type: 'annual',
-        start_date: '2026-09-01',
-        end_date: '2026-09-05',
-        days_count: 5,
-        reason: 'Annual family vacation leave',
-        status: 'approved',
-        approved_by: 'Tendai Moyo (Store Manager)',
-        approval_date: '2026-08-18',
-        comments: 'Coverage arranged with relief cashier.',
-        created_at: '2026-08-15T10:00:00Z'
-      },
-      {
-        id: 'lv-002',
-        business_id: businessId,
-        employee_id: 'emp-004',
-        employee_name: 'Simbarashe Ndlovu',
-        leave_type: 'sick',
-        start_date: '2026-08-22',
-        end_date: '2026-08-23',
-        days_count: 2,
-        reason: 'Medical dental appointment & rest',
-        status: 'pending',
-        created_at: new Date().toISOString()
-      }
-    ];
-
-    localStorage.setItem(key, JSON.stringify(defaults));
-    return defaults;
+    // New accounts start with zero leave requests
+    return [];
   },
 
   async submitLeaveRequest(businessId: string, req: Partial<LeaveRequest>): Promise<LeaveRequest> {

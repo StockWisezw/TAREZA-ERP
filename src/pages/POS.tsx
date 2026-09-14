@@ -834,17 +834,20 @@ export default function POS() {
         return updated;
       });
 
-      const updateLocalSessionWithOfflineSale = (saleAmount: number) => {
+      const updateLocalSessionWithOfflineSale = (saleAmount: number, saleCogs: number = 0) => {
         if (activeSession) {
           const currentTotalSales = Number(activeSession.sales_total || 0) + saleAmount;
           const currentCountSales = Number(activeSession.sales_count || 0) + 1;
           const currentExpectedObj = Number(activeSession.expected_balance || activeSession.opening_balance || 0) + saleAmount;
+          const currentCogs = Number(activeSession.cogs_total || activeSession.cogs || 0) + saleCogs;
           
           const updatedSession = {
             ...activeSession,
             sales_total: currentTotalSales,
             sales_count: currentCountSales,
-            expected_balance: currentExpectedObj
+            expected_balance: currentExpectedObj,
+            cogs_total: currentCogs,
+            cogs: currentCogs
           };
 
           setActiveSession(updatedSession as any);
@@ -852,6 +855,23 @@ export default function POS() {
           localStorage.setItem('tareza_active_session_cache', JSON.stringify(updatedSession));
         }
       };
+
+      // Precalculate perpetual COGS for this sale
+      let saleCogs = 0;
+      if (sale.items && sale.items.length > 0) {
+        for (const item of sale.items) {
+          if (item.product?.bundles && item.product.bundles.length > 0) {
+            for (const comp of item.product.bundles) {
+              const compCostPrice = Number(comp.costPrice || comp.cost_price || 0);
+              saleCogs += (compCostPrice * Number(comp.quantity || 1) * Number(item.quantity || 1));
+            }
+          } else {
+            const multiplier = getItemPackSize(item);
+            const itemCost = Number(item.product?.costPrice || item.product?.cost_price || item.costPrice || item.cost_price || 0);
+            saleCogs += (itemCost * Number(item.quantity || 1) * multiplier);
+          }
+        }
+      }
 
       if (!isOffline) {
         try {
@@ -1037,7 +1057,23 @@ export default function POS() {
               ledgerLines
             );
 
-            // 3. Update active session metrics
+            // 3. Calculate exact perpetual COGS for this sale and update active session metrics
+            let saleCogs = 0;
+            if (sale.items && sale.items.length > 0) {
+              for (const item of sale.items) {
+                if (item.product?.bundles && item.product.bundles.length > 0) {
+                  for (const comp of item.product.bundles) {
+                    const compCostPrice = Number(comp.costPrice || comp.cost_price || 0);
+                    saleCogs += (compCostPrice * Number(comp.quantity || 1) * Number(item.quantity || 1));
+                  }
+                } else {
+                  const multiplier = getItemPackSize(item);
+                  const itemCost = Number(item.product?.costPrice || item.product?.cost_price || item.costPrice || item.cost_price || 0);
+                  saleCogs += (itemCost * Number(item.quantity || 1) * multiplier);
+                }
+              }
+            }
+
             if (activeSession && activeSession.id && !activeSession.id.startsWith('off-shift-')) {
               try {
                 const sessRef = doc(db, 'register_sessions', activeSession.id);
@@ -1047,25 +1083,41 @@ export default function POS() {
                   const currentTotalSales = Number(sessData.sales_total || 0) + sale.total;
                   const currentCountSales = Number(sessData.sales_count || 0) + 1;
                   const currentExpectedObj = Number(sessData.expected_balance || 0) + sale.total;
+                  const currentCogs = Number(sessData.cogs_total || sessData.cogs || 0) + saleCogs;
                   await updateDoc(sessRef, {
                     sales_total: currentTotalSales,
                     sales_count: currentCountSales,
-                    expected_balance: currentExpectedObj
+                    expected_balance: currentExpectedObj,
+                    cogs_total: currentCogs,
+                    cogs: currentCogs
                   });
+                  try {
+                    await supabase.from('register_sessions').eq('id', activeSession.id).update({
+                      sales_total: currentTotalSales,
+                      sales_count: currentCountSales,
+                      expected_balance: currentExpectedObj,
+                      cogs_total: currentCogs,
+                      cogs: currentCogs
+                    });
+                  } catch (subErr) {
+                    // Ignore if supabase register_sessions table is not configured
+                  }
                   // Update activeSession state
                   setActiveSession({
                     ...activeSession,
                     sales_total: currentTotalSales,
                     sales_count: currentCountSales,
-                    expected_balance: currentExpectedObj
+                    expected_balance: currentExpectedObj,
+                    cogs_total: currentCogs,
+                    cogs: currentCogs
                   } as any);
                 }
               } catch (sessErr) {
                 console.warn('[POS] Failed to update Firestore session metrics:', sessErr);
-                updateLocalSessionWithOfflineSale(sale.total);
+                updateLocalSessionWithOfflineSale(sale.total, saleCogs);
               }
             } else {
-              updateLocalSessionWithOfflineSale(sale.total);
+              updateLocalSessionWithOfflineSale(sale.total, saleCogs);
             }
 
             // 4. Update Customer credit balance if credit purchase
@@ -1161,11 +1213,11 @@ export default function POS() {
           usePOSStore.setState((s: any) => ({
             offlineQueue: [...s.offlineQueue, offlineSale]
           }));
-          updateLocalSessionWithOfflineSale(sale.total);
+          updateLocalSessionWithOfflineSale(sale.total, saleCogs);
           toast.warning('Could not save to database — sale queued for automatic retry.');
         }
       } else {
-        updateLocalSessionWithOfflineSale(sale.total);
+        updateLocalSessionWithOfflineSale(sale.total, saleCogs);
       }
     }
   };

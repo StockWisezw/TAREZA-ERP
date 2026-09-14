@@ -48,6 +48,9 @@ export function useCashManagement(activeBranch: any) {
   // Accounting metrics
   const [startingFloatAmount, setStartingFloatAmount] = useState(0);
   const [sessionCashSales, setSessionCashSales] = useState(0);
+  const [sessionGrossSales, setSessionGrossSales] = useState(0);
+  const [sessionCogs, setSessionCogs] = useState(0);
+  const [sessionSalesCount, setSessionSalesCount] = useState(0);
   const [sessionOutflows, setSessionOutflows] = useState(0);
   const [expectedCash, setExpectedCash] = useState(0);
 
@@ -181,11 +184,34 @@ export function useCashManagement(activeBranch: any) {
       });
       
       let totalCashSales = 0;
+      let totalGrossSales = 0;
+      let totalShiftCogs = 0;
+      let validSalesCount = 0;
+
+      // Fetch products cost map to ensure all items calculate exact COGS
+      let productCostsMap = new Map<string, any>();
+      try {
+        let pQuery = supabase.from('products').select('id, cost_price, costPrice, price, retail_price, sku, pack_size');
+        if (busId && busId !== '00000000-0000-0000-0000-000000000000') {
+          pQuery = pQuery.eq('business_id', busId);
+        }
+        const { data: pList } = await pQuery;
+        if (pList) {
+          pList.forEach((p: any) => productCostsMap.set(p.id, p));
+        }
+      } catch (pErr) {
+        console.warn('Could not load product catalog costs in cash management:', pErr);
+      }
+
       if (salesData && salesData.length > 0) {
         salesData.forEach((s: any) => {
           const stat = String(s.status || '').toUpperCase();
-          const allowedStatuses = ['COMPLETED', 'PAID', 'SYNCED', 'OFFLINE_PENDING'];
-          if (!allowedStatuses.includes(stat)) return;
+          const disallowed = ['REFUNDED', 'VOIDED', 'CANCELLED'];
+          if (disallowed.includes(stat)) return;
+
+          validSalesCount++;
+          const saleTotal = Number(s.total || s.total_amount || 0);
+          totalGrossSales += saleTotal;
 
           let paymentsArray: any[] = [];
           if (Array.isArray(s.payments)) {
@@ -210,12 +236,65 @@ export function useCashManagement(activeBranch: any) {
           } else {
             const pm = String(s.payment_method || '').toLowerCase();
             if (pm === 'cash' || pm === 'usd_cash' || pm === 'zig_cash' || pm === 'zwg_cash') {
-              totalCashSales += Number(s.total || 0);
+              totalCashSales += saleTotal;
             }
           }
+
+          // Extract COGS per sale item using perpetual inventory matching
+          let itemsArray: any[] = [];
+          if (Array.isArray(s.items)) {
+            itemsArray = s.items;
+          } else if (typeof s.items === 'string') {
+            try {
+              itemsArray = JSON.parse(s.items);
+            } catch (e) {
+              itemsArray = [];
+            }
+          }
+
+          itemsArray.forEach((it: any) => {
+            const qty = Number(it.quantity || 1);
+            let cost = 0;
+            const embeddedCost = it.product?.cost_price ?? it.product?.costPrice ?? it.costPrice ?? it.cost_price;
+            if (embeddedCost !== undefined && embeddedCost !== null && Number(embeddedCost) > 0) {
+              cost = Number(embeddedCost);
+            } else {
+              const pId = it.product?.id || it.product_id || it.productId;
+              if (pId && productCostsMap.has(pId)) {
+                cost = Number(productCostsMap.get(pId).cost_price ?? productCostsMap.get(pId).costPrice ?? 0);
+              }
+            }
+
+            let multiplier = 1;
+            const sku = it.product?.sku || it.sku || '';
+            const match = sku.match(/\|PK:(\d+)/i);
+            if (match) {
+              multiplier = parseInt(match[1], 10);
+            } else if (it.tier === 'wholesale' || String(it.tier || '').toLowerCase().includes('wholesale')) {
+              const pObj = it.product || (it.product_id ? productCostsMap.get(it.product_id) : null);
+              if (pObj?.pack_size) {
+                multiplier = Number(pObj.pack_size) || 1;
+              }
+            }
+
+            totalShiftCogs += (qty * multiplier * cost);
+          });
         });
       }
       setSessionCashSales(totalCashSales);
+      setSessionGrossSales(totalGrossSales);
+      setSessionCogs(totalShiftCogs);
+      setSessionSalesCount(validSalesCount);
+
+      if (activeSess) {
+        setActiveSession({
+          ...activeSess,
+          sales_total: totalGrossSales || totalCashSales,
+          sales_count: validSalesCount,
+          cogs_total: totalShiftCogs,
+          cogs: totalShiftCogs
+        });
+      }
       
       let logsQuery = supabase.from('cash_drawer_logs')
         .select('*')
@@ -316,6 +395,9 @@ export function useCashManagement(activeBranch: any) {
     historyLoading,
     startingFloatAmount,
     sessionCashSales,
+    sessionGrossSales,
+    sessionCogs,
+    sessionSalesCount,
     sessionOutflows,
     expectedCash,
     cashLogs,
