@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, signOut as fireSignOut } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as fireSignOut } from 'firebase/auth';
 import { fireAuth, supabase, firebaseConfig, setActiveBusinessId } from '../lib/firebaseClient';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -396,8 +396,7 @@ export default function Login() {
         
         const user = { id: firebaseUser.uid, email: firebaseUser.email };
 
-        // Send Firebase email verification to the newly registered user
-        await sendEmailVerification(firebaseUser).catch(err => console.error("Could not send Firebase email verification on signup:", err));
+        // Email confirmation skipped per configuration - accounts are active immediately
 
         // Setup Firebase Data
         await supabase.from('profiles').insert([
@@ -499,7 +498,7 @@ export default function Login() {
           })
         }).catch(err => console.error("Signup notification dispatch failed", err));
 
-        toast.success(`Signup successful! A confirmation email has been sent to ${email}. Please check your inbox and confirm your email address. ${isSuperAdminEmail ? 'Forever Free Developer trial configured.' : (planChoice === 'STARTER_TRIAL' || planChoice === 'STARTER_PAID') ? 'Your Starter branch has been pre-configured.' : 'Your multiple branches are pre-configured.'}`, { duration: 10000 });
+        toast.success(`Signup successful! Welcome to Tareza ERP. ${isSuperAdminEmail ? 'Forever Free Developer trial configured.' : (planChoice === 'STARTER_TRIAL' || planChoice === 'STARTER_PAID') ? 'Your Starter branch has been pre-configured.' : 'Your multiple branches are pre-configured.'}`, { duration: 8000 });
         navigate('/dashboard');
         setIsSignUp(false);
       } catch (error: any) {
@@ -541,17 +540,8 @@ export default function Login() {
         const userCredential = await signInWithEmailAndPassword(fireAuth, loginEmail, password);
         const firebaseUser = userCredential.user;
 
-        // Check if verified
-        const isBypass = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(firebaseUser.email?.toLowerCase() || '');
+        // Email confirmation skipped per user instruction to allow instant login without verification blockers
 
-        if (!firebaseUser.emailVerified && !isBypass && !firebaseUser.email?.endsWith('.tareza.internal')) {
-          // Block unverified user, sign out, and resend verification email
-          await sendEmailVerification(firebaseUser).catch(err => console.error("Could not resend verification email", err));
-          await fireSignOut(fireAuth);
-          toast.error(`Email confirmation is required. We have sent a verification link to ${loginEmail}. Please check your inbox and confirm your email before logging in.`, { duration: 8000 });
-          setLoading(false);
-          return;
-        }
 
         const { getActiveBusinessId, setActiveBusinessId } = await import('../lib/firebaseClient');
         if (isDeveloperEmail) {
