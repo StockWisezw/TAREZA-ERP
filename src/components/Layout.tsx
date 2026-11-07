@@ -118,11 +118,12 @@ export default function Layout() {
   const { isUnlocked, getFeatureTier, checkAccess } = useSubscription();
 
   React.useEffect(() => {
-    if (!rbacLoading && role === 'cashier' && (location.pathname === '/settings' || location.pathname.startsWith('/settings/'))) {
+    // Strictly restrict cashier accounts to POS Terminal only
+    if (!rbacLoading && role === 'cashier' && location.pathname !== '/pos') {
       navigate('/pos', { replace: true });
     }
   }, [role, rbacLoading, location.pathname, navigate]);
-  const isDeveloper = isAuthorizedAdminEmail(user?.email);
+  const isDeveloper = isAuthorizedAdminEmail(user?.email) || role === 'admin' || role === 'owner' || role === 'developer';
   // Screen lock removed per user request
   const isLocked = false;
   const { setBranches, activeBranch, setActiveBranch, branches, setCurrentBusiness } = useBusinessStore();
@@ -289,7 +290,7 @@ export default function Layout() {
   const NavLinks = ({ mobile }: { mobile?: boolean }) => {
     const filteredNav = navigation.filter(item => {
       if (role === 'cashier') {
-        return item.href !== '/settings';
+        return item.href === '/pos';
       }
       if (role === 'staff') {
         return ['/pos', '/inventory', '/customers', '/suppliers', '/messenger', '/support'].includes(item.href);
@@ -398,7 +399,7 @@ export default function Layout() {
           <div className={`p-4 flex flex-col gap-1.5 border-t border-zinc-150 dark:border-zinc-850 bg-zinc-100/10 dark:bg-[#0c0c0d] ${
             sidebarExpanded ? 'items-stretch' : 'items-center px-1'
           }`}>
-            {isAuthorizedAdminEmail(user?.email) && (
+            {(isAuthorizedAdminEmail(user?.email) || role === 'admin' || role === 'owner' || role === 'developer') && (
               <>
                 <Button 
                   variant="ghost" 

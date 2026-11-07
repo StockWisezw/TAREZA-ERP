@@ -33,6 +33,8 @@ const Support = React.lazy(() => import('./pages/Support'));
 const GmailInbox = React.lazy(() => import('./pages/GmailInbox'));
 const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
 
+import { usePermission } from './hooks/usePermission';
+
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -43,11 +45,12 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// Admin Route Wrapper: Strictly restrict Admin Dashboard to authorized administrative emails
+// Admin Route Wrapper: Restrict to authorized administrative emails OR assigned Admin role
 const AdminProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { role, loading: permLoading } = usePermission();
 
-  if (loading) {
+  if (authLoading || permLoading) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
         <div className="w-8 h-8 rounded-full border-4 border-zinc-200 border-t-indigo-600 animate-spin mb-4" />
@@ -56,18 +59,21 @@ const AdminProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (!user || !isAuthorizedAdminEmail(user.email)) {
+  const hasAdminAccess = isAuthorizedAdminEmail(user?.email) || role === 'admin' || role === 'owner' || role === 'developer';
+
+  if (!user || !hasAdminAccess) {
     return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
 };
 
-// Smart Root Redirect (starts with login and bypasses landing page)
+// Smart Root Redirect (starts with login and routes cashiers to POS)
 const RootRoute = () => {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { role, loading: permLoading } = usePermission();
   
-  if (loading) {
+  if (authLoading || permLoading) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
         <div className="w-8 h-8 rounded-full border-4 border-zinc-200 border-t-zinc-900 animate-spin mb-4" />
@@ -77,6 +83,9 @@ const RootRoute = () => {
   }
   
   if (user) {
+    if (role === 'cashier') {
+      return <Navigate to="/pos" replace />;
+    }
     return <Navigate to="/dashboard" replace />;
   }
   

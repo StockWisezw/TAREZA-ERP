@@ -279,7 +279,7 @@ export function checkIsOfflineError(err: any): boolean {
 const ALLOWED_KEYS: Record<string, string[]> = {
   businesses: ['id', 'name', 'tax_number', 'email', 'phone', 'currency', 'subscription_plan', 'subscription_status', 'subscription_end_date', 'max_users', 'max_branches', 'created_at', 'updated_at', 'logo_url'],
   branches: ['id', 'business_id', 'name', 'address', 'phone', 'type', 'is_active', 'access_code', 'created_at', 'updated_at'],
-  profiles: ['id', 'first_name', 'last_name', 'phone', 'email', 'pin', 'created_at', 'updated_at'],
+  profiles: ['id', 'first_name', 'last_name', 'phone', 'email', 'username', 'role', 'pin', 'created_at', 'updated_at'],
   roles: ['id', 'business_id', 'name', 'description', 'created_at', 'updated_at'],
   role_permissions: ['id', 'role_id', 'permissions', 'created_at'],
   business_users: ['id', 'business_id', 'user_id', 'branch_id', 'role_id', 'is_active', 'created_at', 'updated_at'],
@@ -308,7 +308,8 @@ const ALLOWED_KEYS: Record<string, string[]> = {
   support_tickets: ['id', 'user_id', 'user_email', 'business_id', 'business_name', 'subject', 'category', 'priority', 'status', 'description', 'response', 'created_at', 'updated_at'],
   trial_bookkeepings: ['id', 'business_id', 'branch_id', 'account_id', 'debit', 'credit', 'amount', 'type', 'created_at'],
   currencies: ['id', 'business_id', 'code', 'name', 'symbol', 'exchange_rate', 'is_base', 'is_active', 'created_at'],
-  exchange_rate_history: ['id', 'currency_id', 'rate', 'effective_date']
+  exchange_rate_history: ['id', 'currency_id', 'rate', 'effective_date'],
+  left_changes: ['id', 'business_id', 'branch_id', 'cashier_id', 'cashier_name', 'customer_name', 'customer_phone', 'sale_id', 'receipt_number', 'amount', 'currency', 'notes', 'status', 'claimed_at', 'claimed_by', 'created_at', 'updated_at']
 };
 
 function normalizeInput(item: any, table: string): any {

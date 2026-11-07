@@ -14,6 +14,7 @@ import { SaleRecord } from '../../store/posStore';
 import { exportReceiptPDF } from '../../utils/exportReceiptPDF';
 import { printReceiptDirect } from '../../utils/printManager';
 import { useBusinessStore } from '../../store';
+import { CustomerChangeNotes } from './CustomerChangeNotes';
 
 interface PaymentFlowProps {
   showPayment: boolean;
@@ -41,6 +42,7 @@ export const PaymentFlow: React.FC<PaymentFlowProps> = ({
   receiptRef
 }) => {
   const { currentBusiness, activeBranch } = useBusinessStore();
+  const [showLeftChangeModal, setShowLeftChangeModal] = React.useState(false);
 
   const changeDue = lastSale 
     ? lastSale.payments.reduce((acc, p) => acc + p.amount, 0) - lastSale.total 
@@ -101,11 +103,22 @@ export const PaymentFlow: React.FC<PaymentFlowProps> = ({
             </div>
             
             {lastSale && changeDue > 0 && (
-              <div className="w-full p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl shadow-sm text-center">
-                <p className="text-emerald-700 dark:text-emerald-400 font-bold text-xs mb-0.5">Change Due</p>
-                <p className="text-2xl font-extrabold font-mono text-emerald-700 dark:text-emerald-400">
-                  ${changeDue.toFixed(2)}
-                </p>
+              <div className="w-full p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl shadow-sm text-center space-y-2">
+                <div>
+                  <p className="text-emerald-700 dark:text-emerald-400 font-bold text-xs mb-0.5">Change Due</p>
+                  <p className="text-2xl font-extrabold font-mono text-emerald-700 dark:text-emerald-400">
+                    ${changeDue.toFixed(2)}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowLeftChangeModal(true)}
+                  className="text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 cursor-pointer w-full"
+                >
+                  📝 Customer Left Change? Record Note (${changeDue.toFixed(2)})
+                </Button>
               </div>
             )}
 
@@ -155,6 +168,13 @@ export const PaymentFlow: React.FC<PaymentFlowProps> = ({
       </Dialog>
 
       <ReceiptPrint ref={receiptRef} sale={lastSale} />
+
+      <CustomerChangeNotes
+        open={showLeftChangeModal}
+        onOpenChange={setShowLeftChangeModal}
+        initialAmount={changeDue > 0 ? changeDue : undefined}
+        initialReceipt={lastSale?.receiptNumber}
+      />
     </>
   );
 };

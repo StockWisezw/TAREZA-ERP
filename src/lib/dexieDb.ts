@@ -68,6 +68,7 @@ class TarezaOfflineDatabase extends Dexie {
   syncLogs!: Table<SyncLogRecord, string>;
   settings!: Table<any, string>;
   tutorial_videos!: Table<any, string>;
+  left_changes!: Table<any, string>;
 
   constructor() {
     super('TarezaEnterpriseOfflineDB');
@@ -106,7 +107,12 @@ class TarezaOfflineDatabase extends Dexie {
       offlineQueue: 'id, type, recordId, timestamp, status, priority',
       syncLogs: 'id, timestamp, status, syncStatus',
       settings: 'id, key, syncStatus',
-      tutorial_videos: 'id, title, syncStatus'
+      tutorial_videos: 'id, title, syncStatus',
+      left_changes: 'id, business_id, branch_id, customer_name, status, syncStatus'
+    });
+    this.version(2).stores({
+      profiles: 'id, email, username, syncStatus',
+      left_changes: 'id, business_id, branch_id, customer_name, status, syncStatus'
     });
   }
 }

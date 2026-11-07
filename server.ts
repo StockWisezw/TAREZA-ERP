@@ -524,6 +524,134 @@ async function startServer() {
     }
   });
 
+  // 8. Create Team Member / Cashier / Admin via Firebase Admin SDK (Bypasses all client restrictions)
+  app.post("/api/team/create-user", async (req, res) => {
+    const { firstName, lastName, username, email, phone, password, pin, role, branchId, businessId } = req.body;
+    
+    if (!username && !email) {
+      return res.status(400).json({ error: "Username or email is required." });
+    }
+    if (!password) {
+      return res.status(400).json({ error: "Password or PIN is required." });
+    }
+    if (!businessId) {
+      return res.status(400).json({ error: "Business ID is required." });
+    }
+
+    try {
+      const sanitizedUsername = (username || (email ? email.split('@')[0] : 'user')).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const assignedRole = (role || 'Staff').trim();
+      const sanitizedRoleLower = assignedRole.toLowerCase();
+      
+      // If email is not supplied (e.g. for cashier who logs in by username + pin/password), generate a unique internal email
+      const safeBizSlug = businessId.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      const finalEmail = (email && email.trim()) 
+        ? email.trim().toLowerCase() 
+        : `${sanitizedUsername}@${safeBizSlug}.tareza.internal`;
+
+      const finalDisplayName = `${firstName || ''} ${lastName || ''}`.trim() || sanitizedUsername;
+      const finalPin = (pin && String(pin).trim()) || Math.floor(1000 + Math.random() * 9000).toString();
+
+      let userUid = '';
+      // Try to find if user already exists in Firebase Auth
+      try {
+        const existingAuthUser = await adminAuth.getUserByEmail(finalEmail);
+        userUid = existingAuthUser.uid;
+        // Update password if provided
+        await adminAuth.updateUser(userUid, {
+          password: password.length >= 6 ? password : `${password}1234`,
+          displayName: finalDisplayName,
+          disabled: false
+        }).catch(() => {});
+      } catch (notFoundErr) {
+        // Create user in Firebase Auth with Admin privileges
+        const newUser = await adminAuth.createUser({
+          email: finalEmail,
+          password: password.length >= 6 ? password : `${password}1234`,
+          displayName: finalDisplayName,
+          emailVerified: true
+        });
+        userUid = newUser.uid;
+      }
+
+      const now = new Date().toISOString();
+
+      // Find or create role record in Firestore
+      let roleId = '';
+      try {
+        const rolesSnap = await firestoreDb.collection("roles")
+          .where("business_id", "==", businessId)
+          .where("name", "==", assignedRole)
+          .limit(1)
+          .get();
+
+        if (!rolesSnap.empty) {
+          roleId = rolesSnap.docs[0].id;
+        } else {
+          const newRoleRef = firestoreDb.collection("roles").doc();
+          roleId = newRoleRef.id;
+          await newRoleRef.set({
+            id: roleId,
+            business_id: businessId,
+            name: assignedRole,
+            description: `${assignedRole} access role`,
+            created_at: now,
+            updated_at: now
+          });
+        }
+      } catch (roleErr: any) {
+        console.warn("[Role Creation Warning]", roleErr.message);
+        roleId = `role_${sanitizedRoleLower}`;
+      }
+
+      // Create / update profile record in Firestore
+      await firestoreDb.collection("profiles").doc(userUid).set({
+        id: userUid,
+        first_name: firstName || sanitizedUsername,
+        last_name: lastName || '',
+        username: sanitizedUsername,
+        email: finalEmail,
+        phone: phone || null,
+        pin: finalPin,
+        role: sanitizedRoleLower,
+        created_at: now,
+        updated_at: now
+      }, { merge: true });
+
+      // Create / update business_user linkage in Firestore
+      const buId = `bu_${userUid}`;
+      await firestoreDb.collection("business_users").doc(buId).set({
+        id: buId,
+        business_id: businessId,
+        user_id: userUid,
+        branch_id: branchId || null,
+        role_id: roleId,
+        is_active: true,
+        created_at: now,
+        updated_at: now
+      }, { merge: true });
+
+      return res.json({
+        success: true,
+        message: `User '${finalDisplayName}' created successfully as ${assignedRole}.`,
+        user: {
+          uid: userUid,
+          id: userUid,
+          username: sanitizedUsername,
+          email: finalEmail,
+          name: finalDisplayName,
+          role: assignedRole,
+          pin: finalPin,
+          branchId: branchId || null,
+          businessId
+        }
+      });
+    } catch (err: any) {
+      console.error("[Create Team User Error]", err);
+      return res.status(500).json({ error: err.message || "Failed to create user record." });
+    }
+  });
+
   // 0. Notifications Integration Endpoint
   app.post("/api/notifications/notify", async (req, res) => {
     const { type, payload } = req.body;

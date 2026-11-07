@@ -123,6 +123,21 @@ export function usePermission() {
             } else {
               setRoleName(rawName);
             }
+          } else {
+            // Check direct profile role attribute as fallback
+            const { data: prof } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle();
+            if (prof?.role && isMounted) {
+              const pRole = prof.role.toLowerCase();
+              if (pRole.includes('admin') || pRole.includes('owner') || pRole.includes('developer')) {
+                setRoleName('admin');
+              } else if (pRole.includes('cashier')) {
+                setRoleName('cashier');
+              } else if (pRole.includes('manager')) {
+                setRoleName('manager');
+              } else {
+                setRoleName(pRole);
+              }
+            }
           }
         }
       } catch (err) {
@@ -143,11 +158,15 @@ export function usePermission() {
 
   const can = (permission: Permission): boolean => {
     if (!user) return false;
-    // Superadmin override
+    // Full access for all Administrators, Owners, and Developers
+    if (roleName === 'admin' || roleName === 'owner' || roleName === 'developer') {
+      return true;
+    }
+    // Whitelist superadmin override
     if (user.email && ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(user.email.toLowerCase())) {
       return true;
     }
-    const permissions = ROLE_PERMISSIONS[roleName] || ROLE_PERMISSIONS['admin'];
+    const permissions = ROLE_PERMISSIONS[roleName] || ROLE_PERMISSIONS['cashier'];
     return permissions.includes(permission);
   };
 

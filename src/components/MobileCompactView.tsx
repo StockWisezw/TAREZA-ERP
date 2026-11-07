@@ -83,13 +83,16 @@ export function MobileCompactView({ onCloseSheet, className = '' }: MobileCompac
   ];
 
   // Filtering based on role
-  const filteredEssential = essentialItems.filter(() => {
+  const filteredEssential = essentialItems.filter(item => {
+    if (role === 'cashier') {
+      return item.href === '/pos';
+    }
     return true;
   });
 
   const filteredSecondary = secondaryItems.filter(item => {
     if (role === 'cashier') {
-      return item.href !== '/settings';
+      return false; // Cashiers are restricted to POS Terminal only
     }
     if (role === 'staff') {
       return ['/pos', '/inventory', '/customers', '/suppliers', '/messenger', '/support'].includes(item.href);

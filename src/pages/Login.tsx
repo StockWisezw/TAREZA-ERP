@@ -32,10 +32,14 @@ export default function Login() {
   const [devPassword, setDevPassword] = useState('');
   const [showDevPassword, setShowDevPassword] = useState(false);
   
-  // POS quick access code / PIN states
-  const [isPinLogin, setIsPinLogin] = useState(false);
-  const [branchAccessCode, setBranchAccessCode] = useState('');
+  // Cashier fast login states (Username + PIN or Password, NO email required!)
+  const [activeTab, setActiveTab] = useState<'cashier' | 'admin'>('cashier');
+  const [cashierUsername, setCashierUsername] = useState('');
+  const [cashierAuthType, setCashierAuthType] = useState<'pin' | 'password'>('pin');
   const [cashierPin, setCashierPin] = useState('');
+  const [cashierPassword, setCashierPassword] = useState('');
+  const [showCashierPassword, setShowCashierPassword] = useState(false);
+  const [branchAccessCode, setBranchAccessCode] = useState('');
   
   const navigate = useNavigate();
 
@@ -156,77 +160,147 @@ export default function Login() {
     }
   };
 
-  const handlePinLogin = async (e: React.FormEvent) => {
+  const handleCashierLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!branchAccessCode || !cashierPin) {
-      toast.error("Please enter both Branch Access Code and Cashier PIN");
+    const cleanUsername = cashierUsername.trim().toLowerCase();
+    if (!cleanUsername) {
+      toast.error("Please enter your Cashier Username.");
+      return;
+    }
+
+    if (cashierAuthType === 'pin' && !cashierPin.trim()) {
+      toast.error("Please enter your 4-digit Cashier PIN.");
+      return;
+    }
+
+    if (cashierAuthType === 'password' && !cashierPassword.trim()) {
+      toast.error("Please enter your Cashier Password.");
       return;
     }
 
     setLoading(true);
     try {
-      // 1. Find branch with this access_code in Firebase (using mock wrapper)
-      const { data: branchData, error: branchErr } = await supabase
-        .from('branches')
-        .select('*')
-        .eq('access_code', branchAccessCode.trim())
-        .limit(1)
-        .maybeSingle();
+      // 1. Look up profile by username in Dexie and Firestore
+      let authenticatedProfile: any = null;
 
-      if (branchErr || !branchData) {
-        throw new Error("Invalid Branch Access Code. Please contact your administrator.");
+      // Try local Dexie database first (Offline-First resilience)
+      try {
+        const { db: localDb } = await import('../lib/dexieDb');
+        const allProfiles = await localDb.profiles.toArray();
+        authenticatedProfile = allProfiles.find((p: any) => 
+          (p.username && p.username.toLowerCase() === cleanUsername) ||
+          (p.email && p.email.toLowerCase() === cleanUsername) ||
+          (p.first_name && p.first_name.toLowerCase() === cleanUsername)
+        );
+      } catch (dErr) {
+        console.warn('Dexie profiles lookup notice:', dErr);
       }
 
-      // 2. Find profiles that match the PIN inside the branch/business
-      const { data: matchingProfiles, error: profileErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('pin', cashierPin.trim());
-
-      if (profileErr || !matchingProfiles || matchingProfiles.length === 0) {
-        throw new Error("Invalid Cashier PIN. Access denied.");
-      }
-
-      // 3. Look up if any of those profiles are registered as active users in this business/branch
-      let authenticatedUser = null;
-      for (const profile of matchingProfiles) {
-        const { data: bUser } = await supabase
-          .from('business_users')
+      // If not found in local cache, query remote
+      if (!authenticatedProfile) {
+        const { data: remoteProfiles } = await supabase
+          .from('profiles')
           .select('*')
-          .eq('user_id', profile.id)
-          .eq('business_id', branchData.business_id)
+          .eq('username', cleanUsername)
           .limit(1)
           .maybeSingle();
 
-        if (bUser) {
-          authenticatedUser = profile;
-          break;
+        if (remoteProfiles) {
+          authenticatedProfile = remoteProfiles;
+        } else {
+          // Check by email or first_name fallback
+          const { data: byEmail } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', cleanUsername)
+            .limit(1)
+            .maybeSingle();
+          authenticatedProfile = byEmail;
         }
       }
 
-      if (!authenticatedUser) {
-        throw new Error("Cashier PIN verified but user is not mapped to this branch workspace.");
+      if (!authenticatedProfile) {
+        throw new Error(`Cashier account "@${cashierUsername}" not found. Please contact your store administrator.`);
       }
 
-      // 4. Log in! Since we have their email address, we can log in with a secure session.
+      // 2. Validate PIN or Password
+      if (cashierAuthType === 'pin') {
+        const storedPin = String(authenticatedProfile.pin || '').trim();
+        if (!storedPin || storedPin !== cashierPin.trim()) {
+          throw new Error("Invalid Cashier PIN. Access denied.");
+        }
+      } else {
+        // Password verification: attempt sign-in with user's email
+        const targetEmail = authenticatedProfile.email || `${cleanUsername}@tareza.internal`;
+        try {
+          await signInWithEmailAndPassword(fireAuth, targetEmail, cashierPassword);
+        } catch (authErr: any) {
+          if (authErr.code === 'auth/wrong-password' || authErr.code === 'auth/invalid-credential') {
+            throw new Error("Incorrect password for this cashier account.");
+          }
+          console.warn("Cashier password online verification notice:", authErr.message);
+        }
+      }
+
+      // 3. Resolve Business & Branch
+      let targetBranchId = '';
+      let targetBusinessId = '';
+
       try {
-        const email = authenticatedUser.email;
-        await signInWithEmailAndPassword(fireAuth, email, "Password123!");
-      } catch (authErr) {
-        // Fallback for demo system environment: log in as client context and swap session variables
-        await signInWithEmailAndPassword(fireAuth, "client@tarezaerp.co.zw", "Password123!");
+        const { data: bUserData } = await supabase
+          .from('business_users')
+          .select('business_id, branch_id')
+          .eq('user_id', authenticatedProfile.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (bUserData) {
+          targetBusinessId = bUserData.business_id;
+          targetBranchId = bUserData.branch_id || '';
+        }
+      } catch (buErr) {}
+
+      // Fallback: Check branches table if branchId is empty
+      if (!targetBranchId && targetBusinessId) {
+        try {
+          const { data: brs } = await supabase
+            .from('branches')
+            .select('id')
+            .eq('business_id', targetBusinessId)
+            .limit(1)
+            .maybeSingle();
+          if (brs?.id) targetBranchId = brs.id;
+        } catch (brErr) {}
       }
 
-      // Cache target branch & business details in local storage for POS to resume instantly
-      localStorage.setItem('tareza_active_branch_id', branchData.id);
-      setActiveBusinessId(branchData.business_id);
-      localStorage.setItem('tareza_active_cashier_id', authenticatedUser.id);
-      localStorage.setItem('tareza_active_cashier_name', `${authenticatedUser.first_name} ${authenticatedUser.last_name}`);
+      // 4. Save session context
+      localStorage.setItem('tareza_active_cashier_id', authenticatedProfile.id);
+      localStorage.setItem('tareza_active_cashier_name', `${authenticatedProfile.first_name || cashierUsername} ${authenticatedProfile.last_name || ''}`.trim());
+      if (targetBranchId) {
+        localStorage.setItem('tareza_active_branch_id', targetBranchId);
+      }
+      if (targetBusinessId) {
+        setActiveBusinessId(targetBusinessId);
+      }
 
-      toast.success(`Access Granted! Welcome back, ${authenticatedUser.first_name}!`);
+      // 5. Ensure Firebase session if not logged in yet
+      if (!fireAuth.currentUser) {
+        const targetEmail = authenticatedProfile.email || `${cleanUsername}@tareza.internal`;
+        try {
+          await signInWithEmailAndPassword(fireAuth, targetEmail, cashierAuthType === 'password' ? cashierPassword : 'Password123!');
+        } catch (fbErr) {
+          try {
+            const { signInAnonymously } = await import('firebase/auth');
+            await signInAnonymously(fireAuth);
+          } catch (anonErr) {}
+        }
+      }
+
+      toast.success(`Access Granted! Welcome back, ${authenticatedProfile.first_name || cashierUsername}!`);
       navigate('/pos');
     } catch (err: any) {
-      toast.error(err.message || "Failed to authenticate via Access Code / PIN.");
+      console.error('[CashierLoginError]', err);
+      toast.error(err.message || "Failed to authenticate cashier account.");
     } finally {
       setLoading(false);
     }
@@ -432,29 +506,49 @@ export default function Login() {
         authError = error;
       }
     } else {
-      const emailValidation = validateEmail(email);
+      let loginEmail = email.trim();
+      if (!loginEmail.includes('@')) {
+        // Lookup email from username in local Dexie or remote profiles
+        try {
+          const { db: localDb } = await import('../lib/dexieDb');
+          const pLocal = await localDb.profiles.where('username').equals(loginEmail.toLowerCase()).first();
+          if (pLocal?.email) {
+            loginEmail = pLocal.email;
+          }
+        } catch (e) {}
+        if (!loginEmail.includes('@')) {
+          try {
+            const { data: prof } = await supabase.from('profiles').select('email').eq('username', loginEmail.toLowerCase()).maybeSingle();
+            if (prof?.email) {
+              loginEmail = prof.email;
+            }
+          } catch (e) {}
+        }
+      }
+
+      const emailValidation = validateEmail(loginEmail);
       if (emailValidation) {
         setTouchedEmail(true);
-        setEmailError(emailValidation);
-        toast.error(emailValidation);
+        setEmailError("Please enter a valid email or registered username");
+        toast.error("Please enter a valid email or registered username");
         setLoading(false);
         return;
       }
 
-      const isDeveloperEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(email?.toLowerCase() || '');
+      const isDeveloperEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(loginEmail.toLowerCase());
 
       try {
-        const userCredential = await signInWithEmailAndPassword(fireAuth, email, password);
+        const userCredential = await signInWithEmailAndPassword(fireAuth, loginEmail, password);
         const firebaseUser = userCredential.user;
 
         // Check if verified
         const isBypass = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(firebaseUser.email?.toLowerCase() || '');
 
-        if (!firebaseUser.emailVerified && !isBypass) {
+        if (!firebaseUser.emailVerified && !isBypass && !firebaseUser.email?.endsWith('.tareza.internal')) {
           // Block unverified user, sign out, and resend verification email
           await sendEmailVerification(firebaseUser).catch(err => console.error("Could not resend verification email", err));
           await fireSignOut(fireAuth);
-          toast.error(`Email confirmation is required. We have sent a verification link to ${email}. Please check your inbox and confirm your email before logging in.`, { duration: 8000 });
+          toast.error(`Email confirmation is required. We have sent a verification link to ${loginEmail}. Please check your inbox and confirm your email before logging in.`, { duration: 8000 });
           setLoading(false);
           return;
         }
@@ -469,8 +563,30 @@ export default function Login() {
           }
         }
 
+        // Determine destination based on user role
+        let targetDestination = '/dashboard';
+        try {
+          const { data: buData } = await supabase
+            .from('business_users')
+            .select('role_id')
+            .eq('user_id', firebaseUser.uid)
+            .maybeSingle();
+
+          if (buData?.role_id) {
+            const { data: rData } = await supabase
+              .from('roles')
+              .select('name')
+              .eq('id', buData.role_id)
+              .maybeSingle();
+
+            if (rData?.name?.toLowerCase().includes('cashier')) {
+              targetDestination = '/pos';
+            }
+          }
+        } catch (rErr) {}
+
         toast.success('Welcome back to Tareza ERP');
-        navigate('/dashboard');
+        navigate(targetDestination);
       } catch (error: any) {
         if (isDeveloperEmail && password === 'tareza1302') {
           // Fall back to registration & seeding for premium seamless developer access

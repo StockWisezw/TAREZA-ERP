@@ -38,20 +38,21 @@ import { QuotationManager } from '../components/pos/QuotationManager';
 import { PaymentFlow } from '../components/pos/PaymentFlow';
 import { TransactionHistoryManager } from '../components/pos/TransactionHistoryManager';
 import { POSHardwareSettingsDialog } from '../components/pos/POSHardwareSettingsDialog';
+import { CustomerChangeNotes } from '../components/pos/CustomerChangeNotes';
 import { Button } from '../components/ui/button';
 import { 
   Dialog, 
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogDescription,
-  DialogFooter
+  DialogDescription, 
+  DialogFooter 
 } from '../components/ui/dialog';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useReactToPrint } from 'react-to-print';
 import { useNavigate } from 'react-router-dom';
-import { Package, Tag, ShoppingCart, HelpCircle, Monitor, Cpu, Fingerprint, Maximize, Sliders, Layout, RefreshCw } from 'lucide-react';
+import { Package, Tag, ShoppingCart, HelpCircle, Monitor, Cpu, Fingerprint, Maximize, Sliders, Layout, RefreshCw, FileText } from 'lucide-react';
 
 export default function POS() {
   const navigate = useNavigate();
@@ -95,6 +96,21 @@ export default function POS() {
     isSyncing,
     syncOfflineSales
   } = useOfflineQueue();
+
+  const [showChangeNotes, setShowChangeNotes] = useState(false);
+  const [unclaimedChangeCount, setUnclaimedChangeCount] = useState(0);
+
+  useEffect(() => {
+    const fetchUnclaimedCount = async () => {
+      try {
+        const count = await dexieDb.left_changes.where('status').equals('unclaimed').count();
+        setUnclaimedChangeCount(count);
+      } catch (e) {}
+    };
+    fetchUnclaimedCount();
+    const interval = setInterval(fetchUnclaimedCount, 6000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Load saved active transaction state on initial mount/resume from IndexedDB
   useEffect(() => {
@@ -1200,6 +1216,26 @@ export default function POS() {
                       : "Sync Data to Online"}
                 </span>
               </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowChangeNotes(true)}
+                className={cn(
+                  "text-xs shadow-none cursor-pointer rounded-xl font-extrabold flex items-center gap-1.5 transition-all",
+                  unclaimedChangeCount > 0 
+                    ? "border-amber-300 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 hover:bg-amber-100" 
+                    : "border-zinc-200 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100"
+                )}
+                title="Customer Left Changes Notes"
+              >
+                <FileText className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                <span>Left Changes</span>
+                {unclaimedChangeCount > 0 && (
+                  <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                    {unclaimedChangeCount}
+                  </span>
+                )}
+              </Button>
               <TransactionHistoryManager 
                 activeSession={activeSession}
                 setActiveSession={setActiveSession}
@@ -1358,6 +1394,12 @@ export default function POS() {
         setScaleMode={setScaleMode}
         isFullscreen={isFullscreen}
         toggleFullscreen={toggleFullscreen}
+      />
+
+      {/* Customer Left Changes Tracker Modal */}
+      <CustomerChangeNotes
+        open={showChangeNotes}
+        onOpenChange={setShowChangeNotes}
       />
     </div>
   );
