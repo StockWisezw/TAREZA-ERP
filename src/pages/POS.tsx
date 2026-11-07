@@ -24,6 +24,7 @@ import {
   logAuditEvent
 } from '../services/ledgerService';
 import { db, doc, getDoc, updateDoc, supabase } from '../lib/firebaseClient';
+import { db as dexieDb } from '../lib/dexieDb';
 import { usePOSSession } from '../hooks/usePOSSession';
 import { usePOSData } from '../hooks/usePOSData';
 import { indexedDbService } from '../services/indexedDbService';
@@ -37,7 +38,6 @@ import { QuotationManager } from '../components/pos/QuotationManager';
 import { PaymentFlow } from '../components/pos/PaymentFlow';
 import { TransactionHistoryManager } from '../components/pos/TransactionHistoryManager';
 import { POSHardwareSettingsDialog } from '../components/pos/POSHardwareSettingsDialog';
-import { OfflineModePromptDialog } from '../components/pos/OfflineModePromptDialog';
 import { Button } from '../components/ui/button';
 import { 
   Dialog, 
@@ -51,14 +51,14 @@ import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useReactToPrint } from 'react-to-print';
 import { useNavigate } from 'react-router-dom';
-import { Package, Tag, ShoppingCart, HelpCircle, Monitor, Cpu, Fingerprint, Maximize, Sliders, Layout } from 'lucide-react';
+import { Package, Tag, ShoppingCart, HelpCircle, Monitor, Cpu, Fingerprint, Maximize, Sliders, Layout, RefreshCw } from 'lucide-react';
 
 export default function POS() {
   const navigate = useNavigate();
   const { 
     cart, getTotals, addToCart, removeFromCart, updateQuantity, pricingTier, setPricingTier, setItemPricingTier,
     clearCart, completeSale, currentCustomer, setCurrentCustomer, parkSale, parkedSales, resumeSale,
-    applyGlobalDiscount, applyItemDiscount, payments, globalDiscount
+    applyGlobalDiscount, applyItemDiscount, payments, globalDiscount, offlineQueue
   } = usePOSStore();
   
   const totals = getTotals();
@@ -176,42 +176,50 @@ export default function POS() {
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
   const [activeMobileTab, setActiveMobileTab] = useState<'catalog' | 'cart'>('catalog');
   const [viewingDashboard, setViewingDashboard] = useState(true);
-  const [showOfflinePrompt, setShowOfflinePrompt] = useState(false);
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? window.navigator.onLine : true);
 
-  const handleToggleOfflineMode = () => {
-    const currentMode = localStorage.getItem('tareza_offline_mode') === 'true';
-    if (currentMode) {
-      localStorage.setItem('tareza_offline_mode', 'false');
-      window.dispatchEvent(new Event('offline-mode-changed'));
-      toast.success('Switched back to Online Mode. Synchronizing local cache...');
-    } else {
-      localStorage.setItem('tareza_offline_mode', 'true');
-      window.dispatchEvent(new Event('offline-mode-changed'));
-      toast.info('Switched to Offline Transaction Mode manually.');
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
+
+  const handleManualSync = async () => {
+    if (!navigator.onLine) {
+      toast.error('Cannot sync: No internet connection detected. Please connect to a network.');
+      return;
+    }
+    setIsManualSyncing(true);
+    const syncToast = toast.loading('Syncing offline transactions and register data to cloud...');
+    try {
+      const { syncOfflineDatabase } = await import('../lib/firebaseClient');
+      await syncOfflineDatabase();
+
+      const { offlineSyncEngine } = await import('../services/offlineSyncEngine');
+      await offlineSyncEngine.sync();
+
+      window.dispatchEvent(new CustomEvent('tareza-trigger-sync'));
+      toast.success('All offline transactions & register data synced to cloud!', { id: syncToast });
+    } catch (err: any) {
+      console.error('[Manual Sync Error]:', err);
+      toast.error('Sync failed: ' + (err?.message || String(err)), { id: syncToast });
+    } finally {
+      setIsManualSyncing(false);
     }
   };
 
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
+      toast.info('Internet connection restored. Tap "Sync Data to Online" to push offline transactions.');
     };
     const handleOffline = () => {
       setIsOnline(false);
-      setShowOfflinePrompt(true);
-    };
-    const handleNetworkOfflineEvent = () => {
-      setShowOfflinePrompt(true);
+      toast.warning('Operating offline. All transactions are recorded locally.');
     };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    window.addEventListener('tareza-network-offline', handleNetworkOfflineEvent);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('tareza-network-offline', handleNetworkOfflineEvent);
     };
   }, []);
 
@@ -762,7 +770,7 @@ export default function POS() {
       return;
     }
 
-    const isOffline = !navigator.onLine || localStorage.getItem('tareza_offline_mode') === 'true';
+    const isOffline = true; // All transactions recorded offline by default
 
     // Calculate a sale timestamp matching the active shift business day date with current wall-clock time
     const getSaleTimestamp = () => {
@@ -792,7 +800,7 @@ export default function POS() {
       setLastSale(sale);
       setShowPayment(false);
       setShowPostSale(true);
-      toast.success(isOffline ? 'Sale queued — will sync when online.' : 'Sale completed and recorded!');
+      toast.success(`Sale recorded locally (Receipt #${sale.receiptNumber}). Ready for manual sync.`);
       shouldPrintRef.current = false;
       
       // Decrement stock in local state immediately so UI updates instantly with BOM explosion
@@ -856,6 +864,162 @@ export default function POS() {
         }
       };
 
+      const persistOfflineSale = async (currentSale: SaleRecord, saleCogsVal: number) => {
+        try {
+          updateLocalSessionWithOfflineSale(currentSale.total, saleCogsVal);
+
+          const { getActiveBusinessId } = await import('../lib/firebaseClient');
+          const bizId = (await getActiveBusinessId()) || activeSession?.business_id || 'default_business';
+          const branchId = activeSession?.branch_id || '';
+
+          // 1. Save complete sale into Dexie sales table
+          await dexieDb.sales.put({
+            id: currentSale.id,
+            receipt_number: currentSale.receiptNumber,
+            receiptNumber: currentSale.receiptNumber,
+            total: currentSale.total,
+            vat_total: currentSale.vatTotal,
+            vatTotal: currentSale.vatTotal,
+            discount_total: currentSale.discountTotal,
+            discountTotal: currentSale.discountTotal,
+            subtotal: currentSale.subtotal || (currentSale.total - currentSale.vatTotal),
+            payment_method: currentSale.payments.length > 0 ? currentSale.payments[0].method : 'cash',
+            payments: currentSale.payments,
+            items: currentSale.items,
+            status: 'COMPLETED',
+            created_at: currentSale.timestamp || new Date().toISOString(),
+            business_id: bizId,
+            branch_id: branchId,
+            customer_id: currentSale.customerId || null,
+            customerId: currentSale.customerId || null,
+            customerName: currentSale.customerName || 'Walk-In Customer',
+            syncStatus: 'pending',
+            synced: false
+          });
+
+          // 2. Save items into Dexie sale_items table
+          if (currentSale.items && currentSale.items.length > 0) {
+            for (const item of currentSale.items) {
+              await dexieDb.sale_items.put({
+                id: crypto.randomUUID(),
+                business_id: bizId,
+                sale_id: currentSale.id,
+                product_id: item.product.id,
+                quantity: item.quantity,
+                price: item.unitPrice,
+                unit_price: item.unitPrice,
+                line_total: item.subtotal,
+                vat_amount: item.vatAmount || 0,
+                syncStatus: 'pending'
+              });
+
+              // 3. Decrement local stock in Dexie inventory and products tables
+              const mult = getItemPackSize(item);
+              const dec = item.quantity * mult;
+              try {
+                const invRecords = await dexieDb.inventory.where('product_id').equals(item.product.id).toArray();
+                if (invRecords.length > 0) {
+                  const firstInv = invRecords[0];
+                  await dexieDb.inventory.update(firstInv.id, {
+                    quantity: Math.max(0, (Number(firstInv.quantity) || 0) - dec),
+                    updated_at: new Date().toISOString()
+                  });
+                }
+                const pRecord = await dexieDb.products.get(item.product.id);
+                if (pRecord) {
+                  const currentStock = Number(pRecord.stock || pRecord.stock_quantity || 0);
+                  await dexieDb.products.update(item.product.id, {
+                    stock: Math.max(0, currentStock - dec),
+                    stock_quantity: Math.max(0, currentStock - dec)
+                  });
+                }
+              } catch (stkErr) {}
+            }
+          }
+
+          // 4. Record cash drawer logs in Dexie
+          for (const p of currentSale.payments) {
+            try {
+              await dexieDb.cash_drawer_logs.put({
+                id: crypto.randomUUID(),
+                business_id: bizId,
+                branch_id: branchId,
+                amount: p.amount,
+                type: p.method === 'credit' ? 'receivable' : 'cash',
+                transaction_type: p.method + '_sale',
+                payment_method: p.method,
+                notes: `Offline Sale ${currentSale.receiptNumber} - ${p.method}`,
+                linked_document_id: currentSale.id,
+                linked_document_type: 'sale',
+                created_at: currentSale.timestamp || new Date().toISOString(),
+                syncStatus: 'pending'
+              });
+            } catch (logErr) {}
+          }
+
+          // 5. Update shift in Dexie register_sessions table
+          if (activeSession?.id) {
+            try {
+              const existingSess = await dexieDb.register_sessions.get(activeSession.id);
+              const updatedSess = {
+                ...(existingSess || activeSession),
+                id: activeSession.id,
+                business_id: bizId,
+                sales_total: Number(activeSession.sales_total || 0) + currentSale.total,
+                sales_count: Number(activeSession.sales_count || 0) + 1,
+                expected_balance: Number(activeSession.expected_balance || activeSession.opening_balance || 0) + currentSale.total,
+                cogs_total: Number(activeSession.cogs_total || 0) + saleCogsVal,
+                updated_at: new Date().toISOString()
+              };
+              await dexieDb.register_sessions.put(updatedSess);
+            } catch (sessErr) {}
+          }
+
+          // 6. Ensure queued in posStore and dexieDb.offlineQueue
+          const offlineSale = { ...currentSale, status: 'offline_pending' as const, business_id: bizId, branch_id: branchId };
+          usePOSStore.setState((s: any) => {
+            const exists = s.offlineQueue.some((q: any) => q.id === currentSale.id || q.receiptNumber === currentSale.receiptNumber);
+            return {
+              offlineQueue: exists ? s.offlineQueue : [...s.offlineQueue, offlineSale]
+            };
+          });
+
+          await dexieDb.offlineQueue.put({
+            id: crypto.randomUUID(),
+            type: 'sales:save',
+            recordId: currentSale.id,
+            payload: {
+              id: currentSale.id,
+              receipt_number: currentSale.receiptNumber,
+              receiptNumber: currentSale.receiptNumber,
+              total: currentSale.total,
+              vat_total: currentSale.vatTotal,
+              discount_total: currentSale.discountTotal,
+              subtotal: currentSale.subtotal,
+              payment_method: currentSale.payments.length > 0 ? currentSale.payments[0].method : 'cash',
+              payments: currentSale.payments,
+              items: currentSale.items,
+              status: 'COMPLETED',
+              created_at: currentSale.timestamp,
+              business_id: bizId,
+              branch_id: branchId,
+              customer_id: currentSale.customerId
+            },
+            timestamp: Date.now(),
+            retryCount: 0,
+            status: 'pending',
+            priority: 'high'
+          });
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('inventory-update-needed'));
+            window.dispatchEvent(new Event('offline-mode-changed'));
+          }
+        } catch (offlineErr) {
+          console.error('[POS] Error in persistOfflineSale:', offlineErr);
+        }
+      };
+
       // Precalculate perpetual COGS for this sale
       let saleCogs = 0;
       if (sale.items && sale.items.length > 0) {
@@ -873,352 +1037,9 @@ export default function POS() {
         }
       }
 
-      if (!isOffline) {
-        try {
-          const { supabase } = await import('../lib/firebaseClient');
-
-          const { data: userData } = await supabase.auth.getUser();
-          let businessId = activeSession?.business_id || '';
-          let branchId = activeSession?.branch_id || '';
-
-          if (businessId === 'offline_business_id' || businessId === 'default_business') {
-            businessId = '';
-          }
-          if (branchId === 'offline_branch_id' || branchId === 'default_branch') {
-            branchId = '';
-          }
-
-          if (userData?.user && (!businessId || !branchId)) {
-            const { data: businessData } = await supabase.from('business_users').select('business_id, branch_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
-            if (businessData) {
-              if (!businessId) businessId = businessData.business_id || '';
-              if (!branchId) branchId = businessData.branch_id || '';
-            }
-          }
-
-          if (!businessId || businessId === 'default_business' || businessId === '00000000-0000-0000-0000-000000000000') {
-            const { data: fallbackB } = await supabase.from('businesses').select('id').limit(1).maybeSingle();
-            if (fallbackB?.id) {
-              businessId = fallbackB.id;
-              const { data: fallbackBr } = await supabase.from('branches').select('id').eq('business_id', fallbackB.id).limit(1).maybeSingle();
-              if (fallbackBr?.id) {
-                branchId = fallbackBr.id;
-              }
-            } else {
-              const { data: newB } = await supabase.from('businesses').insert({ name: 'Default Business' }).select().single();
-              if (newB) {
-                businessId = newB.id;
-                const { data: newBr } = await supabase.from('branches').insert({ business_id: businessId, name: 'Default Branch' }).select().single();
-                if (newBr) {
-                  branchId = newBr.id;
-                }
-              }
-            }
-          }
-
-          if (!branchId || branchId === 'default_branch' || branchId === '00000000-0000-0000-0000-000000000000') {
-            const { data: fallbackBr } = await supabase.from('branches').select('id').eq('business_id', businessId).limit(1).maybeSingle();
-            if (fallbackBr?.id) {
-              branchId = fallbackBr.id;
-            } else {
-              const { data: newBr } = await supabase.from('branches').insert({ business_id: businessId, name: 'Default Branch' }).select().single();
-              if (newBr) {
-                branchId = newBr.id;
-              }
-            }
-          }
-
-          const salePayload: any = {
-             receipt_number: sale.receiptNumber,
-             receiptNumber: sale.receiptNumber,
-             total: sale.total,
-             vat_total: sale.vatTotal,
-             vatTotal: sale.vatTotal,
-             discount_total: sale.discountTotal,
-             discountTotal: sale.discountTotal,
-             subtotal: sale.total - sale.vatTotal,
-             payment_method: sale.payments.length > 0 ? sale.payments[0].method : 'cash',
-             payments: sale.payments,
-             items: sale.items,
-             status: 'COMPLETED',
-             created_at: sale.timestamp || new Date().toISOString()
-          };
-          if (businessId) salePayload.business_id = businessId;
-          if (branchId) salePayload.branch_id = branchId;
-          if (sale.customerId) {
-            salePayload.customer_id = sale.customerId;
-            salePayload.customerId = sale.customerId;
-          }
-
-          const { data: saleDoc, error: saleErr } = await supabase.from('sales').insert([salePayload]).select().single();
-
-          if (saleErr || !saleDoc) {
-             throw new Error(saleErr?.message || 'Failed to initialize sale document in remote DB.');
-          }
-
-          if (saleDoc) {
-            // 1. Log sale items and update real-time stock levels with matching double-entry COGS
-            if (sale.items.length > 0) {
-              const itemsPayload = sale.items.map(item => ({
-                sale_id: saleDoc.id,
-                product_id: item.product.id,
-                quantity: item.quantity,
-                price: item.unitPrice,
-                unit_price: item.unitPrice,
-                line_total: item.subtotal,
-                vat_amount: item.vatAmount
-              }));
-              const { error: itemsErr } = await supabase.from('sale_items').insert(itemsPayload);
-              if (itemsErr) {
-                console.error('[POS] Failed to save sale items:', itemsErr);
-                throw new Error(itemsErr.message || 'Failed to save items for this sale.');
-              }
-
-              // 2.1: Record stock movements with error handling & BOM explosion
-              const stockErrors: string[] = [];
-              for (const item of sale.items) {
-                const bomBundle = item.product.bundles?.find((b: any) => b.is_bom);
-                if (bomBundle && bomBundle.bom_composition && bomBundle.bom_composition.length > 0) {
-                  // Explode BOM for virtual kits: log movement for each constituent single unit
-                  for (const comp of bomBundle.bom_composition) {
-                    try {
-                      // Retrieve component product cost price from existing products list
-                      const compProd = products.find(p => p.id === comp.product_id || p.sku === comp.sku);
-                      const compCostPrice = compProd?.costPrice || 0;
-                      const compProductId = compProd?.id || comp.product_id || comp.productId;
-
-                      if (!compProductId) {
-                        throw new Error(`Unable to resolve product ID for constituent item ${comp.sku || 'Component'}`);
-                      }
-                      
-                      const result = await recordStockMovement(
-                        businessId,
-                        branchId,
-                        compProductId,
-                        -(item.quantity * comp.quantity),
-                        'POS_SALE',
-                        userData?.user?.id || 'unknown',
-                        sale.receiptNumber,
-                        compCostPrice
-                      );
-                      
-                      if (!result || result.error) {
-                        stockErrors.push(`${comp.sku || 'Component'}: ${result?.error || 'Unknown error'}`);
-                      }
-                    } catch (err: any) {
-                      stockErrors.push(`${comp.sku || 'Component'}: ${err.message}`);
-                    }
-                  }
-                } else {
-                  // Standard item or simple pack
-                  try {
-                    const multiplier = getItemPackSize(item);
-                    const result = await recordStockMovement(
-                      businessId,
-                      branchId,
-                      item.product.id,
-                      -(item.quantity * multiplier),
-                      'POS_SALE',
-                      userData?.user?.id || 'unknown',
-                      sale.receiptNumber,
-                      item.product.costPrice || 0
-                    );
-                    
-                    if (!result || result.error) {
-                      stockErrors.push(`${item.product.name}: ${result?.error || 'Unknown error'}`);
-                    }
-                  } catch (err: any) {
-                    stockErrors.push(`${item.product.name}: ${err.message}`);
-                  }
-                }
-              }
-
-              if (stockErrors.length > 0) {
-                console.warn('[POS] Inventory sync warnings:', stockErrors);
-              }
-            }
-
-            // 2. Double-Entry Accounting postings for sale receipts
-            const creditPayment = sale.payments.find(p => p.method === 'credit');
-            const isCredit = !!creditPayment;
-            const mainAccount = isCredit ? '1100' : '1000'; // Accounts Receivable vs POS Cash Till
-
-            const ledgerLines = [
-              { accountCode: mainAccount, debit: sale.total, credit: 0, description: `Receipt payment ${sale.receiptNumber}` },
-              { accountCode: '4000', debit: 0, credit: sale.total, description: `Sales Revenue registered [${sale.receiptNumber}]` }
-            ];
-
-            await postJournalEntry(
-              businessId,
-              branchId,
-              userData?.user?.id || 'unknown',
-              sale.receiptNumber,
-              `POS Sale Checkout ${sale.receiptNumber}`,
-              ledgerLines
-            );
-
-            // 3. Calculate exact perpetual COGS for this sale and update active session metrics
-            let saleCogs = 0;
-            if (sale.items && sale.items.length > 0) {
-              for (const item of sale.items) {
-                if (item.product?.bundles && item.product.bundles.length > 0) {
-                  for (const comp of item.product.bundles) {
-                    const compCostPrice = Number(comp.costPrice || comp.cost_price || 0);
-                    saleCogs += (compCostPrice * Number(comp.quantity || 1) * Number(item.quantity || 1));
-                  }
-                } else {
-                  const multiplier = getItemPackSize(item);
-                  const itemCost = Number(item.product?.costPrice || item.product?.cost_price || item.costPrice || item.cost_price || 0);
-                  saleCogs += (itemCost * Number(item.quantity || 1) * multiplier);
-                }
-              }
-            }
-
-            if (activeSession && activeSession.id && !activeSession.id.startsWith('off-shift-')) {
-              try {
-                const sessRef = doc(db, 'register_sessions', activeSession.id);
-                const sessSnap = await getDoc(sessRef);
-                if (sessSnap.exists()) {
-                  const sessData = sessSnap.data();
-                  const currentTotalSales = Number(sessData.sales_total || 0) + sale.total;
-                  const currentCountSales = Number(sessData.sales_count || 0) + 1;
-                  const currentExpectedObj = Number(sessData.expected_balance || 0) + sale.total;
-                  const currentCogs = Number(sessData.cogs_total || sessData.cogs || 0) + saleCogs;
-                  await updateDoc(sessRef, {
-                    sales_total: currentTotalSales,
-                    sales_count: currentCountSales,
-                    expected_balance: currentExpectedObj,
-                    cogs_total: currentCogs,
-                    cogs: currentCogs
-                  });
-                  try {
-                    await supabase.from('register_sessions').eq('id', activeSession.id).update({
-                      sales_total: currentTotalSales,
-                      sales_count: currentCountSales,
-                      expected_balance: currentExpectedObj,
-                      cogs_total: currentCogs,
-                      cogs: currentCogs
-                    });
-                  } catch (subErr) {
-                    // Ignore if supabase register_sessions table is not configured
-                  }
-                  // Update activeSession state
-                  setActiveSession({
-                    ...activeSession,
-                    sales_total: currentTotalSales,
-                    sales_count: currentCountSales,
-                    expected_balance: currentExpectedObj,
-                    cogs_total: currentCogs,
-                    cogs: currentCogs
-                  } as any);
-                }
-              } catch (sessErr) {
-                console.warn('[POS] Failed to update Firestore session metrics:', sessErr);
-                updateLocalSessionWithOfflineSale(sale.total, saleCogs);
-              }
-            } else {
-              updateLocalSessionWithOfflineSale(sale.total, saleCogs);
-            }
-
-            // 4. Update Customer credit balance if credit purchase
-            if (creditPayment && sale.customerId) {
-              const { data: custData } = await supabase.from('customers').select('*').eq('id', sale.customerId).single();
-              if (custData) {
-                const newBalance = Number(custData.balance || 0) + creditPayment.amount;
-                await supabase.from('customers').update({ balance: newBalance }).eq('id', sale.customerId);
-              }
-            }
-
-            // 4.1: Log ALL payment methods
-            const paymentTypeMap: Record<string, string> = {
-              'cash': 'cash_sale',
-              'usd_cash': 'usd_cash_sale',
-              'card': 'card_sale',
-              'ecocash': 'ecocash_sale',
-              'credit': 'credit_sale'
-            };
-
-            for (const payment of sale.payments) {
-              try {
-                const { error } = await supabase.from('cash_drawer_logs').insert([{
-                  business_id: businessId,
-                  branch_id: branchId,
-                  amount: payment.amount,
-                  type: payment.method === 'credit' ? 'receivable' : 'cash',
-                  transaction_type: paymentTypeMap[payment.method] || 'sale',
-                  payment_method: payment.method,
-                  notes: `Sale ${sale.receiptNumber} - ${payment.method}`,
-                  linked_document_id: saleDoc.id,
-                  linked_document_type: 'sale',
-                  created_at: sale.timestamp || new Date().toISOString()
-                }]);
-                
-                if (error) {
-                  console.error(`[POS] Cash log error for ${payment.method}:`, error);
-                }
-              } catch (err: any) {
-                console.error(`[POS] Exception logging ${payment.method}:`, err);
-              }
-            }
-
-            // 4.2: Create summary record for complete audit trail
-            try {
-              const cashTotal = sale.payments
-                .filter(p => p.method === 'cash' || p.method === 'usd_cash')
-                .reduce((sum, p) => sum + p.amount, 0);
-              const cardTotal = sale.payments
-                .filter(p => p.method === 'card')
-                .reduce((sum, p) => sum + p.amount, 0);
-              const creditTotal = sale.payments
-                .filter(p => p.method === 'credit')
-                .reduce((sum, p) => sum + p.amount, 0);
-              
-              await supabase.from('transaction_summaries').insert([{
-                business_id: businessId,
-                branch_id: branchId,
-                transaction_type: 'sale',
-                reference_id: sale.receiptNumber,
-                reference_document_id: saleDoc.id,
-                total_amount: sale.total,
-                cash_amount: cashTotal,
-                card_amount: cardTotal,
-                credit_amount: creditTotal,
-                created_at: sale.timestamp || new Date().toISOString(),
-                created_by: userData?.user?.id || 'unknown'
-              }]);
-            } catch (err: any) {
-              console.warn('[POS] Summary record creation failed:', err.message);
-            }
-
-            // 3.1: Trigger inventory refresh trigger
-            try {
-              window.dispatchEvent(new Event('inventory-update-needed'));
-            } catch (err) {
-              console.error('Failed to dispatch inventory event:', err);
-            }
-
-            // 6. Log Audit Trail
-            await logAuditEvent(
-              businessId,
-              userData?.user?.id || 'unknown',
-              'CREATE',
-              'POS',
-              null,
-              { receipt: sale.receiptNumber, total: sale.total }
-            );
-          }
-        } catch (err) {
-          console.error('Failed to sync sale to Firebase directly, saving to offline queue:', err);
-          const offlineSale = { ...sale, status: 'offline_pending' as const };
-          usePOSStore.setState((s: any) => ({
-            offlineQueue: [...s.offlineQueue, offlineSale]
-          }));
-          updateLocalSessionWithOfflineSale(sale.total, saleCogs);
-          toast.warning('Could not save to database — sale queued for automatic retry.');
-        }
-      } else {
-        updateLocalSessionWithOfflineSale(sale.total, saleCogs);
-      }
+      // OFFLINE-FIRST: Record all transactions offline locally by default.
+      // Remote cloud sync is triggered manually by user when internet is restored.
+      await persistOfflineSale(sale, saleCogs);
     }
   };
 
@@ -1340,29 +1161,45 @@ export default function POS() {
           <div className="flex justify-between items-center mb-3">
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">Point of Sale</h1>
-              {localStorage.getItem('tareza_offline_mode') === 'true' ? (
-                <button
-                  type="button"
-                  onClick={handleToggleOfflineMode}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-400 text-[10px] font-black tracking-wider uppercase animate-pulse cursor-pointer hover:bg-amber-100 transition-all select-none"
-                  title="Offline Transaction Mode. Click to switch online."
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  Offline Mode
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleToggleOfflineMode}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/55 text-emerald-700 dark:text-emerald-400 text-[10px] font-black tracking-wider uppercase cursor-pointer hover:bg-emerald-100 transition-all select-none"
-                  title="Online Connected. Click to force offline mode."
-                >
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-[11px] font-bold border border-zinc-200 dark:border-zinc-700" title="Offline-first POS: all transactions are recorded locally by default">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  Online
-                </button>
-              )}
+                  Offline-First
+                </span>
+                {isOnline ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                    Online
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25 animate-pulse">
+                    No Internet
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleManualSync}
+                disabled={isManualSyncing || !isOnline}
+                className={cn(
+                  "text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-none transition-all cursor-pointer",
+                  offlineQueue.length > 0
+                    ? "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20"
+                    : "bg-zinc-100 dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
+                )}
+                title={isOnline ? "Manually sync all offline transactions to cloud" : "Connect to internet to sync data"}
+              >
+                <RefreshCw className={cn("w-3.5 h-3.5", isManualSyncing && "animate-spin")} />
+                <span>
+                  {isManualSyncing 
+                    ? "Syncing..." 
+                    : offlineQueue.length > 0 
+                      ? `Sync Data to Online (${offlineQueue.length})` 
+                      : "Sync Data to Online"}
+                </span>
+              </Button>
               <TransactionHistoryManager 
                 activeSession={activeSession}
                 setActiveSession={setActiveSession}
@@ -1522,14 +1359,6 @@ export default function POS() {
         isFullscreen={isFullscreen}
         toggleFullscreen={toggleFullscreen}
       />
-      
-      {/* Offline Mode Switch Prompt Dialog */}
-      <OfflineModePromptDialog
-        open={showOfflinePrompt}
-        onOpenChange={setShowOfflinePrompt}
-        onToggleOfflineMode={handleToggleOfflineMode}
-      />
-
     </div>
   );
 }

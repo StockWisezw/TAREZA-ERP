@@ -165,9 +165,9 @@ export function PosSettings() {
 
             <div className="flex items-center justify-between">
               <div className="flex flex-col space-y-1 pr-4">
-                <Label className="font-semibold text-zinc-900">Offline Fallback Mode</Label>
+                <Label className="font-semibold text-zinc-900">Offline-First Transaction Recording</Label>
                 <span className="text-xs text-zinc-500 max-w-[200px]">
-                  Allow POS to continue operating without internet. Queues transactions and syncs in background via ServiceWorker when connectivity is restored.
+                  All POS transactions are recorded offline locally in IndexedDB by default. Cashiers manually sync transactions to online when internet is back.
                 </span>
               </div>
               <Switch checked={offlineMode} onCheckedChange={setOfflineMode} />

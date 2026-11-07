@@ -336,13 +336,25 @@ export function SyncManager() {
         }
       }
 
-      // Step D: Clean Removal
+      // Step D: Clean Removal from in-memory and local Dexie DB
       removeSaleFromOfflineQueue(sale.id);
       if (retryCountRef.current[sale.id] !== undefined) {
         delete retryCountRef.current[sale.id];
       }
-      console.log(`[SyncManager] Background Sync: Transaction ${sale.receiptNumber} successfully synchronized over active internet connection!`);
-      console.log(`[SyncManager] Successfully completed background sync of sale ${sale.receiptNumber}.`);
+
+      try {
+        const { db: dexieDb } = await import('../../lib/dexieDb');
+        const queuedItems = await dexieDb.offlineQueue.where('recordId').equals(sale.id).toArray();
+        for (const item of queuedItems) {
+          await dexieDb.offlineQueue.delete(item.id);
+        }
+        await dexieDb.sales.update(sale.id, { syncStatus: 'synced', synced: true });
+        window.dispatchEvent(new CustomEvent('tareza-sync-completed'));
+      } catch (cleanErr) {
+        console.warn('[SyncManager] Error cleaning Dexie queue for synced sale:', cleanErr);
+      }
+
+      console.log(`[SyncManager] Manual Sync: Transaction ${sale.receiptNumber} successfully synchronized over active internet connection!`);
 
     } catch (err: any) {
       console.error('[SyncManager] Error syncing transaction from queue:', err);
@@ -356,30 +368,32 @@ export function SyncManager() {
           console.warn(`[SyncManager] Removing blocked transaction ${sale.receiptNumber} after 3 continuous failures.`);
           removeSaleFromOfflineQueue(sale.id);
           delete retryCountRef.current[sale.id];
-          console.error(`[SyncManager] Auto-Sync: Bypassed receipt ${sale.receiptNumber} after 3 continuous failures to unblock other pending transactions.`);
+          console.error(`[SyncManager] Bypassed receipt ${sale.receiptNumber} after 3 continuous failures to unblock other pending transactions.`);
         }
       }
     } finally {
       isSyncingRef.current = false;
-      // After finishing one item, call setTimeout(processSync, count >= 3 ? 1000 : 0) to avoid excessive spinning on error blocks
+      // Continue processing remainder of offline queue
       const saleId = sale?.id;
       const failCount = saleId ? (retryCountRef.current[saleId] || 0) : 0;
-      const delay = failCount > 0 ? 3000 : 0; // Wait 3s before retrying a failed transaction to alleviate server hammering
+      const delay = failCount > 0 ? 3000 : 0;
       setTimeout(processSync, delay);
     }
   };
 
-  // Synchronize ONLY when the user explicitly triggers a manual push
+  // Synchronize ONLY when user manually triggers a sync (Offline-First manual sync architecture)
   useEffect(() => {
-    const handleManualSync = () => {
-      console.log('[SyncManager] Manual sync trigger received via global event.');
-      if (offlineQueue.length > 0) processSync();
+    const triggerSync = () => {
+      if (navigator.onLine && offlineQueue.length > 0) {
+        console.log('[SyncManager] Manual sync triggered for offline transactions...');
+        processSync();
+      }
     };
 
-    window.addEventListener('tareza-trigger-sync', handleManualSync);
+    window.addEventListener('tareza-trigger-sync', triggerSync);
 
     return () => {
-      window.removeEventListener('tareza-trigger-sync', handleManualSync);
+      window.removeEventListener('tareza-trigger-sync', triggerSync);
     };
   }, [offlineQueue]);
 

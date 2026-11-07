@@ -28,13 +28,40 @@ export function SyncStatusIndicator() {
     };
   }, []);
 
-  // Filter queue by active business ID to prevent cross-workspace data leaks
+  const [dexiePendingCount, setDexiePendingCount] = useState(0);
+
+  const checkPendingCounts = React.useCallback(async () => {
+    try {
+      const { db: dexieDb } = await import('../lib/dexieDb');
+      const count = await dexieDb.offlineQueue.where('status').anyOf(['pending', 'failed']).count();
+      setDexiePendingCount(count);
+    } catch (e) {
+      setDexiePendingCount(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkPendingCounts();
+    const interval = setInterval(checkPendingCounts, 3000);
+    const handleUpdate = () => checkPendingCounts();
+    
+    window.addEventListener('tareza-sync-completed', handleUpdate);
+    window.addEventListener('offline-mode-changed', handleUpdate);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('tareza-sync-completed', handleUpdate);
+      window.removeEventListener('offline-mode-changed', handleUpdate);
+    };
+  }, [checkPendingCounts]);
+
+  // Show all queued sales, prioritizing current business but never hiding unassigned offline sales
   const filteredQueue = React.useMemo(() => {
-    if (!currentBusinessId) return [];
-    return offlineQueue.filter((sale) => sale.business_id === currentBusinessId);
+    if (!currentBusinessId) return offlineQueue;
+    return offlineQueue.filter((sale) => !sale.business_id || sale.business_id === currentBusinessId || sale.business_id === 'offline_business_id' || sale.business_id === 'default_business');
   }, [offlineQueue, currentBusinessId]);
 
-  const pendingCount = filteredQueue.length;
+  const pendingCount = Math.max(filteredQueue.length, dexiePendingCount);
 
   const handleManualSyncClick = async () => {
     if (!navigator.onLine) {
@@ -50,8 +77,14 @@ export function SyncStatusIndicator() {
       const { syncOfflineDatabase } = await import('../lib/firebaseClient');
       await syncOfflineDatabase();
 
-      // 2. Dispatch custom global event to notify SyncManager to sync POS sales
+      // 2. Run Dexie offlineSyncEngine
+      const { offlineSyncEngine } = await import('../services/offlineSyncEngine');
+      await offlineSyncEngine.sync();
+
+      // 3. Dispatch custom global event to notify SyncManager to sync POS sales
       window.dispatchEvent(new CustomEvent('tareza-trigger-sync'));
+
+      await checkPendingCounts();
 
       toast.success('All cash registers, ledger journals, and transactions synchronized successfully!', { id: syncToast });
     } catch (err: any) {
@@ -134,7 +167,7 @@ export function SyncStatusIndicator() {
             disabled={isManualSyncing || !isOnline}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isManualSyncing ? 'animate-spin' : ''}`} />
-            {isOnline ? (pendingCount > 0 || (typeof window !== 'undefined' && localStorage.getItem('tareza_offline_mode') === 'true') ? 'Sync Now' : 'Synced to Cloud') : 'Offline - Reconnect'}
+            {isOnline ? (pendingCount > 0 ? `Sync Data to Online (${pendingCount})` : 'Sync Data to Online') : 'Offline - Reconnect to Sync'}
           </Button>
         </div>
       </PopoverContent>

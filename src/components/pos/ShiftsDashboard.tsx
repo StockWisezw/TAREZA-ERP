@@ -86,7 +86,7 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
   });
 
   const getIsOffline = () => {
-    return localStorage.getItem('tareza_offline_mode') === 'true' || (typeof window !== 'undefined' && !window.navigator.onLine);
+    return typeof window !== 'undefined' && !window.navigator.onLine;
   };
 
   const getShiftReferenceCode = (shiftId: string) => {
@@ -99,85 +99,60 @@ export const ShiftsDashboard: React.FC<ShiftsDashboardProps> = ({
   const fetchShiftsAndMetadata = async () => {
     try {
       setLoading(true);
+      const isOff = getIsOffline();
       const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) {
-        setLoading(false);
-        return;
-      }
-      setCurrentUserId(userData.user.id);
+      const userId = userData?.user?.id || 'offline_user_id';
+      setCurrentUserId(userId);
 
-      // Fetch user tenancy mapping context
-      const { data: bData } = await supabase.from('business_users')
-        .select('business_id, branch_id, role_id')
-        .eq('user_id', userData.user.id)
-        .limit(1)
-        .maybeSingle();
-
-      const bid = bData?.business_id || 'offline_business_id';
-
-      if (bData?.role_id) {
-        const { data: roleDef } = await supabase
-          .from('roles')
-          .select('name')
-          .eq('id', bData.role_id)
-          .limit(1)
-          .maybeSingle();
-        
-        if (roleDef?.name) {
-          const rawName = roleDef.name.toLowerCase();
-          if (rawName.includes('admin') || rawName.includes('owner') || rawName.includes('developer')) {
-            setCurrentUserRole('admin');
-          } else if (rawName.includes('manager')) {
-            setCurrentUserRole('manager');
-          } else if (rawName.includes('cashier')) {
-            setCurrentUserRole('cashier');
-          } else {
-            setCurrentUserRole('staff');
-          }
-        }
-      }
+      const { getActiveBusinessId } = await import('../../lib/firebaseClient');
+      const activeBiz = (await getActiveBusinessId()) || localStorage.getItem('tareza_active_business_id') || 'default_business';
 
       // Load active branches
       const { data: branchesRes } = await supabase.from('branches')
         .select('*')
-        .eq('business_id', bid);
-      if (branchesRes) setBranches(branchesRes);
+        .eq('business_id', activeBiz);
+      if (branchesRes && branchesRes.length > 0) setBranches(branchesRes);
 
-      // Load users/profiles for tenancy mapping
-      const { data: businessUsersRes } = await supabase.from('business_users')
-        .select('user_id')
-        .eq('business_id', bid);
-      const validUserIds = businessUsersRes ? businessUsersRes.map(bu => bu.user_id) : [];
-
-      if (validUserIds.length > 0) {
-        const { data: profilesRes } = await supabase.from('profiles')
-          .select('*')
-          .in('id', validUserIds);
-        if (profilesRes) setProfiles(profilesRes);
-      }
-
-      // Query register_sessions
+      // Query register_sessions from Supabase / Dexie
       let shiftsData: any[] = [];
-      if (getIsOffline()) {
-        const savedShiftsArrRaw = localStorage.getItem('tareza_offline_shifts_uncollapsed') || '[]';
-        shiftsData = JSON.parse(savedShiftsArrRaw);
+      if (isOff) {
+        try {
+          const { db: dexieDb } = await import('../../lib/dexieDb');
+          const dexieShifts = await dexieDb.register_sessions.toArray();
+          const savedShiftsArrRaw = localStorage.getItem('tareza_offline_shifts_uncollapsed') || '[]';
+          const lsShifts = JSON.parse(savedShiftsArrRaw);
+          const combined = [...lsShifts];
+          dexieShifts.forEach((ds: any) => {
+            if (!combined.some(s => s.id === ds.id)) combined.push(ds);
+          });
+          shiftsData = combined.sort((a, b) => new Date(b.opened_at || 0).getTime() - new Date(a.opened_at || 0).getTime());
+        } catch {
+          const savedShiftsArrRaw = localStorage.getItem('tareza_offline_shifts_uncollapsed') || '[]';
+          shiftsData = JSON.parse(savedShiftsArrRaw);
+        }
       } else {
-        const { data: onlineShifts, error: shiftsError } = await supabase.from('register_sessions')
+        const { data: onlineShifts } = await supabase.from('register_sessions')
           .select('*')
-          .eq('business_id', bid)
+          .eq('business_id', activeBiz)
           .order('opened_at', { ascending: false });
-        if (onlineShifts) shiftsData = onlineShifts;
+        if (onlineShifts && onlineShifts.length > 0) {
+          shiftsData = onlineShifts;
+        } else {
+          try {
+            const { db: dexieDb } = await import('../../lib/dexieDb');
+            shiftsData = await dexieDb.register_sessions.toArray();
+          } catch {}
+        }
       }
 
       setShifts(shiftsData);
 
       // Pre-select opening defaults if there's no active session setup
       if (branchesRes && branchesRes.length > 0) {
-        const matched = branchesRes.find(b => b.id === bData?.branch_id) || branchesRes[0];
-        setSelectedBranchId(matched.id);
+        setSelectedBranchId(branchesRes[0].id);
       }
-      setSelectedCashierId(userData.user.id);
-      setSelectedUserId(userData.user.id);
+      setSelectedCashierId(userId);
+      setSelectedUserId(userId);
 
     } catch (err) {
       console.error('Failed to load shifts metadata dashboard:', err);

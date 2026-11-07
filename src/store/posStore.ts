@@ -377,58 +377,7 @@ export const usePOSStore = create<POSState>()(
         
         if (state.cart.length === 0 || totals.balance > 0.01) return null;
 
-        const isOffline = options?.isOffline ?? (!navigator.onLine || localStorage.getItem('tareza_offline_mode') === 'true');
-
-        // Check stock availability before completing the sale if strict inventory checking is enabled
-        const isStrict = typeof window !== 'undefined' ? localStorage.getItem('tareza_strict_inventory') === 'true' : false;
-        if (isStrict) {
-          const accumulatedRequirements: Record<string, { name: string; required: number; available: number }> = {};
-          const allProducts = options?.allProducts || [];
-
-          for (const item of state.cart) {
-            const bomBundle = item.product.bundles?.find((b: any) => b.is_bom);
-            if (bomBundle && bomBundle.bom_composition && bomBundle.bom_composition.length > 0) {
-              // Virtual BOM kit/bundle product. Explode it!
-              for (const comp of bomBundle.bom_composition) {
-                const compProduct = allProducts.find(p => p.id === comp.product_id || p.sku === comp.sku);
-                const available = compProduct ? (compProduct.stock ?? 0) : 0;
-                const required = item.quantity * comp.quantity;
-                const compId = compProduct ? compProduct.id : comp.product_id;
-                
-                if (!accumulatedRequirements[compId]) {
-                  accumulatedRequirements[compId] = {
-                    name: compProduct ? compProduct.name : comp.sku || 'Component',
-                    required: 0,
-                    available,
-                  };
-                }
-                accumulatedRequirements[compId].required += required;
-              }
-            } else {
-              // Standard item
-              const requestedUnits = item.quantity * getItemPackSize(item);
-              const available = item.product.stock ?? 0;
-              const prodId = item.product.id;
-              
-              if (!accumulatedRequirements[prodId]) {
-                accumulatedRequirements[prodId] = {
-                  name: item.product.name,
-                  required: 0,
-                  available,
-                };
-              }
-              accumulatedRequirements[prodId].required += requestedUnits;
-            }
-          }
-
-          // Validate accumulated requirements against available warehouse single-unit stock levels
-          for (const [prodId, req] of Object.entries(accumulatedRequirements)) {
-            if (req.required > req.available) {
-              throw new Error(`Insufficient warehouse stock for constituent single-unit item "${req.name}". (Available: ${req.available} units, requested: ${req.required} units)`);
-            }
-          }
-        }
-
+        // Record offline transactions by default (Offline-First POS Architecture)
         const newSale: SaleRecord = {
           id: uuidv4(),
           items: [...state.cart],
@@ -438,7 +387,7 @@ export const usePOSStore = create<POSState>()(
           discountTotal: totals.discount,
           total: totals.total,
           timestamp: options?.customTimestamp || new Date().toISOString(),
-          status: isOffline ? 'offline_pending' : 'synced',
+          status: 'offline_pending',
           receiptNumber: `RCPT-${Math.floor(Date.now() / 1000).toString(16).toUpperCase()}`,
           customerId: state.currentCustomer?.id,
           customerName: state.currentCustomer?.name || 'Walk-In Customer',
@@ -446,19 +395,17 @@ export const usePOSStore = create<POSState>()(
           branch_id: options?.branchId,
         };
 
-        if (isOffline) {
-          indexedDbService.addQueuedTransaction({
-            id: newSale.id,
-            type: 'sale',
-            data: newSale,
-            timestamp: Date.now(),
-            status: 'pending',
-            retryCount: 0
-          }).catch(err => console.error('[IndexedDB] Error queuing transaction:', err));
-        }
+        indexedDbService.addQueuedTransaction({
+          id: newSale.id,
+          type: 'sale',
+          data: newSale,
+          timestamp: Date.now(),
+          status: 'pending',
+          retryCount: 0
+        }).catch(err => console.error('[IndexedDB] Error queuing transaction:', err));
 
         set((state) => ({
-          offlineQueue: isOffline ? [...state.offlineQueue, newSale] : state.offlineQueue,
+          offlineQueue: [...state.offlineQueue, newSale],
           localSales: [newSale, ...(state.localSales || [])].slice(0, 100),
           cart: [],
           payments: [],

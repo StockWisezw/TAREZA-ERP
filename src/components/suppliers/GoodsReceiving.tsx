@@ -74,7 +74,7 @@ export default function GoodsReceiving() {
 
   // Check offline flag
   const getIsOffline = () => {
-    return localStorage.getItem('tareza_offline_mode') === 'true' || (typeof window !== 'undefined' && !window.navigator.onLine);
+    return typeof window !== 'undefined' && !window.navigator.onLine;
   };
 
   // Synchronize PO product items to editable bulk list

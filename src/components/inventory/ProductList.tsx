@@ -258,8 +258,39 @@ export function ProductList({ onImportClick }: ProductListProps) {
       
       setProducts(mappedProducts);
     } catch (err) {
-      console.error(err);
-      toast.error("Could not fetch products");
+      console.warn("Remote product fetch failed, loading local Dexie cache:", err);
+      try {
+        const { db: dexieDb } = await import('../../lib/dexieDb');
+        const localProds = await dexieDb.products.toArray();
+        const activeLocalProds = localProds.filter(p => p.is_active !== false && p.deleted !== true);
+        const fallbackProds = activeLocalProds.length > 0 ? activeLocalProds : localProds;
+        const localInv = await dexieDb.inventory.toArray();
+        const localCats = await dexieDb.categories.toArray();
+        const localBranches = await dexieDb.branches.toArray();
+
+        if (fallbackProds.length > 0) {
+          setBranches(localBranches);
+          setCategories(localCats);
+          if (localBranches.length > 0 && !selectedBranchId) {
+            setSelectedBranchId(localBranches[0].id);
+          }
+          const mapped = fallbackProds.map(p => {
+            const productInventory = localInv.filter((i: any) => i.product_id === p.id);
+            const category = localCats.find((c: any) => c.id === p.category_id);
+            return {
+              ...p,
+              inventory: productInventory.length > 0 ? productInventory : [{ quantity: p.stock || p.stock_quantity || 0 }],
+              categories: category ? { name: category.name } : null
+            };
+          });
+          setProducts(mapped);
+          toast.info("Operating in Offline Mode — Displaying cached inventory.");
+        } else {
+          toast.error("No cached products available offline.");
+        }
+      } catch (dErr) {
+        toast.error("Could not fetch products");
+      }
     } finally {
       setLoading(false);
     }

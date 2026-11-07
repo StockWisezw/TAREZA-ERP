@@ -44,15 +44,18 @@ export function usePOSData(activeSession: any) {
           ]);
         }
 
-        // Connect fetch with supabase
+        // Connect fetch with supabase / Dexie
+        const { getActiveBusinessId } = await import('../lib/firebaseClient');
+        const activeBiz = await getActiveBusinessId();
         const { data: userData } = await supabase.auth.getUser();
-        let userBusinessId = '';
-        let userBranchId = '';
-        if (userData?.user) {
+        let userBusinessId = activeBiz && activeBiz !== 'default_business' ? activeBiz : (activeSession?.business_id || '');
+        let userBranchId = activeSession?.branch_id && activeSession.branch_id !== 'offline_branch_id' ? activeSession.branch_id : '';
+
+        if (userData?.user && (!userBusinessId || !userBranchId)) {
           const { data: bData } = await supabase.from('business_users').select('business_id, branch_id').eq('user_id', userData.user.id).limit(1).maybeSingle();
           if (bData) {
-            userBusinessId = bData.business_id;
-            userBranchId = activeSession?.branch_id && activeSession.branch_id !== 'offline_branch_id' ? activeSession.branch_id : bData.branch_id;
+            if (!userBusinessId) userBusinessId = bData.business_id;
+            if (!userBranchId) userBranchId = bData.branch_id;
           }
         }
 
@@ -130,18 +133,16 @@ export function usePOSData(activeSession: any) {
                     taxClass: p.tax_class || p.taxClass || 'standard',
                     category: p.category_id || p.category || 'all',
                     imageUrl: '', 
-                    stock: totalStock,
+                    stock: totalStock > 0 ? totalStock : (p.stock || p.stock_quantity || 0),
                     bundles: p.bundles || []
                   };
                 });
                 setProducts(updatedProducts);
                 saveLocalProducts(updatedProducts);
-             } else {
-                setProducts([]);
-                saveLocalProducts([]);
              }
+             // NOTE: If data is empty (e.g. offline query returned nothing), NEVER clear existing local products!
           }).catch(err => {
-             console.error("Failed to refresh POS products dynamically:", err);
+             console.warn("Notice: could not refresh remote POS products (using local cache):", err);
           });
         };
 
@@ -219,8 +220,19 @@ export function usePOSData(activeSession: any) {
 
     loadData();
 
+    const handleDataRefresh = () => {
+      loadData();
+    };
+
+    window.addEventListener('offline-mode-changed', handleDataRefresh);
+    window.addEventListener('tareza-sync-completed', handleDataRefresh);
+    window.addEventListener('online', handleDataRefresh);
+
     return () => {
       if (unsubscribeProducts) unsubscribeProducts();
+      window.removeEventListener('offline-mode-changed', handleDataRefresh);
+      window.removeEventListener('tareza-sync-completed', handleDataRefresh);
+      window.removeEventListener('online', handleDataRefresh);
     };
   }, [activeSession?.id, activeSession?.branch_id]);
 

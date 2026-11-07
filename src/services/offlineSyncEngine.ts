@@ -9,7 +9,7 @@ export class OfflineSyncEngine {
 
   private constructor() {
     this.setupListeners();
-    this.startAutoSync();
+    // Auto-sync interval disabled: transactions are recorded offline by default and synced manually by user
   }
 
   public static getInstance(): OfflineSyncEngine {
@@ -22,8 +22,7 @@ export class OfflineSyncEngine {
   private setupListeners() {
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => {
-        toast.success('Internet connection restored! Resuming synchronization...');
-        this.sync();
+        toast.info('Internet connection restored! You can now sync offline transactions to the cloud.');
       });
 
       window.addEventListener('offline', () => {
@@ -38,14 +37,7 @@ export class OfflineSyncEngine {
   }
 
   private startAutoSync() {
-    if (typeof window !== 'undefined') {
-      // Periodic background sync check every 15 seconds
-      this.syncInterval = setInterval(() => {
-        if (navigator.onLine && !this.isSyncing) {
-          this.sync();
-        }
-      }, 15000);
-    }
+    // Disabled in favor of manual user sync
   }
 
   /**
@@ -99,11 +91,6 @@ export class OfflineSyncEngine {
 
     await db.offlineQueue.put(queueItem);
 
-    // Trigger immediate sync asynchronously if online
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      this.sync();
-    }
-
     return resolvedRecord;
   }
 
@@ -148,10 +135,6 @@ export class OfflineSyncEngine {
     };
 
     await db.offlineQueue.put(queueItem);
-
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      this.sync();
-    }
   }
 
   /**
@@ -224,11 +207,25 @@ export class OfflineSyncEngine {
     await db.syncLogs.put(logRecord);
 
     this.isSyncing = false;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tareza-sync-completed', { detail: { synced: syncedCount, failed: failedCount } }));
+    }
     return {
       total: pendingItems.length,
       synced: syncedCount,
       failed: failedCount,
     };
+  }
+
+  /**
+   * Returns current count of pending/failed offline operations
+   */
+  public async getPendingCount(): Promise<number> {
+    try {
+      return await db.offlineQueue.where('status').anyOf(['pending', 'failed']).count();
+    } catch {
+      return 0;
+    }
   }
 
   /**

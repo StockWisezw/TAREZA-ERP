@@ -1,13 +1,18 @@
-const CACHE_NAME = 'pos-offline-cache-v2';
-const OFFLINE_URLS = [
+const CACHE_NAME = 'tareza-erp-pwa-v3';
+const PRECACHE_ASSETS = [
   '/',
   '/index.html',
+  '/favicon.png',
+  '/favicon.svg',
+  '/manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(OFFLINE_URLS);
+      return cache.addAll(PRECACHE_ASSETS).catch((err) => {
+        console.warn('[SW] Precache notice:', err);
+      });
     })
   );
   self.skipWaiting();
@@ -19,7 +24,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME) {
-            console.log('Clearing old service worker cache:', cache);
+            console.log('[SW] Clearing old cache:', cache);
             return caches.delete(cache);
           }
         })
@@ -29,60 +34,100 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Skip cross-origin or POST/PUT/DELETE requests
-  if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
+  const url = new URL(event.request.url);
+
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') {
     return;
   }
 
-  // API or FireStore requests should go directly to network
-  if (event.request.url.includes('/api/') || event.request.url.includes('firestore.googleapis.com')) {
+  // Bypass API proxy and remote Firebase/Firestore services
+  if (
+    url.pathname.startsWith('/api/') || 
+    url.hostname.includes('firestore.googleapis.com') ||
+    url.hostname.includes('firebase') ||
+    url.hostname.includes('identitytoolkit')
+  ) {
     return;
   }
 
-  // Use a Network-First strategy for application assets and routing.
-  // This ensures the live application pulls the absolute latest bundle when online requested,
-  // falling back to local service worker cache only when offline.
+  // 1. Navigation requests (HTML pages / routes like /pos, /inventory, /dashboard)
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      // Race network with 1500ms timeout
+      new Promise((resolve) => {
+        let timedOut = false;
+        const timer = setTimeout(() => {
+          timedOut = true;
+          caches.match('/index.html').then((cached) => {
+            if (cached) resolve(cached);
+          });
+        }, 1500);
+
+        fetch(event.request)
+          .then((response) => {
+            clearTimeout(timer);
+            if (response && response.status === 200) {
+              const clone = response.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone));
+            }
+            if (!timedOut) resolve(response);
+          })
+          .catch(() => {
+            clearTimeout(timer);
+            caches.match('/index.html').then((cached) => {
+              resolve(cached || caches.match('/'));
+            });
+          });
+      })
+    );
+    return;
+  }
+
+  // 2. Static Assets (Scripts, Styles, Fonts, Images)
+  // Stale-While-Revalidate strategy
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // If response is valid, clone and update the cache for offline fallback
-        if (response && response.status === 200 && response.type === 'basic') {
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-        return response;
-      })
-      .catch(() => {
-        // Fallback to cache if network fails
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse;
+    caches.match(event.request).then((cachedResponse) => {
+      const fetchPromise = fetch(event.request)
+        .then((networkResponse) => {
+          if (
+            networkResponse && 
+            networkResponse.status === 200 && 
+            (event.request.url.startsWith(self.location.origin) || url.hostname.includes('fonts.g'))
+          ) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
           }
-          // If navigation request fails and not cached, return root index page
-          if (event.request.mode === 'navigate') {
-            return caches.match('/');
-          }
-          // Avoid TypeError: Failed to convert value to 'Response' by returning a transparent offline Response
-          return new Response('Offline asset unavailable', { 
-            status: 503, 
-            statusText: 'Service Unavailable (Offline)',
-            headers: { 'Content-Type': 'text/plain' }
-          });
+          return networkResponse;
+        })
+        .catch(() => {
+          // If offline and not in cache, fallback if image or font
+          return null;
         });
-      })
+
+      return cachedResponse || fetchPromise.then((resp) => {
+        if (resp) return resp;
+        // If script or style missing in offline cache, return empty script/style instead of crashing with 503 text
+        if (url.pathname.endsWith('.js') || url.pathname.endsWith('.tsx') || url.pathname.endsWith('.ts')) {
+          return new Response('/* Offline fallback */', { headers: { 'Content-Type': 'application/javascript' } });
+        }
+        if (url.pathname.endsWith('.css')) {
+          return new Response('/* Offline fallback */', { headers: { 'Content-Type': 'text/css' } });
+        }
+        return new Response('', { status: 404, statusText: 'Not found offline' });
+      });
+    })
   );
 });
 
 self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-pos-transactions') {
-    event.waitUntil(syncTransactions());
+  if (event.tag === 'sync-pos-transactions' || event.tag === 'tareza-sync') {
+    event.waitUntil(
+      self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'SYNC_TRIGGERED' });
+        });
+      })
+    );
   }
 });
-
-async function syncTransactions() {
-  console.log('Background sync: syncing offline transactions...');
-  // Logic to process an IndexedDB queue of offline sales
-  // and push them to Firestore once connectivity is restored.
-}

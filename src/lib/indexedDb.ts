@@ -38,6 +38,31 @@ export function initDb(): Promise<IDBDatabase> {
 
 export async function saveProducts(products: Product[]): Promise<void> {
   try {
+    // Mirror to Dexie products table
+    try {
+      const { db: dexieDb } = await import('./dexieDb');
+      const records = products.map(p => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        barcode: p.barcode,
+        retail_price: p.retailPrice,
+        retailPrice: p.retailPrice,
+        wholesale_price: p.wholesalePrice,
+        wholesalePrice: p.wholesalePrice,
+        cost_price: p.costPrice,
+        category_id: p.category,
+        stock: p.stock,
+        stock_quantity: p.stock,
+        bundles: p.bundles,
+        is_active: true,
+        syncStatus: 'synced'
+      }));
+      await dexieDb.products.bulkPut(records);
+    } catch (dexErr) {
+      console.warn('[Dexie] saveProducts mirror notice:', dexErr);
+    }
+
     const db = await initDb();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction('products', 'readwrite');
@@ -82,7 +107,7 @@ export async function saveProducts(products: Product[]): Promise<void> {
 export async function getProducts(): Promise<Product[]> {
   try {
     const db = await initDb();
-    return new Promise((resolve, reject) => {
+    const localProds = await new Promise<Product[]>((resolve, reject) => {
       const transaction = db.transaction('products', 'readonly');
       const store = transaction.objectStore('products');
       const request = store.getAll();
@@ -95,9 +120,56 @@ export async function getProducts(): Promise<Product[]> {
         reject(request.error);
       };
     });
+
+    if (localProds && localProds.length > 0) {
+      return localProds;
+    }
+
+    // Fallback to Dexie products table
+    try {
+      const { db: dexieDb } = await import('./dexieDb');
+      const dexieProds = await dexieDb.products.toArray();
+      if (dexieProds && dexieProds.length > 0) {
+        return dexieProds.map(p => ({
+          id: p.id,
+          name: p.name || 'Unnamed',
+          barcode: p.barcode || '',
+          sku: p.sku || '',
+          retailPrice: p.retail_price || p.retailPrice || 0,
+          wholesalePrice: p.wholesale_price || p.wholesalePrice || 0,
+          costPrice: p.cost_price || 0,
+          taxClass: p.tax_class || 'standard',
+          category: p.category_id || p.category || 'all',
+          imageUrl: '',
+          stock: p.stock || p.stock_quantity || 0,
+          bundles: p.bundles || []
+        }));
+      }
+    } catch (e) {}
+
+    return [];
   } catch (error) {
     console.error('Failed to load products from IndexedDB:', error);
-    return [];
+    try {
+      const { db: dexieDb } = await import('./dexieDb');
+      const dexieProds = await dexieDb.products.toArray();
+      return dexieProds.map(p => ({
+        id: p.id,
+        name: p.name || 'Unnamed',
+        barcode: p.barcode || '',
+        sku: p.sku || '',
+        retailPrice: p.retail_price || p.retailPrice || 0,
+        wholesalePrice: p.wholesale_price || p.wholesalePrice || 0,
+        costPrice: p.cost_price || 0,
+        taxClass: p.tax_class || 'standard',
+        category: p.category_id || p.category || 'all',
+        imageUrl: '',
+        stock: p.stock || p.stock_quantity || 0,
+        bundles: p.bundles || []
+      }));
+    } catch (e) {
+      return [];
+    }
   }
 }
 

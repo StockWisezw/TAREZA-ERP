@@ -114,14 +114,14 @@ function createFirestoreInstance() {
 export const db = createFirestoreInstance();
 export const fireAuth = getAuth(app);
 
-// Simulated Offline Mode Enforcement
+// Offline-First Network Management
 if (typeof window !== 'undefined') {
   const checkAndApplyNetworkStatus = async () => {
-    const isOfflineForced = localStorage.getItem('tareza_offline_mode') === 'true';
-    if (isOfflineForced) {
+    const isOffline = !window.navigator.onLine;
+    if (isOffline) {
       try {
         await disableNetwork(db);
-        console.log('[Firebase] Network disabled. Enforced Offline database mode active.');
+        console.log('[Firebase] Network disabled. Offline Dexie & Firestore local cache active.');
       } catch (err) {
         console.error('[Firebase] Error disabling network:', err);
       }
@@ -139,6 +139,8 @@ if (typeof window !== 'undefined') {
   checkAndApplyNetworkStatus();
 
   // Listen for changes
+  window.addEventListener('online', checkAndApplyNetworkStatus);
+  window.addEventListener('offline', checkAndApplyNetworkStatus);
   window.addEventListener('offline-mode-changed', checkAndApplyNetworkStatus);
 }
 
@@ -379,19 +381,53 @@ export function collection(...args: any[]): any {
 }
 
 export async function getDoc(docRef: any): Promise<any> {
+  const isOffline = typeof window !== 'undefined' && (!window.navigator.onLine || localStorage.getItem('tareza_offline_mode') === 'true');
+  const pathParts = docRef.path ? docRef.path.split('/') : [];
+  const table = pathParts[0] || '';
+  const docId = pathParts[1] || '';
+
+  if (isOffline && table && docId) {
+    try {
+      const { db: dexieDb } = await import('./dexieDb');
+      const tableObj = (dexieDb as any)[table];
+      if (tableObj) {
+        const localDoc = await tableObj.get(docId);
+        if (localDoc) {
+          return {
+            exists: () => true,
+            data: () => localDoc,
+            id: docId
+          };
+        }
+      }
+    } catch (e) {}
+  }
+
   try {
     let snap;
     try {
       snap = await fireGetDoc(docRef);
     } catch (err: any) {
-      if (checkIsOfflineError(err)) {
-        try {
-          const { getDocFromCache } = await import('firebase/firestore');
-          snap = await getDocFromCache(docRef);
-        } catch (cacheErr) {
-          throw err;
+      try {
+        const { getDocFromCache } = await import('firebase/firestore');
+        snap = await getDocFromCache(docRef);
+      } catch (cacheErr) {
+        if (table && docId) {
+          try {
+            const { db: dexieDb } = await import('./dexieDb');
+            const tableObj = (dexieDb as any)[table];
+            if (tableObj) {
+              const localDoc = await tableObj.get(docId);
+              if (localDoc) {
+                return {
+                  exists: () => true,
+                  data: () => localDoc,
+                  id: docId
+                };
+              }
+            }
+          } catch (e) {}
         }
-      } else {
         throw err;
       }
     }
@@ -401,18 +437,81 @@ export async function getDoc(docRef: any): Promise<any> {
       id: snap.id
     };
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, docRef.path);
-    throw error;
+    // If offline or disconnected, return non-existent or local fallback rather than crash
+    if (table && docId) {
+      try {
+        const { db: dexieDb } = await import('./dexieDb');
+        const tableObj = (dexieDb as any)[table];
+        if (tableObj) {
+          const localDoc = await tableObj.get(docId);
+          if (localDoc) {
+            return {
+              exists: () => true,
+              data: () => localDoc,
+              id: docId
+            };
+          }
+        }
+      } catch (e) {}
+    }
+    return {
+      exists: () => false,
+      data: () => null,
+      id: docId
+    };
   }
 }
 
 export async function updateDoc(docRef: any, data: any) {
+  const isOffline = typeof window !== 'undefined' && (!window.navigator.onLine || localStorage.getItem('tareza_offline_mode') === 'true');
+  const pathParts = docRef.path ? docRef.path.split('/') : [];
+  const table = pathParts[0] || '';
+  const docId = pathParts[1] || '';
+
+  // Update Dexie first
+  if (table && docId) {
+    try {
+      const { db: dexieDb } = await import('./dexieDb');
+      const tableObj = (dexieDb as any)[table];
+      if (tableObj) {
+        const existing = (await tableObj.get(docId)) || {};
+        await tableObj.put({ ...existing, ...data, id: docId, syncStatus: isOffline ? 'pending' : 'synced' });
+      }
+    } catch (e) {}
+  }
+
+  if (isOffline) {
+    try {
+      const { db: dexieDb } = await import('./dexieDb');
+      await dexieDb.offlineQueue.put({
+        id: uuidv4(),
+        type: `${table}:save`,
+        recordId: docId,
+        payload: { id: docId, ...data },
+        timestamp: Date.now(),
+        retryCount: 0,
+        status: 'pending'
+      });
+    } catch (e) {}
+    return;
+  }
+
   try {
-    const table = docRef.path ? docRef.path.split('/')[0] : '';
     await fireUpdateDoc(docRef, normalizeInput(data, table));
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, docRef.path);
-    throw error;
+    console.warn(`[Firebase] updateDoc failed on ${docRef.path}, queuing for offline sync:`, error);
+    try {
+      const { db: dexieDb } = await import('./dexieDb');
+      await dexieDb.offlineQueue.put({
+        id: uuidv4(),
+        type: `${table}:save`,
+        recordId: docId,
+        payload: { id: docId, ...data },
+        timestamp: Date.now(),
+        retryCount: 0,
+        status: 'pending'
+      });
+    } catch (e) {}
   }
 }
 
@@ -529,7 +628,26 @@ export async function getActiveBusinessId(): Promise<string | null> {
   }
 
   const user = fireAuth.currentUser;
-  if (!user) return 'default_business';
+  const isOffline = typeof window !== 'undefined' && (!window.navigator.onLine || localStorage.getItem('tareza_offline_mode') === 'true');
+  if (!user || isOffline) {
+    try {
+      const { db: dexieDb } = await import('./dexieDb');
+      const allUsers = await dexieDb.table('business_users').toArray();
+      if (allUsers && allUsers.length > 0) {
+        const found = user ? allUsers.find((bu: any) => bu.user_id === user.uid || bu.id === user.uid) : allUsers[0];
+        if (found?.business_id) {
+          cachedBusinessId = found.business_id;
+          return found.business_id;
+        }
+      }
+      const allBusinesses = await dexieDb.table('businesses').toArray();
+      if (allBusinesses && allBusinesses.length > 0) {
+        cachedBusinessId = allBusinesses[0].id;
+        return allBusinesses[0].id;
+      }
+    } catch (e) {}
+    return localId || 'default_business';
+  }
 
   // Fast-path for developer/admin accounts to guarantee zero data loss
   const isDevEmail = ['admin@tarezaerp.co.zw', 'sales@tarezaerp.co.zw', 'tapsforex@gmail.com', 'tapiwagahadza54@gmail.com', 'petronellamutero@gmail.com'].includes(user.email?.toLowerCase() || '');
@@ -749,6 +867,11 @@ class SupabaseQueryBuilder {
 
   async execute() {
     try {
+      const isOfflineNow = typeof window !== 'undefined' && (
+        !window.navigator.onLine || 
+        localStorage.getItem('tareza_offline_mode') === 'true'
+      );
+
       const email = fireAuth.currentUser?.email?.toLowerCase();
       const isSystemDev = email && (
         email === 'admin@tarezaerp.co.zw' ||
@@ -789,22 +912,66 @@ class SupabaseQueryBuilder {
 
         const insertedItems: any[] = [];
         for (const item of itemsToInsert) {
-          const docRef = fireDoc(db, this.table, item.id);
-          // Save directly to the live Cloud Firestore database
-          await fireSetDoc(docRef, item, { merge: true });
           insertedItems.push(item);
 
-          // Mirror immediately to local IndexedDB for continuous offline fallback and synchronization backup
+          // 1. Always save to local Dexie IndexedDB first for instant responsiveness
           if (dexieTable) {
             try {
-              await dexieTable.put({ ...item, syncStatus: 'synced', syncedAt: new Date().toISOString() });
+              await dexieTable.put({
+                ...item,
+                syncStatus: isOfflineNow ? 'pending' : 'synced',
+                syncedAt: isOfflineNow ? undefined : new Date().toISOString()
+              });
             } catch (dexieErr) {
-              console.warn('[Dexie] Failed to mirror write:', dexieErr);
+              console.warn('[Dexie] Local write mirror warning:', dexieErr);
+            }
+          }
+
+          // 2. If completely offline, queue directly into offlineQueue
+          if (isOfflineNow) {
+            try {
+              await dexieDb.offlineQueue.put({
+                id: uuidv4(),
+                type: `${this.table}:save`,
+                recordId: item.id,
+                payload: item,
+                timestamp: Date.now(),
+                retryCount: 0,
+                status: 'pending',
+                priority: this.table === 'sales' ? 'high' : 'normal'
+              });
+            } catch (qErr) {
+              console.warn('[OfflineQueue] Failed to record offline insert:', qErr);
+            }
+          } else {
+            // 3. Online: attempt Firestore write
+            try {
+              const docRef = fireDoc(db, this.table, item.id);
+              await fireSetDoc(docRef, item, { merge: true });
+            } catch (fireErr: any) {
+              console.warn(`[Firebase] Write failed online for ${this.table}/${item.id}. Queuing locally:`, fireErr);
+              try {
+                await dexieDb.offlineQueue.put({
+                  id: uuidv4(),
+                  type: `${this.table}:save`,
+                  recordId: item.id,
+                  payload: item,
+                  timestamp: Date.now(),
+                  retryCount: 0,
+                  status: 'pending',
+                  priority: this.table === 'sales' ? 'high' : 'normal',
+                  lastError: fireErr?.message || String(fireErr)
+                });
+              } catch (qErr) {}
             }
           }
         }
 
-        return { data: insertedItems.map(d => normalizeOutput(d.id, d, this.table)), count: itemsToInsert.length, error: null };
+        return { 
+          data: insertedItems.map(d => normalizeOutput(d.id, d, this.table)), 
+          count: itemsToInsert.length, 
+          error: null 
+        };
       } 
       
       // Handle Update
@@ -817,31 +984,108 @@ class SupabaseQueryBuilder {
         }
 
         if (this.targetId) {
-          const docRef = fireDoc(db, this.table, this.targetId);
-          await fireUpdateDoc(docRef, cleanItem);
-
-          // Mirror immediately to local IndexedDB
+          const targetId = this.targetId;
+          // Update Dexie first
+          let existingData: any = {};
           if (dexieTable) {
             try {
-              const existing = await dexieTable.get(this.targetId);
-              await dexieTable.put({ ...(existing || {}), ...cleanItem, id: this.targetId, syncStatus: 'synced', syncedAt: new Date().toISOString() });
+              existingData = (await dexieTable.get(targetId)) || {};
+              await dexieTable.put({
+                ...existingData,
+                ...cleanItem,
+                id: targetId,
+                syncStatus: isOfflineNow ? 'pending' : 'synced',
+                syncedAt: isOfflineNow ? undefined : new Date().toISOString()
+              });
             } catch (dexieErr) {
-              console.warn('[Dexie] Failed to mirror update:', dexieErr);
+              console.warn('[Dexie] Local update mirror warning:', dexieErr);
             }
           }
-          return { data: [normalizeOutput(this.targetId, { ...cleanItem, id: this.targetId }, this.table)], count: 1, error: null };
-        } else {
-          const results = await this.getFilteredFirestoreDocs();
-          for (const item of results) {
-            const docRef = fireDoc(db, this.table, item.id);
-            await fireUpdateDoc(docRef, cleanItem);
 
-            // Mirror immediately to local IndexedDB
+          if (isOfflineNow) {
+            try {
+              await dexieDb.offlineQueue.put({
+                id: uuidv4(),
+                type: `${this.table}:save`,
+                recordId: targetId,
+                payload: { ...existingData, ...cleanItem, id: targetId },
+                timestamp: Date.now(),
+                retryCount: 0,
+                status: 'pending'
+              });
+            } catch (qErr) {}
+          } else {
+            try {
+              const docRef = fireDoc(db, this.table, targetId);
+              await fireUpdateDoc(docRef, cleanItem);
+            } catch (fireErr: any) {
+              console.warn(`[Firebase] Update failed for ${this.table}/${targetId}. Queuing offline:`, fireErr);
+              try {
+                await dexieDb.offlineQueue.put({
+                  id: uuidv4(),
+                  type: `${this.table}:save`,
+                  recordId: targetId,
+                  payload: { ...existingData, ...cleanItem, id: targetId },
+                  timestamp: Date.now(),
+                  retryCount: 0,
+                  status: 'pending',
+                  lastError: fireErr?.message || String(fireErr)
+                });
+              } catch (qErr) {}
+            }
+          }
+
+          return { 
+            data: [normalizeOutput(targetId, { ...existingData, ...cleanItem, id: targetId }, this.table)], 
+            count: 1, 
+            error: null 
+          };
+        } else {
+          // Batch update
+          const results = isOfflineNow 
+            ? await this.getFilteredLocalDocs() 
+            : await this.getFilteredFirestoreDocs();
+
+          for (const item of results) {
             if (dexieTable) {
               try {
-                await dexieTable.put({ ...item, ...cleanItem, syncStatus: 'synced', syncedAt: new Date().toISOString() });
-              } catch (dexieErr) {
-                console.warn('[Dexie] Failed to mirror batch update:', dexieErr);
+                await dexieTable.put({
+                  ...item,
+                  ...cleanItem,
+                  syncStatus: isOfflineNow ? 'pending' : 'synced',
+                  syncedAt: isOfflineNow ? undefined : new Date().toISOString()
+                });
+              } catch (e) {}
+            }
+
+            if (isOfflineNow) {
+              try {
+                await dexieDb.offlineQueue.put({
+                  id: uuidv4(),
+                  type: `${this.table}:save`,
+                  recordId: item.id,
+                  payload: { ...item, ...cleanItem },
+                  timestamp: Date.now(),
+                  retryCount: 0,
+                  status: 'pending'
+                });
+              } catch (qErr) {}
+            } else {
+              try {
+                const docRef = fireDoc(db, this.table, item.id);
+                await fireUpdateDoc(docRef, cleanItem);
+              } catch (fireErr) {
+                try {
+                  await dexieDb.offlineQueue.put({
+                    id: uuidv4(),
+                    type: `${this.table}:save`,
+                    recordId: item.id,
+                    payload: { ...item, ...cleanItem },
+                    timestamp: Date.now(),
+                    retryCount: 0,
+                    status: 'pending'
+                  });
+                } catch (qErr) {}
               }
             }
           }
@@ -852,27 +1096,83 @@ class SupabaseQueryBuilder {
       // Handle Delete
       if (this.isDelete) {
         if (this.targetId) {
-          const docRef = fireDoc(db, this.table, this.targetId);
-          await fireDeleteDoc(docRef);
-
+          const targetId = this.targetId;
           if (dexieTable) {
             try {
-              await dexieTable.delete(this.targetId);
-            } catch (dexieErr) {
-              console.warn('[Dexie] Failed to mirror delete:', dexieErr);
+              await dexieTable.delete(targetId);
+            } catch (e) {}
+          }
+
+          if (isOfflineNow) {
+            try {
+              await dexieDb.offlineQueue.put({
+                id: uuidv4(),
+                type: `${this.table}:delete`,
+                recordId: targetId,
+                payload: { id: targetId },
+                timestamp: Date.now(),
+                retryCount: 0,
+                status: 'pending'
+              });
+            } catch (qErr) {}
+          } else {
+            try {
+              const docRef = fireDoc(db, this.table, targetId);
+              await fireDeleteDoc(docRef);
+            } catch (fireErr) {
+              try {
+                await dexieDb.offlineQueue.put({
+                  id: uuidv4(),
+                  type: `${this.table}:delete`,
+                  recordId: targetId,
+                  payload: { id: targetId },
+                  timestamp: Date.now(),
+                  retryCount: 0,
+                  status: 'pending'
+                });
+              } catch (qErr) {}
             }
           }
         } else {
-          const results = await this.getFilteredFirestoreDocs();
-          for (const item of results) {
-            const docRef = fireDoc(db, this.table, item.id);
-            await fireDeleteDoc(docRef);
+          const results = isOfflineNow 
+            ? await this.getFilteredLocalDocs() 
+            : await this.getFilteredFirestoreDocs();
 
+          for (const item of results) {
             if (dexieTable) {
               try {
                 await dexieTable.delete(item.id);
-              } catch (dexieErr) {
-                console.warn('[Dexie] Failed to mirror batch delete:', dexieErr);
+              } catch (e) {}
+            }
+
+            if (isOfflineNow) {
+              try {
+                await dexieDb.offlineQueue.put({
+                  id: uuidv4(),
+                  type: `${this.table}:delete`,
+                  recordId: item.id,
+                  payload: { id: item.id },
+                  timestamp: Date.now(),
+                  retryCount: 0,
+                  status: 'pending'
+                });
+              } catch (qErr) {}
+            } else {
+              try {
+                const docRef = fireDoc(db, this.table, item.id);
+                await fireDeleteDoc(docRef);
+              } catch (fireErr) {
+                try {
+                  await dexieDb.offlineQueue.put({
+                    id: uuidv4(),
+                    type: `${this.table}:delete`,
+                    recordId: item.id,
+                    payload: { id: item.id },
+                    timestamp: Date.now(),
+                    retryCount: 0,
+                    status: 'pending'
+                  });
+                } catch (qErr) {}
               }
             }
           }
@@ -882,17 +1182,36 @@ class SupabaseQueryBuilder {
 
       // SELECT single record
       if (this.targetId) {
+        if (isOfflineNow) {
+          // Serve immediately from local Dexie database
+          if (dexieTable) {
+            const localRecord = await dexieTable.get(this.targetId);
+            let mappedData: any[] = [];
+            if (localRecord && localRecord.deleted !== true) {
+              if (!requiresBusinessScope || isSystemDev || localRecord.business_id === activeBizId || this.table === 'businesses') {
+                mappedData = [normalizeOutput(localRecord.id, localRecord, this.table)];
+              }
+            }
+            return { data: mappedData, count: mappedData.length, error: null };
+          }
+          return { data: [], count: 0, error: null };
+        }
+
         const docRef = fireDoc(db, this.table, this.targetId);
-        let snap;
+        let snap: any = null;
         try {
-          snap = await fireGetDoc(docRef);
+          // Race live Firestore get with a 2000ms timeout
+          const livePromise = fireGetDoc(docRef);
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Firestore single get timeout')), 2000)
+          );
+          snap = await Promise.race([livePromise, timeoutPromise]);
         } catch (err: any) {
-          console.warn(`[Firebase] Live get failed on ${this.table}/${this.targetId}, checking cached fallback...`);
+          console.warn(`[Firebase] Live get failed or timed out on ${this.table}/${this.targetId}, falling back to cache/Dexie.`);
           try {
             const { getDocFromCache } = await import('firebase/firestore');
             snap = await getDocFromCache(docRef);
           } catch (cacheErr) {
-            // Last resort: read from IndexedDB
             if (dexieTable) {
               const localRecord = await dexieTable.get(this.targetId);
               let mappedData: any[] = [];
@@ -903,15 +1222,19 @@ class SupabaseQueryBuilder {
               }
               return { data: mappedData, count: mappedData.length, error: null };
             }
-            throw err;
           }
         }
 
         let mappedData = [];
-        if (snap && snap.exists()) {
+        if (snap && snap.exists && snap.exists()) {
           const snapData = snap.data();
           if (!requiresBusinessScope || isSystemDev || snapData.business_id === activeBizId || this.table === 'businesses') {
             mappedData = [normalizeOutput(snap.id, snapData, this.table)];
+          }
+        } else if (dexieTable) {
+          const localRecord = await dexieTable.get(this.targetId);
+          if (localRecord && localRecord.deleted !== true) {
+            mappedData = [normalizeOutput(localRecord.id, localRecord, this.table)];
           }
         }
 
@@ -919,9 +1242,7 @@ class SupabaseQueryBuilder {
         if (mappedData.length > 0 && dexieTable) {
           try {
             await dexieTable.put({ ...mappedData[0], syncStatus: 'synced', syncedAt: new Date().toISOString() });
-          } catch (dexieErr) {
-            console.warn('[Dexie] Failed to mirror read:', dexieErr);
-          }
+          } catch (dexieErr) {}
         }
 
         return { 
@@ -932,7 +1253,10 @@ class SupabaseQueryBuilder {
       }
 
       // SELECT multiple records
-      const results = await this.getFilteredFirestoreDocs();
+      const results = isOfflineNow 
+        ? await this.getFilteredLocalDocs() 
+        : await this.getFilteredFirestoreDocs();
+
       const mappedData = results.map(item => normalizeOutput(item.id, item, this.table));
       return { 
         data: mappedData, 
@@ -940,12 +1264,27 @@ class SupabaseQueryBuilder {
         error: null 
       };
     } catch (error) {
-      console.error(`Firestore query failed on ${this.table}:`, error);
-      return { data: null, count: null, error };
+      console.error(`Firestore query failed on ${this.table}, attempting local Dexie fallback:`, error);
+      try {
+        const localResults = await this.getFilteredLocalDocs();
+        const mapped = localResults.map(item => normalizeOutput(item.id, item, this.table));
+        return { data: mapped, count: mapped.length, error: null };
+      } catch (dErr) {
+        return { data: [], count: 0, error: null };
+      }
     }
   }
 
   async getFilteredFirestoreDocs() {
+    const isOfflineNow = typeof window !== 'undefined' && (
+      !window.navigator.onLine || 
+      localStorage.getItem('tareza_offline_mode') === 'true'
+    );
+
+    if (isOfflineNow) {
+      return await this.getFilteredLocalDocs();
+    }
+
     const email = fireAuth.currentUser?.email?.toLowerCase();
     const isSystemDev = email && (
       email === 'admin@tarezaerp.co.zw' ||
@@ -956,7 +1295,6 @@ class SupabaseQueryBuilder {
     );
     
     const adminTables = ['businesses', 'subscriptions', 'profiles', 'business_users', 'support_tickets'];
-    // Only bypass active business scoping for system devs if we are explicitly inside the Developer Panel page (/dev-portal)
     const isDevPortal = typeof window !== 'undefined' && window.location && window.location.pathname.includes('/dev-portal');
     const isDevAdminTable = isSystemDev && isDevPortal && adminTables.includes(this.table);
 
@@ -990,29 +1328,42 @@ class SupabaseQueryBuilder {
       constraints.push(fireWhere(filter.col, '<=', filter.val));
     }
 
-    let snap;
+    let snap: any = null;
     try {
       const q = fireQuery(colRef, ...constraints);
-      snap = await fireGetDocs(q);
+      // Fast timeout race: if network does not respond in 2200ms, fallback to local Dexie
+      const livePromise = fireGetDocs(q);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Firestore query timeout')), 2200)
+      );
+      snap = await Promise.race([livePromise, timeoutPromise]);
     } catch (err: any) {
-      console.warn(`[Firebase] Live query failed on ${this.table}, checking cached fallback:`, err);
+      console.warn(`[Firebase] Live query failed or timed out on ${this.table}, checking cached fallback.`);
       try {
         const { getDocsFromCache } = await import('firebase/firestore');
         const q = fireQuery(colRef, ...constraints);
         snap = await getDocsFromCache(q);
       } catch (cacheErr) {
-        console.warn(`[Firebase] Cache read failed on ${this.table}, falling back to local IndexedDB.`);
+        console.warn(`[Firebase] Cache read also failed on ${this.table}, using local Dexie IndexedDB.`);
         return await this.getFilteredLocalDocs();
       }
     }
 
-    let results = snap.docs.map(docSnap => ({
+    let results = snap.docs.map((docSnap: any) => ({
       id: docSnap.id,
       ...(docSnap.data() as any)
     }));
 
     // Soft deletion filter
     results = results.filter((item: any) => item.deleted !== true);
+
+    // If Firestore returned 0 docs but we have local records, check Dexie fallback
+    if (results.length === 0) {
+      const localResults = await this.getFilteredLocalDocs();
+      if (localResults.length > 0) {
+        results = localResults;
+      }
+    }
 
     // Apply sorting in-memory to prevent Firestore index requirements
     if (this.orderCol) {

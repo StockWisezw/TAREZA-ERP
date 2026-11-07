@@ -22,6 +22,8 @@ export interface RegisterSession {
   sales_count: number;
   variance: number | null;
   sales_total?: number;
+  cogs_total?: number;
+  cogs?: number;
 }
 
 export function usePOSSession() {
@@ -34,7 +36,7 @@ export function usePOSSession() {
   const [showShiftDetails, setShowShiftDetails] = useState(false);
 
   const getIsOffline = () => {
-    return localStorage.getItem('tareza_offline_mode') === 'true' || (typeof window !== 'undefined' && !window.navigator.onLine);
+    return typeof window !== 'undefined' && !window.navigator.onLine;
   };
 
   const getUserRoleAndBusiness = async (userId: string) => {
@@ -274,17 +276,12 @@ export function usePOSSession() {
     };
     window.addEventListener('offline-mode-changed', handleOfflineToggle);
 
-    // Auto-switch to offline/online when network changes
+    // Handle network online/offline events
     const handleAutoOffline = () => {
-      localStorage.setItem('tareza_offline_mode', 'true');
-      toast.info('Network connection lost! Automatically switched to OFFLINE mode.');
       window.dispatchEvent(new Event('offline-mode-changed'));
-      window.dispatchEvent(new Event('tareza-network-offline'));
     };
 
     const handleAutoOnline = () => {
-      localStorage.setItem('tareza_offline_mode', 'false');
-      toast.success('Network connection restored! Automatically restored ONLINE mode.');
       window.dispatchEvent(new Event('offline-mode-changed'));
     };
 
@@ -361,11 +358,14 @@ export function usePOSSession() {
 
       // Implement offline shift startup if offline mode is triggered
       if (isCurrentlyOffline) {
+        const { getActiveBusinessId } = await import('../lib/firebaseClient');
+        const activeBiz = (await getActiveBusinessId()) || localStorage.getItem('tareza_active_business_id') || 'default_business';
+
         const offSessionId = 'off-shift-' + Math.random().toString(36).substring(2, 11) + '-' + Date.now().toString().slice(-4);
         const offlineShiftObj: RegisterSession & { is_offline: boolean; synced: boolean } = {
           id: offSessionId,
-          business_id: 'offline_business_id',
-          branch_id: customBranchId || 'offline_branch_id',
+          business_id: activeBiz,
+          branch_id: customBranchId || 'default_branch',
           cashier_id: customCashierId || userData?.user?.id || 'offline_cashier_id',
           user_id: customUserId || userData?.user?.id || 'offline_user_id',
           opened_at: openedAtStr,
@@ -379,8 +379,15 @@ export function usePOSSession() {
           synced: false
         };
 
-        // Save active session
+        // Save active session to localStorage and IndexedDB
         localStorage.setItem('tareza_active_offline_session', JSON.stringify(offlineShiftObj));
+        localStorage.setItem('tareza_active_session_cache', JSON.stringify(offlineShiftObj));
+
+        try {
+          await indexedDbService.saveActiveShift(offlineShiftObj);
+          const { db: dexieDb } = await import('../lib/dexieDb');
+          await dexieDb.register_sessions.put(offlineShiftObj);
+        } catch (e) {}
 
         // Append to local shifts log history for future manual synchronizations
         const savedShiftsArrRaw = localStorage.getItem('tareza_offline_shifts_uncollapsed');
@@ -469,11 +476,27 @@ export function usePOSSession() {
           ...activeSession,
           closed_at: new Date().toISOString(),
           closing_balance: actualVal,
-          variance: actualVal - activeSession.expected_balance
+          variance: actualVal - (activeSession.expected_balance ?? activeSession.opening_balance ?? 0)
         };
 
         // Remove active offline session, keep the record in uncollapsed array
         localStorage.removeItem('tareza_active_offline_session');
+        localStorage.removeItem('tareza_active_session_cache');
+
+        try {
+          await indexedDbService.clearActiveShift();
+          const { db: dexieDb } = await import('../lib/dexieDb');
+          await dexieDb.register_sessions.put(updatedOfflineSession);
+          await dexieDb.offlineQueue.put({
+            id: crypto.randomUUID(),
+            type: 'register_sessions:save',
+            recordId: updatedOfflineSession.id,
+            payload: updatedOfflineSession,
+            timestamp: Date.now(),
+            retryCount: 0,
+            status: 'pending'
+          });
+        } catch (e) {}
 
         const savedShiftsArrRaw = localStorage.getItem('tareza_offline_shifts_uncollapsed') || '[]';
         let shiftsArr = JSON.parse(savedShiftsArrRaw);
@@ -483,7 +506,7 @@ export function usePOSSession() {
         setActiveSession(null);
         setClosingActual('');
         setShowCloseShift(false);
-        toast.success(`Offline shift successfully completed! Total Expected: $${updatedOfflineSession.expected_balance.toFixed(2)}, Actual counted: $${actualVal.toFixed(2)}, Variance: $${updatedOfflineSession.variance.toFixed(2)}. Saved offline queue for manual sync.`);
+        toast.success(`Offline shift successfully completed! Total Expected: $${(updatedOfflineSession.expected_balance || 0).toFixed(2)}, Actual counted: $${actualVal.toFixed(2)}, Variance: $${(updatedOfflineSession.variance || 0).toFixed(2)}. Saved offline queue for automatic sync.`);
         window.dispatchEvent(new Event('offline-mode-changed'));
         return true;
       }
