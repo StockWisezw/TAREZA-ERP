@@ -829,23 +829,31 @@ export default function Login() {
               </CardDescription>
             </div>
           </CardHeader>
-          <form onSubmit={isForgotPassword ? handleForgotPassword : (isPinLogin ? handlePinLogin : handleAuth)}>
+          <form onSubmit={isForgotPassword ? handleForgotPassword : (activeTab === 'cashier' && !isSignUp ? handleCashierLogin : handleAuth)}>
             <CardContent className="space-y-5 p-8">
               {!isSignUp && !isForgotPassword && (
                 <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl mb-4">
                   <button
                     type="button"
-                    onClick={() => setIsPinLogin(false)}
-                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-lg transition-all ${!isPinLogin ? 'bg-white dark:bg-zinc-800 text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-950'}`}
+                    onClick={() => setActiveTab('cashier')}
+                    className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      activeTab === 'cashier' 
+                        ? 'bg-white dark:bg-zinc-800 text-amber-700 dark:text-amber-400 shadow-sm' 
+                        : 'text-zinc-500 hover:text-zinc-950'
+                    }`}
                   >
-                    Email Sign In
+                    🛒 Cashier Login (No Email)
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsPinLogin(true)}
-                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-lg transition-all ${isPinLogin ? 'bg-white dark:bg-zinc-800 text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-950'}`}
+                    onClick={() => setActiveTab('admin')}
+                    className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      activeTab === 'admin' 
+                        ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm' 
+                        : 'text-zinc-500 hover:text-zinc-950'
+                    }`}
                   >
-                    POS Quick PIN Access
+                    🛡️ Admin / Manager Login
                   </button>
                 </div>
               )}
@@ -879,38 +887,85 @@ export default function Login() {
                 </div>
               ) : (
                 <>
-                  {isPinLogin ? (
+                  {activeTab === 'cashier' && !isSignUp ? (
                     <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="branchAccessCode" className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Branch Access Code</Label>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="cashierUsername" className="text-xs uppercase tracking-wider font-semibold text-zinc-600 dark:text-zinc-400">
+                          Cashier Username
+                        </Label>
                         <Input 
-                          id="branchAccessCode" 
+                          id="cashierUsername" 
                           type="text" 
-                          placeholder="e.g. ALPHA-LAB" 
-                          value={branchAccessCode}
-                          onChange={(e) => setBranchAccessCode(e.target.value)}
-                          required={isPinLogin}
-                          className="h-11 bg-zinc-50 focus-visible:ring-primary focus-visible:bg-white border-zinc-200 uppercase"
+                          placeholder="e.g. cashier1 or tendai" 
+                          value={cashierUsername}
+                          onChange={(e) => setCashierUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                          required
+                          className="h-11 bg-zinc-50 focus-visible:ring-primary focus-visible:bg-white border-zinc-200 font-mono text-sm"
                         />
-                        <p className="text-[10px] text-zinc-400 leading-normal">
-                          Your shop-specific unique access code. Contact management if you do not have one.
-                          <span className="block mt-1.5 font-semibold text-amber-600 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/20 p-2 rounded-lg border border-amber-200/50 dark:border-amber-900/30">
-                            💡 First time logging in? If you haven't configured an access code yet, use "Email Sign In" above, then navigate to Settings ➔ Branches to view or assign access codes.
-                          </span>
-                        </p>
+                        <p className="text-[11px] text-zinc-400">Log in to POS using your assigned cashier username (No email needed).</p>
                       </div>
+
                       <div className="space-y-2">
-                        <Label htmlFor="cashierPin" className="text-xs uppercase tracking-wider font-semibold text-zinc-500">Personal Cashier PIN</Label>
-                        <Input 
-                          id="cashierPin" 
-                          type="password" 
-                          maxLength={6}
-                          placeholder="••••" 
-                          value={cashierPin}
-                          onChange={(e) => setCashierPin(e.target.value.replace(/\D/g, ''))}
-                          required={isPinLogin}
-                          className="h-11 bg-zinc-50 focus-visible:ring-primary focus-visible:bg-white border-zinc-200 text-center tracking-[0.5em] text-lg font-bold"
-                        />
+                        <div className="flex justify-between items-center">
+                          <Label className="text-xs uppercase tracking-wider font-semibold text-zinc-600 dark:text-zinc-400">
+                            Authentication Mode
+                          </Label>
+                          <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 p-0.5 rounded-lg text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => setCashierAuthType('pin')}
+                              className={`px-2 py-0.5 rounded font-semibold transition-all cursor-pointer ${
+                                cashierAuthType === 'pin' ? 'bg-white text-zinc-900 shadow-xs' : 'text-zinc-500'
+                              }`}
+                            >
+                              4-Digit PIN
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCashierAuthType('password')}
+                              className={`px-2 py-0.5 rounded font-semibold transition-all cursor-pointer ${
+                                cashierAuthType === 'password' ? 'bg-white text-zinc-900 shadow-xs' : 'text-zinc-500'
+                              }`}
+                            >
+                              Password
+                            </button>
+                          </div>
+                        </div>
+
+                        {cashierAuthType === 'pin' ? (
+                          <div className="space-y-1">
+                            <Input 
+                              id="cashierPin" 
+                              type="password" 
+                              maxLength={4}
+                              placeholder="••••" 
+                              value={cashierPin}
+                              onChange={(e) => setCashierPin(e.target.value.replace(/\D/g, ''))}
+                              required
+                              className="h-12 bg-zinc-50 focus-visible:ring-primary focus-visible:bg-white border-zinc-200 text-center tracking-[0.6em] text-2xl font-bold font-mono"
+                            />
+                            <p className="text-[10px] text-zinc-400 text-center">Enter your 4-digit personal security PIN</p>
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <Input 
+                              id="cashierPassword" 
+                              type={showCashierPassword ? "text" : "password"} 
+                              placeholder="Enter cashier password" 
+                              value={cashierPassword}
+                              onChange={(e) => setCashierPassword(e.target.value)}
+                              required
+                              className="h-11 bg-zinc-50 focus-visible:ring-primary focus-visible:bg-white border-zinc-200 pr-10"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowCashierPassword(!showCashierPassword)}
+                              className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-600 transition-colors"
+                            >
+                              {showCashierPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -1138,7 +1193,7 @@ export default function Login() {
               ) : (
                 <>
                   <Button type="submit" className="w-full h-11 text-secondary font-bold text-base shadow-sm shadow-primary/20" disabled={loading}>
-                    {loading ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Sign In')}
+                    {loading ? 'Processing...' : (isSignUp ? 'Sign Up' : (activeTab === 'cashier' ? 'Unlock POS Terminal' : 'Sign In as Admin / Manager'))}
                   </Button>
 
                   <div className="relative w-full my-1">
