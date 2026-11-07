@@ -33,7 +33,13 @@ export default function Login() {
   const [showDevPassword, setShowDevPassword] = useState(false);
   
   // Cashier fast login states (Username + PIN or Password, NO email required!)
-  const [activeTab, setActiveTab] = useState<'cashier' | 'admin'>('cashier');
+  const [activeTab, setActiveTabState] = useState<'cashier' | 'admin'>(() => {
+    return (typeof window !== 'undefined' && localStorage.getItem('tareza_login_tab') as 'cashier' | 'admin') || 'admin';
+  });
+  const setActiveTab = (tab: 'cashier' | 'admin') => {
+    setActiveTabState(tab);
+    localStorage.setItem('tareza_login_tab', tab);
+  };
   const [cashierUsername, setCashierUsername] = useState('');
   const [cashierAuthType, setCashierAuthType] = useState<'pin' | 'password'>('pin');
   const [cashierPin, setCashierPin] = useState('');
@@ -541,6 +547,11 @@ export default function Login() {
         const firebaseUser = userCredential.user;
 
         // Email confirmation skipped per user instruction to allow instant login without verification blockers
+        fetch('/api/auth/auto-verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: loginEmail })
+        }).catch(() => {});
 
 
         const { getActiveBusinessId, setActiveBusinessId } = await import('../lib/firebaseClient');
@@ -825,17 +836,6 @@ export default function Login() {
                 <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl mb-4">
                   <button
                     type="button"
-                    onClick={() => setActiveTab('cashier')}
-                    className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      activeTab === 'cashier' 
-                        ? 'bg-white dark:bg-zinc-800 text-amber-700 dark:text-amber-400 shadow-sm' 
-                        : 'text-zinc-500 hover:text-zinc-950'
-                    }`}
-                  >
-                    🛒 Cashier Login (No Email)
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => setActiveTab('admin')}
                     className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                       activeTab === 'admin' 
@@ -843,7 +843,18 @@ export default function Login() {
                         : 'text-zinc-500 hover:text-zinc-950'
                     }`}
                   >
-                    🛡️ Admin / Manager Login
+                    🛡️ Admin / Staff Login
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('cashier')}
+                    className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      activeTab === 'cashier' 
+                        ? 'bg-white dark:bg-zinc-800 text-amber-700 dark:text-amber-400 shadow-sm' 
+                        : 'text-zinc-500 hover:text-zinc-950'
+                    }`}
+                  >
+                    🛒 Cashier Login (PIN)
                   </button>
                 </div>
               )}

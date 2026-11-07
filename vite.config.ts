@@ -84,6 +84,9 @@ export default defineConfig(({mode}) => {
         },
       })
     ],
+    server: {
+      hmr: false,
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

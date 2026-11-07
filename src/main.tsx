@@ -9,11 +9,23 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-// Register service worker for Progressive Web App capability
+// Register service worker for Progressive Web App capability with automated stale cache purging
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  if ('caches' in window) {
+    caches.keys().then((keys) => {
+      keys.forEach((key) => {
+        if (key !== 'tareza-erp-pwa-v6') {
+          console.log('[PWA] Purging outdated cache:', key);
+          caches.delete(key);
+        }
+      });
+    });
+  }
+
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
       .then((reg) => {
+        reg.update();
         console.log('Tareza ERP PWA ServiceWorker successfully registered with scope: ', reg.scope);
       })
       .catch((err) => {
