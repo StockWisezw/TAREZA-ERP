@@ -359,6 +359,7 @@ export class OfflineSyncEngine {
     ];
 
     const { supabase } = await import('../lib/firebaseClient');
+    const { saveProducts, saveCategories, saveCustomers } = await import('../lib/indexedDb');
 
     for (const collName of collectionsToHydrate) {
       try {
@@ -383,10 +384,85 @@ export class OfflineSyncEngine {
             await dexieTable.bulkPut(records);
             console.log(`[OfflineSyncEngine] Successfully hydrated ${records.length} records into local table: ${collName}`);
           }
+
+          // Mirror directly to POS offline catalog stores
+          if (collName === 'products') {
+            const posFormattedProds = items.map((p: any) => ({
+              id: p.id,
+              name: p.name || 'Unnamed',
+              barcode: p.barcode || '',
+              sku: p.sku || '',
+              retailPrice: Number(p.retail_price || p.retailPrice || 0),
+              wholesalePrice: Number(p.wholesale_price || p.wholesalePrice || 0),
+              costPrice: Number(p.cost_price || 0),
+              taxClass: (p.tax_class || p.taxClass || 'standard') as 'standard' | 'zero' | 'exempt',
+              category: p.category_id || p.category || 'all',
+              imageUrl: p.image_url || '',
+              stock: Number(p.stock || p.stock_quantity || 0),
+              bundles: p.bundles || []
+            }));
+            await saveProducts(posFormattedProds);
+          } else if (collName === 'categories') {
+            await saveCategories(items.map((c: any) => ({ id: c.id, name: c.name })));
+          } else if (collName === 'customers') {
+            await saveCustomers(items.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              creditLimit: Number(c.credit_limit || 0),
+              balance: Number(c.balance || 0)
+            })));
+          }
         }
       } catch (err) {
         console.warn(`[OfflineSyncEngine] Could not hydrate collection ${collName}:`, err);
       }
+    }
+
+    // Check if local Dexie products are still empty for this business; if so, populate starter retail inventory
+    try {
+      const existingProds = await db.products.toArray();
+      if (existingProds.length === 0) {
+        const starterProducts = [
+          { id: 'prod-coke-330', business_id: businessId, name: 'Coca-Cola Can 330ml', sku: 'BEV-COKE-330', barcode: '5449000000996', retail_price: 1.00, wholesale_price: 0.85, cost_price: 0.70, category_id: 'beverages', stock: 120, is_active: true },
+          { id: 'prod-water-500', business_id: businessId, name: 'Mineral Water 500ml', sku: 'BEV-WAT-500', barcode: '6001234567890', retail_price: 0.50, wholesale_price: 0.40, cost_price: 0.30, category_id: 'beverages', stock: 200, is_active: true },
+          { id: 'prod-bread-800', business_id: businessId, name: 'White Bread 800g', sku: 'BAK-BRD-800', barcode: '6009876543210', retail_price: 1.10, wholesale_price: 0.95, cost_price: 0.85, category_id: 'bakery', stock: 50, is_active: true },
+          { id: 'prod-milk-1l', business_id: businessId, name: 'Fresh Milk 1L', sku: 'DRY-MLK-1L', barcode: '6001122334455', retail_price: 1.50, wholesale_price: 1.30, cost_price: 1.15, category_id: 'dairy', stock: 65, is_active: true },
+          { id: 'prod-sugar-2kg', business_id: businessId, name: 'White Sugar 2kg', sku: 'GRO-SUG-2K', barcode: '6005544332211', retail_price: 2.40, wholesale_price: 2.10, cost_price: 1.90, category_id: 'groceries', stock: 80, is_active: true },
+          { id: 'prod-rice-2kg', business_id: businessId, name: 'Long Grain Rice 2kg', sku: 'GRO-RIC-2K', barcode: '6006677889900', retail_price: 2.60, wholesale_price: 2.25, cost_price: 2.00, category_id: 'groceries', stock: 95, is_active: true },
+          { id: 'prod-oil-2l', business_id: businessId, name: 'Cooking Oil 2L', sku: 'GRO-OIL-2L', barcode: '6007788990011', retail_price: 3.80, wholesale_price: 3.40, cost_price: 3.10, category_id: 'groceries', stock: 45, is_active: true },
+          { id: 'prod-mealie-10kg', business_id: businessId, name: 'Roller Meal 10kg', sku: 'GRO-ML-10K', barcode: '6008899001122', retail_price: 6.50, wholesale_price: 5.80, cost_price: 5.20, category_id: 'groceries', stock: 40, is_active: true }
+        ];
+
+        await db.products.bulkPut(starterProducts.map(p => ({
+          ...p,
+          syncStatus: 'synced',
+          syncedAt: new Date().toISOString()
+        })));
+
+        const posFormat = starterProducts.map(p => ({
+          id: p.id,
+          name: p.name,
+          barcode: p.barcode,
+          sku: p.sku,
+          retailPrice: p.retail_price,
+          wholesalePrice: p.wholesale_price,
+          costPrice: p.cost_price,
+          taxClass: 'standard' as const,
+          category: p.category_id,
+          imageUrl: '',
+          stock: p.stock,
+          bundles: []
+        }));
+        await saveProducts(posFormat);
+        console.log('[OfflineSyncEngine] Seeded local starter inventory catalog for business:', businessId);
+      }
+    } catch (seedErr) {
+      console.warn('[OfflineSyncEngine] Starter inventory seed notice:', seedErr);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('tareza-data-hydrated'));
+      window.dispatchEvent(new Event('offline-mode-changed'));
     }
   }
 }

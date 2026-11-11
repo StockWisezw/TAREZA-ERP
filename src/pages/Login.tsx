@@ -68,14 +68,18 @@ export default function Login() {
       // First attempt standard Firebase Auth login with dev/client credentials
       await signInWithEmailAndPassword(fireAuth, demoEmail, demoPassword);
       const { getActiveBusinessId, setActiveBusinessId } = await import('../lib/firebaseClient');
+      let targetBiz = 'TZ-999999-DEV';
       if (role === 'developer') {
         setActiveBusinessId('TZ-999999-DEV');
       } else {
         const resolvedBiz = await getActiveBusinessId();
         if (resolvedBiz && resolvedBiz !== 'default_business') {
+          targetBiz = resolvedBiz;
           setActiveBusinessId(resolvedBiz);
         }
       }
+      const { offlineSyncEngine } = await import('../services/offlineSyncEngine');
+      offlineSyncEngine.hydrateLocalDatabase(targetBiz).catch(console.warn);
       toast.success(`Successfully logged in as ${role === 'developer' ? 'System Developer' : 'Business Client'}!`);
       navigate('/dashboard');
     } catch (err: any) {
@@ -287,6 +291,29 @@ export default function Login() {
       }
       if (targetBusinessId) {
         setActiveBusinessId(targetBusinessId);
+        // Hydrate all business catalogs and offline storage immediately
+        try {
+          const { offlineSyncEngine } = await import('../services/offlineSyncEngine');
+          offlineSyncEngine.hydrateLocalDatabase(targetBusinessId).catch(console.warn);
+        } catch (hErr) {}
+      }
+
+      // Offline resilience: save cashier auth session into local storage & Dexie
+      try {
+        const { db: localDb } = await import('../lib/dexieDb');
+        const cashierAuthUser = {
+          $id: authenticatedProfile.id,
+          id: authenticatedProfile.id,
+          email: authenticatedProfile.email || `${cleanUsername}@tareza.internal`,
+        };
+        await localDb.settings.put({
+          id: 'current_user_session',
+          key: 'current_user_session',
+          value: cashierAuthUser,
+          syncStatus: 'synced',
+        });
+      } catch (sessErr) {
+        console.warn('Could not cache cashier session locally:', sessErr);
       }
 
       // 5. Ensure Firebase session if not logged in yet
@@ -555,14 +582,22 @@ export default function Login() {
 
 
         const { getActiveBusinessId, setActiveBusinessId } = await import('../lib/firebaseClient');
+        let activeBiz = 'TZ-999999-DEV';
         if (isDeveloperEmail) {
           setActiveBusinessId('TZ-999999-DEV');
         } else {
           const resolvedBiz = await getActiveBusinessId();
           if (resolvedBiz && resolvedBiz !== 'default_business') {
+            activeBiz = resolvedBiz;
             setActiveBusinessId(resolvedBiz);
           }
         }
+
+        // Hydrate local database immediately on login
+        try {
+          const { offlineSyncEngine } = await import('../services/offlineSyncEngine');
+          offlineSyncEngine.hydrateLocalDatabase(activeBiz).catch(console.warn);
+        } catch (hErr) {}
 
         // Determine destination based on user role
         let targetDestination = '/dashboard';

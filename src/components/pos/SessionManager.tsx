@@ -13,11 +13,16 @@ import {
   ShieldCheck,
   AlertCircle,
   Info,
-  ArrowRight
+  ArrowRight,
+  Receipt,
+  Printer,
+  Search,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
+import { Badge } from '../ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { 
   Dialog, 
@@ -30,6 +35,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../lib/firebaseClient';
 import { usePOSStore } from '../../store/posStore';
 import { usePermission } from '../../hooks/usePermission';
+import { ThermalReceiptModal } from './ThermalReceiptModal';
 
 interface SessionManagerProps {
   activeSession?: any;
@@ -88,6 +94,10 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     total: 0
   });
   const [loadingTotals, setLoadingTotals] = useState(false);
+  const [shiftSales, setShiftSales] = useState<any[]>([]);
+  const [salesSearchQuery, setSalesSearchQuery] = useState('');
+  const [selectedSaleForThermal, setSelectedSaleForThermal] = useState<any | null>(null);
+  const [activeTabInShift, setActiveTabInShift] = useState<'overview' | 'sales'>('overview');
 
   // Real-time calculation of drawer reconciliation split totals
   useEffect(() => {
@@ -128,6 +138,31 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           });
         } catch (storeErr) {
           console.warn('Could not read local POS store for realtime totals:', storeErr);
+        }
+
+        // Merge Dexie local offline sales table
+        try {
+          const { db: dexieDb } = await import('../../lib/dexieDb');
+          const dexieSales = await dexieDb.sales.toArray();
+          dexieSales.forEach((ds: any) => {
+            const dsTime = new Date(ds.timestamp || ds.created_at || ds.createdAt || 0).toISOString();
+            if (dsTime >= activeSession.opened_at) {
+              const exists = salesInShift.some(
+                s => (s.receiptNumber && s.receiptNumber === ds.receiptNumber) || 
+                     s.id === ds.id || 
+                     s.receipt_number === (ds.receiptNumber || ds.receipt_number)
+              );
+              if (!exists) {
+                salesInShift.push({
+                  ...ds,
+                  created_at: ds.timestamp || ds.created_at || ds.createdAt,
+                  status: ds.status || 'COMPLETED'
+                });
+              }
+            }
+          });
+        } catch (dexErr) {
+          console.warn('Could not read Dexie offline sales for shift report:', dexErr);
         }
 
         // Aggregate payments
@@ -177,6 +212,14 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           mobile: mobileTotal,
           total: cashTotal + creditTotal + mobileTotal
         });
+
+        // Store sorted list of all sales made during this shift
+        salesInShift.sort((a, b) => {
+          const timeA = new Date(a.created_at || a.timestamp || 0).getTime();
+          const timeB = new Date(b.created_at || b.timestamp || 0).getTime();
+          return timeB - timeA;
+        });
+        setShiftSales(salesInShift);
       } catch (err) {
         console.warn('Failed to compile realtime totals:', err);
       } finally {
@@ -556,113 +599,239 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
             <span>Shift Active: {activeBranchName}</span>
           </Button>
 
-          <DialogContent className="sm:max-w-md bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 rounded-2xl">
-            <DialogHeader>
-              <CardTitle className="text-lg font-black flex items-center gap-2 text-indigo-650 dark:text-indigo-400">
-                <Clock className="w-5 h-5 text-indigo-500 animate-pulse" />
-                Active terminal shift details
-              </CardTitle>
+          <DialogContent className="sm:max-w-2xl bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 rounded-2xl flex flex-col max-h-[90vh]">
+            <DialogHeader className="pb-2 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="flex justify-between items-center pr-6">
+                <CardTitle className="text-base font-black flex items-center gap-2 text-indigo-650 dark:text-indigo-400">
+                  <Clock className="w-5 h-5 text-indigo-500 animate-pulse" />
+                  Terminal Shift Audit & Sales History
+                </CardTitle>
+                <Badge variant="outline" className="font-mono text-[10px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300">
+                  {shiftSales.length} Total Sales
+                </Badge>
+              </div>
+
+              {/* Navigation Switcher Tabs */}
+              <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl gap-1 text-xs font-bold mt-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTabInShift('overview')}
+                  className={`flex-1 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                    activeTabInShift === 'overview'
+                      ? 'bg-white dark:bg-zinc-900 text-indigo-700 dark:text-indigo-400 shadow-xs'
+                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Drawer Reconciliation</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTabInShift('sales')}
+                  className={`flex-1 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                    activeTabInShift === 'sales'
+                      ? 'bg-white dark:bg-zinc-900 text-indigo-700 dark:text-indigo-400 shadow-xs'
+                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200'
+                  }`}
+                >
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span>Sales Made in This Shift ({shiftSales.length})</span>
+                </button>
+              </div>
             </DialogHeader>
 
-            <div className="space-y-4 pt-3">
-              
-              {/* Tareza Assignment Context Grid */}
-              <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl p-3 border border-zinc-150 dark:border-zinc-800 space-y-2 text-xs">
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-zinc-500 font-semibold flex items-center gap-1"><Warehouse className="w-3.5 h-3.5" /> Warehouse:</span>
-                  <strong className="text-zinc-800 dark:text-white">{activeBranchName}</strong>
-                </div>
-                <div className="flex justify-between items-center py-1 border-t border-zinc-100 dark:border-zinc-800">
-                  <span className="text-zinc-500 font-semibold flex items-center gap-1"><UserCheck className="w-3.5 h-3.5" /> Designated Cashier:</span>
-                  <strong className="text-zinc-800 dark:text-white">{activeCashierName}</strong>
-                </div>
-                <div className="flex justify-between items-center py-1 border-t border-zinc-100 dark:border-zinc-800">
-                  <span className="text-zinc-500 font-semibold flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" /> Shift Supervisor:</span>
-                  <strong className="text-zinc-800 dark:text-white">{activeResponsibleName}</strong>
-                </div>
-              </div>
+            <div className="flex-1 overflow-y-auto space-y-4 pt-3 pr-1">
+              {activeTabInShift === 'overview' ? (
+                <>
+                  {/* Tareza Assignment Context Grid */}
+                  <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl p-3 border border-zinc-150 dark:border-zinc-800 space-y-2 text-xs">
+                    <div className="flex justify-between items-center py-1">
+                      <span className="text-zinc-500 font-semibold flex items-center gap-1"><Warehouse className="w-3.5 h-3.5" /> Warehouse:</span>
+                      <strong className="text-zinc-800 dark:text-white">{activeBranchName}</strong>
+                    </div>
+                    <div className="flex justify-between items-center py-1 border-t border-zinc-100 dark:border-zinc-800">
+                      <span className="text-zinc-500 font-semibold flex items-center gap-1"><UserCheck className="w-3.5 h-3.5" /> Designated Cashier:</span>
+                      <strong className="text-zinc-800 dark:text-white">{activeCashierName}</strong>
+                    </div>
+                    <div className="flex justify-between items-center py-1 border-t border-zinc-100 dark:border-zinc-800">
+                      <span className="text-zinc-500 font-semibold flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" /> Shift Supervisor:</span>
+                      <strong className="text-zinc-800 dark:text-white">{activeResponsibleName}</strong>
+                    </div>
+                  </div>
 
-              {/* standard Shift Metrics */}
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-150 dark:border-zinc-800/60 flex flex-col justify-between">
-                  <span className="text-zinc-400 font-semibold block mb-0.5">Shift Opened At</span>
-                  <span className="font-bold text-zinc-800 dark:text-zinc-100">
-                    {new Date(activeSession.opened_at).toLocaleTimeString() || 'Just now'}
-                  </span>
-                </div>
-                <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-150 dark:border-zinc-800/60 flex flex-col justify-between">
-                  <span className="text-zinc-400 font-semibold block mb-0.5">Opening Cash Float</span>
-                  <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-sm">
-                    ${(activeSession.opening_balance || 0).toFixed(2)}
-                  </span>
-                </div>
-                <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-150 dark:border-zinc-800/60 flex flex-col justify-between">
-                  <span className="text-zinc-400 font-semibold block mb-0.5">Expected Draw Balance</span>
-                  <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-sm text-indigo-600 dark:text-indigo-400">
-                    {role === 'cashier' ? '[HIDDEN - BLIND TILL]' : `$${(activeSession.expected_balance || 0).toFixed(2)}`}
-                  </span>
-                </div>
-                <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-150 dark:border-zinc-800/60 flex flex-col justify-between">
-                  <span className="text-zinc-400 font-semibold block mb-0.5">Sale Counter</span>
-                  <span className="font-bold text-zinc-800 dark:text-zinc-200">
-                    {activeSession.sales_count || 0} Transactions
-                  </span>
-                </div>
-              </div>
+                  {/* standard Shift Metrics */}
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-150 dark:border-zinc-800/60 flex flex-col justify-between">
+                      <span className="text-zinc-400 font-semibold block mb-0.5">Shift Opened At</span>
+                      <span className="font-bold text-zinc-800 dark:text-zinc-100">
+                        {new Date(activeSession.opened_at).toLocaleTimeString() || 'Just now'}
+                      </span>
+                    </div>
+                    <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-150 dark:border-zinc-800/60 flex flex-col justify-between">
+                      <span className="text-zinc-400 font-semibold block mb-0.5">Opening Cash Float</span>
+                      <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-sm">
+                        ${(activeSession.opening_balance || 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-150 dark:border-zinc-800/60 flex flex-col justify-between">
+                      <span className="text-zinc-400 font-semibold block mb-0.5">Expected Draw Balance</span>
+                      <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-sm text-indigo-600 dark:text-indigo-400">
+                        {role === 'cashier' ? '[HIDDEN - BLIND TILL]' : `$${(activeSession.expected_balance || 0).toFixed(2)}`}
+                      </span>
+                    </div>
+                    <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-150 dark:border-zinc-800/60 flex flex-col justify-between">
+                      <span className="text-zinc-400 font-semibold block mb-0.5">Sale Counter</span>
+                      <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                        {shiftSales.length} Transactions
+                      </span>
+                    </div>
+                  </div>
 
-              {/* Real-time Drawer Reconciliation Summary */}
-              {role === 'cashier' ? (
-                <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 rounded-xl p-3.5 space-y-1.5 text-center">
-                  <h4 className="text-[10px] uppercase font-black text-indigo-700 dark:text-indigo-450 tracking-wider">Blind Till Enforced</h4>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-normal">
-                    Real-time transaction revenues are hidden. Please perform a blind physical count of cash and drawer currency upon shift closure.
-                  </p>
-                </div>
+                  {/* Real-time Drawer Reconciliation Summary */}
+                  {role === 'cashier' ? (
+                    <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 rounded-xl p-3.5 space-y-1.5 text-center">
+                      <h4 className="text-[10px] uppercase font-black text-indigo-700 dark:text-indigo-450 tracking-wider">Blind Till Enforced</h4>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-normal">
+                        Real-time transaction revenues are hidden. Please perform a blind physical count of cash and drawer currency upon shift closure.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 rounded-xl p-3.5 space-y-2.5">
+                      <div className="flex justify-between items-center pb-1.5 border-b border-zinc-150 dark:border-zinc-800">
+                        <span className="text-[10px] uppercase font-black text-indigo-700 dark:text-indigo-400 tracking-wider">Real-time Drawer Reconciliation</span>
+                        {loadingTotals ? (
+                          <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+                        ) : (
+                          <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-500">Live summary</span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
+                          <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Cash</span>
+                          <span className="font-mono text-xs font-black text-emerald-650 dark:text-emerald-400">
+                            ${realtimeTotals.cash.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
+                          <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Credit</span>
+                          <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400">
+                            ${realtimeTotals.credit.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
+                          <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Mobile</span>
+                          <span className="font-mono text-xs font-black text-amber-600 dark:text-amber-500">
+                            ${realtimeTotals.mobile.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center pt-2 border-t border-dashed border-zinc-200 dark:border-zinc-800">
+                        <span className="text-xs font-bold text-zinc-650 dark:text-zinc-350">Total Shift Revenue:</span>
+                        <span className="font-mono text-sm font-black text-zinc-900 dark:text-white">
+                          ${realtimeTotals.total.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-3.5 bg-amber-50 dark:bg-amber-950/25 border border-amber-250 dark:border-amber-900/30 text-amber-800 dark:text-amber-400 rounded-xl text-[11px] leading-relaxed flex items-start gap-2">
+                    <Info className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                    <span>The designated cashier is fully accountable for cash discrepancy and stock variances on end of day balance reviews. Final audits are stored securely.</span>
+                  </div>
+                </>
               ) : (
-                <div className="border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 rounded-xl p-3.5 space-y-2.5">
-                  <div className="flex justify-between items-center pb-1.5 border-b border-zinc-150 dark:border-zinc-800">
-                    <span className="text-[10px] uppercase font-black text-indigo-700 dark:text-indigo-400 tracking-wider">Real-time Drawer Reconciliation</span>
-                    {loadingTotals ? (
-                      <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
-                    ) : (
-                      <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-500">Live summary</span>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
-                      <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Cash</span>
-                      <span className="font-mono text-xs font-black text-emerald-650 dark:text-emerald-400">
-                        ${realtimeTotals.cash.toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
-                      <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Credit</span>
-                      <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400">
-                        ${realtimeTotals.credit.toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 p-2 rounded-lg text-center">
-                      <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block mb-0.5">Mobile</span>
-                      <span className="font-mono text-xs font-black text-amber-600 dark:text-amber-500">
-                        ${realtimeTotals.mobile.toFixed(2)}
-                      </span>
+                /* Shift Sales List Table */
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                      <Input
+                        placeholder="Search sales by receipt # or customer name..."
+                        value={salesSearchQuery}
+                        onChange={(e) => setSalesSearchQuery(e.target.value)}
+                        className="h-8 text-xs pl-8 bg-zinc-50 dark:bg-zinc-800/50"
+                      />
                     </div>
                   </div>
 
-                  <div className="flex justify-between items-center pt-2 border-t border-dashed border-zinc-200 dark:border-zinc-800">
-                    <span className="text-xs font-bold text-zinc-650 dark:text-zinc-350">Total Shift Revenue:</span>
-                    <span className="font-mono text-sm font-black text-zinc-900 dark:text-white">
-                      ${realtimeTotals.total.toFixed(2)}
-                    </span>
-                  </div>
+                  {shiftSales.length === 0 ? (
+                    <div className="p-8 text-center bg-zinc-50 dark:bg-zinc-800/30 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 text-zinc-400 text-xs">
+                      <Receipt className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p className="font-semibold">No sales recorded in this shift yet.</p>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">Transactions completed at the POS will appear here instantly.</p>
+                    </div>
+                  ) : (
+                    <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden divide-y divide-zinc-150 dark:divide-zinc-800 max-h-[360px] overflow-y-auto">
+                      {shiftSales
+                        .filter(s => {
+                          if (!salesSearchQuery) return true;
+                          const q = salesSearchQuery.toLowerCase();
+                          const rcpt = String(s.receiptNumber || s.receipt_number || '').toLowerCase();
+                          const cust = String(s.customerName || s.customer_name || '').toLowerCase();
+                          return rcpt.includes(q) || cust.includes(q);
+                        })
+                        .map((saleItem, idx) => {
+                          const rcpt = saleItem.receiptNumber || saleItem.receipt_number || `#${idx + 1}`;
+                          const saleTotal = Number(saleItem.total || saleItem.total_amount || 0);
+                          const totalZiG = (saleTotal * 26.5).toFixed(2);
+                          const timeStr = saleItem.timestamp || saleItem.created_at ? new Date(saleItem.timestamp || saleItem.created_at).toLocaleTimeString() : 'Just now';
+                          const itemCount = Array.isArray(saleItem.items) ? saleItem.items.length : 1;
+                          const method = String(saleItem.payment_method || (saleItem.payments?.[0]?.method) || 'CASH').replace('_', ' ').toUpperCase();
+                          const isOffline = saleItem.status === 'offline_pending';
+
+                          return (
+                            <div key={saleItem.id || idx} className="p-3 bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-850/50 transition-colors flex items-center justify-between gap-3 text-xs">
+                              <div className="space-y-0.5 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono">{rcpt}</span>
+                                  <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-bold ${isOffline ? 'bg-amber-50 text-amber-700 border-amber-300' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                                    {isOffline ? 'Offline Queue' : 'Synced'}
+                                  </Badge>
+                                  <span className="text-[10px] text-zinc-400">{timeStr}</span>
+                                </div>
+                                <div className="text-[11px] text-zinc-500 truncate">
+                                  <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+                                  <span className="mx-1">•</span>
+                                  <span className="font-medium text-zinc-700 dark:text-zinc-300">{method}</span>
+                                  {saleItem.customerName && saleItem.customerName !== 'Walk-In Customer' && (
+                                    <>
+                                      <span className="mx-1">•</span>
+                                      <span className="text-indigo-600 dark:text-indigo-400 font-medium">{saleItem.customerName}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <div className="text-right">
+                                  <span className="font-mono font-bold text-sm text-zinc-900 dark:text-zinc-100 block">
+                                    ${saleTotal.toFixed(2)}
+                                  </span>
+                                  <span className="text-[9px] text-zinc-400 font-mono block">
+                                    ZiG {totalZiG}
+                                  </span>
+                                </div>
+
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSelectedSaleForThermal(saleItem)}
+                                  className="h-7 px-2 text-[10px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
+                                  title="Print ESC/POS Thermal Receipt"
+                                >
+                                  <Printer className="w-3 h-3 mr-1" />
+                                  ESC/POS
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
                 </div>
               )}
-
-              <div className="p-3.5 bg-amber-50 dark:bg-amber-950/25 border border-amber-250 dark:border-amber-900/30 text-amber-800 dark:text-amber-400 rounded-xl text-[11px] leading-relaxed flex items-start gap-2">
-                <Info className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
-                <span>The designated cashier is fully accountable for cash discrepancy and stock variances on end of day balance reviews. Final audits are stored securely.</span>
-              </div>
             </div>
 
             <DialogFooter className="bg-zinc-50 dark:bg-zinc-900 p-4 border-t border-zinc-150 dark:border-zinc-800 -mx-6 -mb-6 mt-4 flex flex-col sm:flex-row gap-2 rounded-b-2xl">
@@ -751,6 +920,14 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           </DialogContent>
         </Dialog>
       </div>
+
+      <ThermalReceiptModal
+        open={!!selectedSaleForThermal}
+        onOpenChange={(open) => !open && setSelectedSaleForThermal(null)}
+        sale={selectedSaleForThermal}
+        businessName={activeBranchName ? `Tareza - ${activeBranchName}` : undefined}
+        branchName={activeBranchName}
+      />
     </>
   );
 };

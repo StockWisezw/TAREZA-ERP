@@ -26,17 +26,67 @@ export function usePOSData(activeSession: any) {
       try {
         setIsLoading(true);
 
-        // Load instantly from local cache
-        const localProds = await getLocalProducts();
+        // Load instantly from local cache & Dexie DB
+        let localProds = await getLocalProducts();
+        if (!localProds || localProds.length === 0) {
+          try {
+            const { db: dexieDb } = await import('../lib/dexieDb');
+            const dexProds = await dexieDb.products.toArray();
+            if (dexProds && dexProds.length > 0) {
+              localProds = dexProds.map((p: any) => ({
+                id: p.id,
+                name: p.name || 'Unnamed',
+                barcode: p.barcode || '',
+                sku: p.sku || '',
+                retailPrice: Number(p.retail_price || p.retailPrice || 0),
+                wholesalePrice: Number(p.wholesale_price || p.wholesalePrice || 0),
+                costPrice: Number(p.cost_price || 0),
+                taxClass: p.tax_class || p.taxClass || 'standard',
+                category: p.category_id || p.category || 'all',
+                imageUrl: p.image_url || '',
+                stock: Number(p.stock || p.stock_quantity || 0),
+                bundles: p.bundles || []
+              }));
+            }
+          } catch (dexErr) {
+            console.warn('Dexie fallback products error:', dexErr);
+          }
+        }
+
         if (localProds && localProds.length > 0) {
           setProducts(localProds);
           setIsLoading(false);
         }
-        const localCusts = await getLocalCustomers();
+
+        let localCusts = await getLocalCustomers();
+        if (!localCusts || localCusts.length === 0) {
+          try {
+            const { db: dexieDb } = await import('../lib/dexieDb');
+            const dexCusts = await dexieDb.customers.toArray();
+            if (dexCusts && dexCusts.length > 0) {
+              localCusts = dexCusts.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                creditLimit: Number(c.credit_limit || 0),
+                balance: Number(c.balance || 0)
+              }));
+            }
+          } catch (e) {}
+        }
         if (localCusts && localCusts.length > 0) {
           setCustomers(localCusts);
         }
-        const localCats = await getLocalCategories();
+
+        let localCats = await getLocalCategories();
+        if (!localCats || localCats.length === 0) {
+          try {
+            const { db: dexieDb } = await import('../lib/dexieDb');
+            const dexCats = await dexieDb.categories.toArray();
+            if (dexCats && dexCats.length > 0) {
+              localCats = dexCats.map((c: any) => ({ id: c.id, name: c.name }));
+            }
+          } catch (e) {}
+        }
         if (localCats && localCats.length > 0) {
           setCategories([
             { id: 'all', name: 'All Menu' },
@@ -225,12 +275,14 @@ export function usePOSData(activeSession: any) {
     };
 
     window.addEventListener('offline-mode-changed', handleDataRefresh);
+    window.addEventListener('tareza-data-hydrated', handleDataRefresh);
     window.addEventListener('tareza-sync-completed', handleDataRefresh);
     window.addEventListener('online', handleDataRefresh);
 
     return () => {
       if (unsubscribeProducts) unsubscribeProducts();
       window.removeEventListener('offline-mode-changed', handleDataRefresh);
+      window.removeEventListener('tareza-data-hydrated', handleDataRefresh);
       window.removeEventListener('tareza-sync-completed', handleDataRefresh);
       window.removeEventListener('online', handleDataRefresh);
     };

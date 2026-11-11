@@ -98,6 +98,20 @@ export default function App() {
     syncRBZExchangeRates(false).catch(err => {
       console.warn('Background currency rate sync soft failure:', err);
     });
+
+    // Proactively hydrate local database from Firestore to ensure offline readiness
+    (async () => {
+      try {
+        const { getActiveBusinessId } = await import('./lib/firebaseClient');
+        const bizId = await getActiveBusinessId();
+        if (bizId && bizId !== 'default_business') {
+          const { offlineSyncEngine } = await import('./services/offlineSyncEngine');
+          offlineSyncEngine.hydrateLocalDatabase(bizId).catch(console.warn);
+        }
+      } catch (e) {
+        console.warn('Startup offline hydration skipped:', e);
+      }
+    })();
   }, []);
 
   return (

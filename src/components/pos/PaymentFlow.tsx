@@ -15,6 +15,7 @@ import { exportReceiptPDF } from '../../utils/exportReceiptPDF';
 import { printReceiptDirect } from '../../utils/printManager';
 import { useBusinessStore } from '../../store';
 import { CustomerChangeNotes } from './CustomerChangeNotes';
+import { ThermalReceiptModal } from './ThermalReceiptModal';
 
 interface PaymentFlowProps {
   showPayment: boolean;
@@ -43,6 +44,7 @@ export const PaymentFlow: React.FC<PaymentFlowProps> = ({
 }) => {
   const { currentBusiness, activeBranch } = useBusinessStore();
   const [showLeftChangeModal, setShowLeftChangeModal] = React.useState(false);
+  const [showThermalModal, setShowThermalModal] = React.useState(false);
 
   const changeDue = lastSale 
     ? lastSale.payments.reduce((acc, p) => acc + p.amount, 0) - lastSale.total 
@@ -156,18 +158,34 @@ export const PaymentFlow: React.FC<PaymentFlowProps> = ({
               Next Customer
             </Button>
             <Button 
+              className="w-full sm:w-auto flex-1 h-10 cursor-pointer bg-indigo-600 text-white hover:bg-indigo-700 font-bold" 
+              onClick={() => {
+                setShowThermalModal(true);
+              }}
+            >
+              <Printer className="mr-2 h-4 w-4" /> Thermal (ESC/POS)
+            </Button>
+            <Button 
               className="w-full sm:w-auto flex-1 h-10 cursor-pointer bg-zinc-900 text-white hover:bg-zinc-800 font-bold" 
               onClick={() => {
                 onPrintClick();
               }}
             >
-              <Printer className="mr-2 h-4 w-4" /> Print Receipt
+              <Printer className="mr-2 h-4 w-4" /> Standard Print
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <ReceiptPrint ref={receiptRef} sale={lastSale} />
+
+      <ThermalReceiptModal
+        open={showThermalModal}
+        onOpenChange={setShowThermalModal}
+        sale={lastSale}
+        businessName={currentBusiness?.name}
+        branchName={activeBranch?.name}
+      />
 
       <CustomerChangeNotes
         open={showLeftChangeModal}

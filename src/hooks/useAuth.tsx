@@ -34,6 +34,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(sessionRecord.value);
         setLoading(false);
         console.log('[Auth] Restored user session from IndexedDB:', sessionRecord.value.email);
+      } else {
+        const cashierId = typeof window !== 'undefined' ? localStorage.getItem('tareza_active_cashier_id') : null;
+        const cashierName = typeof window !== 'undefined' ? localStorage.getItem('tareza_active_cashier_name') || 'Cashier' : 'Cashier';
+        if (cashierId) {
+          const cashierUser: AuthUser = {
+            $id: cashierId,
+            id: cashierId,
+            email: `${cashierName.toLowerCase().replace(/\s+/g, '')}@pos.local`
+          };
+          setUser(cashierUser);
+          setLoading(false);
+        }
       }
     }).catch((err) => {
       console.warn('[Auth] Failed to restore session from IndexedDB:', err);
@@ -62,12 +74,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setLoading(false);
       } else {
         const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-        // Only clear the user state if we are explicitly signing out or if we are online (meaning the session expired on the server)
-        if (event === 'SIGNED_OUT' || !isOffline) {
+        const hasActiveCashier = typeof window !== 'undefined' && !!localStorage.getItem('tareza_active_cashier_id');
+
+        // Only clear the user state if explicitly signed out and no active cashier session
+        if (event === 'SIGNED_OUT' && !hasActiveCashier) {
           setUser(null);
           await db.settings.delete('current_user_session');
           console.log('[Auth] User state cleared and removed from IndexedDB');
-        } else {
+        } else if (hasActiveCashier) {
+          const cId = localStorage.getItem('tareza_active_cashier_id')!;
+          const cName = localStorage.getItem('tareza_active_cashier_name') || 'Cashier';
+          setUser({
+            $id: cId,
+            id: cId,
+            email: `${cName.toLowerCase().replace(/\s+/g, '')}@pos.local`
+          });
+        } else if (isOffline) {
           console.log('[Auth] Offline and no Firebase session, retaining IndexedDB session');
         }
         setLoading(false);
@@ -120,6 +142,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Clear localStorage active business/branch to prevent stale session pollution
       localStorage.removeItem('tareza_active_business_id');
       localStorage.removeItem('tareza_active_branch_id');
+      localStorage.removeItem('tareza_active_cashier_id');
+      localStorage.removeItem('tareza_active_cashier_name');
     } catch (err) {
       console.error('Error clearing local cache on signout:', err);
     }
