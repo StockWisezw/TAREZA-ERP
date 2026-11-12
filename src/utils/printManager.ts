@@ -99,12 +99,20 @@ export function printReceiptDirect(sale: any, businessInfo?: {
   const itemsHtml = items.map((item: any) => {
     const name = item.product?.name || item.name || 'Item';
     const qty = Number(item.quantity || 1);
-    const price = Number(item.price || item.product?.price || 0);
-    const lineTotal = Number(item.subtotal || (price * qty)) + Number(item.vatAmount || item.vat_amount || 0);
+    const price = Number(
+      item.unitPrice ?? 
+      item.unit_price ?? 
+      item.price ?? 
+      item.product?.retailPrice ?? 
+      item.product?.price ?? 
+      (item.subtotal && item.quantity ? item.subtotal / item.quantity : 0)
+    );
+    const lineTotal = Number(item.subtotal !== undefined ? item.subtotal : (price * qty)) + Number(item.vatAmount || item.vat_amount || 0);
     return `
       <tr>
         <td style="padding: 3px 0; word-break: break-word;">${name}</td>
         <td style="padding: 3px 0; text-align: right;">${qty}</td>
+        <td style="padding: 3px 0; text-align: right;">$${price.toFixed(2)}</td>
         <td style="padding: 3px 0; text-align: right;">$${lineTotal.toFixed(2)}</td>
       </tr>
     `;
@@ -204,8 +212,9 @@ export function printReceiptDirect(sale: any, businessInfo?: {
           <thead>
             <tr style="border-bottom: 1px dashed #666; font-weight: bold;">
               <th style="text-align: left; padding-bottom: 3px;">Item</th>
-              <th style="text-align: right; padding-bottom: 3px; width: 35px;">Qty</th>
-              <th style="text-align: right; padding-bottom: 3px; width: 60px;">Total</th>
+              <th style="text-align: right; padding-bottom: 3px; width: 30px;">Qty</th>
+              <th style="text-align: right; padding-bottom: 3px; width: 45px;">Price</th>
+              <th style="text-align: right; padding-bottom: 3px; width: 55px;">Total</th>
             </tr>
           </thead>
           <tbody>

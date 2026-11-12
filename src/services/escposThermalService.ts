@@ -28,7 +28,10 @@ export interface ThermalSaleData {
   items: Array<{
     name: string;
     quantity: number;
-    price: number;
+    price?: number;
+    unitPrice?: number;
+    unit_price?: number;
+    retailPrice?: number;
     subtotal?: number;
     vatAmount?: number;
     discount?: { type: string; value: number };
@@ -298,9 +301,15 @@ export function formatSaleToESCPOS(
 
   // 4. Line Items
   sale.items.forEach((item) => {
-    const qty = item.quantity || 1;
-    const price = item.price || 0;
-    const lineTotal = (qty * price).toFixed(2);
+    const qty = Number(item.quantity || 1);
+    const price = Number(
+      item.unitPrice ?? 
+      item.unit_price ?? 
+      item.price ?? 
+      item.retailPrice ?? 
+      (item.subtotal && item.quantity ? item.subtotal / item.quantity : 0)
+    );
+    const lineTotal = Number(item.subtotal !== undefined ? item.subtotal : (qty * price)).toFixed(2);
 
     if (cols >= 40) {
       let itemName = item.name;
@@ -435,9 +444,15 @@ export function formatSaleToThermalText(
   lines.push(divider('-'));
 
   sale.items.forEach((item) => {
-    const qty = item.quantity || 1;
-    const price = item.price || 0;
-    const lineTotal = (qty * price).toFixed(2);
+    const qty = Number(item.quantity || 1);
+    const price = Number(
+      item.unitPrice ?? 
+      item.unit_price ?? 
+      item.price ?? 
+      item.retailPrice ?? 
+      (item.subtotal && item.quantity ? item.subtotal / item.quantity : 0)
+    );
+    const lineTotal = Number(item.subtotal !== undefined ? item.subtotal : (qty * price)).toFixed(2);
     lines.push(twoCol(`${item.name} (${qty}x$${price.toFixed(2)})`, `$${lineTotal}`));
   });
 

@@ -31,14 +31,15 @@ export default function Inventory() {
           <TabsTrigger value="import" className="rounded-lg px-6 h-10 data-[state=active]:shadow-sm">Bulk Import</TabsTrigger>
           <TabsTrigger value="stocktake" className="rounded-lg px-6 h-10 data-[state=active]:shadow-sm">Stocktake</TabsTrigger>
           <TabsTrigger value="transfers" className="rounded-lg px-6 h-10 data-[state=active]:shadow-sm">Transfers</TabsTrigger>
-          <TabsTrigger value="history" className="rounded-lg px-6 h-10 data-[state=active]:shadow-sm">History</TabsTrigger>
+          <TabsTrigger value="history" className="rounded-lg px-6 h-10 data-[state=active]:shadow-sm font-bold text-indigo-700">Stock Movements</TabsTrigger>
         </TabsList>
         
         {/* Mobile quick tabs */}
-        <div className="sm:hidden grid grid-cols-5 gap-1.5 mb-6">
+        <div className="sm:hidden grid grid-cols-3 gap-1.5 mb-6">
           <Button variant={activeTab === 'dashboard' ? 'default' : 'outline'} onClick={() => setActiveTab('dashboard')} className="w-full text-[10px] h-8 px-1">Dashboard</Button>
           <Button variant={activeTab === 'products' ? 'default' : 'outline'} onClick={() => setActiveTab('products')} className="w-full text-[10px] h-8 px-1">Products</Button>
-          <Button variant={activeTab === 'bundles' ? 'default' : 'outline'} onClick={() => setActiveTab('bundles')} className="w-full text-[10px] h-8 px-1 bg-indigo-50 border-indigo-150 text-indigo-700 font-semibold">Bundles</Button>
+          <Button variant={activeTab === 'history' ? 'default' : 'outline'} onClick={() => setActiveTab('history')} className="w-full text-[10px] h-8 px-1 bg-indigo-50 border-indigo-200 text-indigo-700 font-bold">Movements</Button>
+          <Button variant={activeTab === 'bundles' ? 'default' : 'outline'} onClick={() => setActiveTab('bundles')} className="w-full text-[10px] h-8 px-1">Bundles</Button>
           <Button variant={activeTab === 'compliance' ? 'default' : 'outline'} onClick={() => setActiveTab('compliance')} className="w-full text-[10px] h-8 px-1">Expiry</Button>
           <Button variant={activeTab === 'import' ? 'default' : 'outline'} onClick={() => setActiveTab('import')} className="w-full text-[10px] h-8 px-1">Import</Button>
         </div>

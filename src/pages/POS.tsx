@@ -929,27 +929,126 @@ export default function POS() {
                 syncStatus: 'pending'
               });
 
-              // 3. Decrement local stock in Dexie inventory and products tables
+              // 3. Decrement stock in Dexie inventory & products, and record Stock Movement
               const mult = getItemPackSize(item);
               const dec = item.quantity * mult;
               try {
+                // A. Update local Dexie products table
+                const pRecord = await dexieDb.products.get(item.product.id);
+                const currentStock = Number(pRecord?.stock || pRecord?.stock_quantity || item.product?.stock || 0);
+                const newStock = Math.max(0, currentStock - dec);
+                if (pRecord) {
+                  await dexieDb.products.update(item.product.id, {
+                    stock: newStock,
+                    stock_quantity: newStock
+                  });
+                }
+
+                // B. Update or create local Dexie inventory table entry
                 const invRecords = await dexieDb.inventory.where('product_id').equals(item.product.id).toArray();
+                let updatedInvQty = newStock;
                 if (invRecords.length > 0) {
                   const firstInv = invRecords[0];
+                  updatedInvQty = Math.max(0, (Number(firstInv.quantity) || 0) - dec);
                   await dexieDb.inventory.update(firstInv.id, {
-                    quantity: Math.max(0, (Number(firstInv.quantity) || 0) - dec),
+                    quantity: updatedInvQty,
                     updated_at: new Date().toISOString()
                   });
-                }
-                const pRecord = await dexieDb.products.get(item.product.id);
-                if (pRecord) {
-                  const currentStock = Number(pRecord.stock || pRecord.stock_quantity || 0);
-                  await dexieDb.products.update(item.product.id, {
-                    stock: Math.max(0, currentStock - dec),
-                    stock_quantity: Math.max(0, currentStock - dec)
+                } else {
+                  await dexieDb.inventory.put({
+                    id: crypto.randomUUID(),
+                    business_id: bizId,
+                    branch_id: branchId || 'main_branch',
+                    product_id: item.product.id,
+                    quantity: updatedInvQty,
+                    reorder_level: 5,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    syncStatus: 'pending'
                   });
                 }
-              } catch (stkErr) {}
+
+                // C. Record stock movement in Dexie stock_movements table
+                const movementId = crypto.randomUUID();
+                const movementRecord = {
+                  id: movementId,
+                  business_id: bizId,
+                  branch_id: branchId || 'main_branch',
+                  product_id: item.product.id,
+                  quantity: -dec, // Negative reflects stock deduction from sale
+                  type: 'SALE',
+                  notes: `Sale Receipt #${currentSale.receiptNumber} (${item.quantity} x ${item.product.name})`,
+                  reference_id: currentSale.id,
+                  created_at: currentSale.timestamp || new Date().toISOString(),
+                  syncStatus: 'pending'
+                };
+                await dexieDb.stock_movements.put(movementRecord);
+
+                // D. Add to Offline Sync Queue
+                await dexieDb.offlineQueue.put({
+                  id: crypto.randomUUID(),
+                  type: 'stock_movements:save',
+                  recordId: movementId,
+                  payload: movementRecord,
+                  timestamp: Date.now(),
+                  retryCount: 0,
+                  status: 'pending',
+                  priority: 'normal'
+                });
+
+                // E. Real-time Cloud update if online
+                if (typeof navigator !== 'undefined' && navigator.onLine) {
+                  // Push stock movement to cloud
+                  try {
+                    await supabase.from('stock_movements').insert([movementRecord]);
+                  } catch (err) {
+                    console.warn('Live stock movement insert deferred:', err);
+                  }
+
+                  // Update product stock in cloud
+                  try {
+                    await supabase.from('products').update({
+                      stock: newStock,
+                      stock_quantity: newStock,
+                      updated_at: new Date().toISOString()
+                    }).eq('id', item.product.id);
+                  } catch (err) {
+                    console.warn('Live product stock update deferred:', err);
+                  }
+
+                  // Update inventory row in Supabase
+                  (async () => {
+                    try {
+                      let invQ = supabase.from('inventory').select('id, quantity').eq('product_id', item.product.id);
+                      if (branchId) invQ = invQ.eq('branch_id', branchId);
+                      const { data: invRows } = await invQ.limit(1);
+                      if (invRows && invRows.length > 0) {
+                        const targetInvId = invRows[0].id;
+                        const remoteQty = Math.max(0, (Number(invRows[0].quantity) || 0) - dec);
+                        await supabase.from('inventory').update({
+                          quantity: remoteQty,
+                          updated_at: new Date().toISOString()
+                        }).eq('id', targetInvId);
+                      } else {
+                        await supabase.from('inventory').insert([{
+                          id: crypto.randomUUID(),
+                          business_id: bizId,
+                          branch_id: branchId || 'main_branch',
+                          product_id: item.product.id,
+                          quantity: newStock,
+                          reorder_level: 5,
+                          created_at: new Date().toISOString(),
+                          updated_at: new Date().toISOString()
+                        }]);
+                      }
+                    } catch (invErr) {
+                      console.warn('Live inventory update deferred:', invErr);
+                    }
+                  })();
+                }
+              } catch (stkErr) {
+                console.error('[POS] Stock decrement and movement tracking error:', stkErr);
+              }
             }
           }
 

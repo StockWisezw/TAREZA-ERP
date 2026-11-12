@@ -245,13 +245,40 @@ export function ProductList({ onImportClick }: ProductListProps) {
         setSelectedBranchId(branchesData[0].id);
       }
       
+      // Merge with local Dexie products & inventory for up-to-the-second POS deductions
+      let localProdsMap: Record<string, any> = {};
+      let localInvMap: Record<string, any> = {};
+      try {
+        const { db: dexieDb } = await import('../../lib/dexieDb');
+        const dProds = await dexieDb.products.toArray();
+        dProds.forEach(dp => { localProdsMap[dp.id] = dp; });
+        const dInvs = await dexieDb.inventory.toArray();
+        dInvs.forEach(di => { localInvMap[di.product_id] = di; });
+      } catch (e) {}
+
       const mappedProducts = productsData.map(p => {
         const productInventory = inventoryData.filter((i: any) => i.product_id === p.id);
         const category = categoriesData.find((c: any) => c.id === p.category_id);
         
+        const localP = localProdsMap[p.id];
+        const localInv = localInvMap[p.id];
+
+        let resolvedStock = Number(p.stock !== undefined ? p.stock : (p.stock_quantity !== undefined ? p.stock_quantity : 0));
+        if (localP && localP.stock !== undefined && localP.stock < resolvedStock) {
+          resolvedStock = localP.stock;
+        }
+
+        let invList = productInventory;
+        if (invList.length === 0) {
+          invList = [{ quantity: localInv ? Number(localInv.quantity || 0) : resolvedStock, branch_id: selectedBranchId || 'main_branch' }];
+        } else if (localInv && localInv.quantity !== undefined && Number(localInv.quantity) < Number(invList[0].quantity)) {
+          invList = [{ ...invList[0], quantity: Number(localInv.quantity) }];
+        }
+        
         return {
           ...p,
-          inventory: productInventory.length > 0 ? productInventory : [{ quantity: 0 }],
+          stock: resolvedStock,
+          inventory: invList,
           categories: category ? { name: category.name } : null
         };
       });
@@ -1646,7 +1673,9 @@ export function ProductList({ onImportClick }: ProductListProps) {
                 const stockRecord = selectedBranchId 
                   ? item.inventory?.find((i: any) => i.branch_id === selectedBranchId)
                   : item.inventory?.[0];
-                const stock = stockRecord ? stockRecord.quantity : 0;
+                const stock = stockRecord && stockRecord.quantity !== undefined 
+                  ? Number(stockRecord.quantity) 
+                  : Number(item.stock !== undefined ? item.stock : (item.stock_quantity !== undefined ? item.stock_quantity : 0));
 
                 const rowEdit = editedFields[item.id] || {
                   retail_price: item.retail_price?.toString() || '0',

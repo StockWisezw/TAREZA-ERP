@@ -1686,4 +1686,8 @@ export const supabase = {
 };
 
 export const rawSupabase = supabase;
+export const firebaseDb = supabase;
+export const firebaseClient = supabase;
+export const firestoreDb = supabase;
+export const rawFirebase = supabase;
 export type SupabaseQueryBuilderType = SupabaseQueryBuilder;

@@ -131,8 +131,9 @@ export const ReceiptPrint = React.forwardRef<HTMLDivElement, ReceiptPrintProps>(
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-left font-bold border-b border-dashed border-zinc-300">
-                  <th className="w-1/2 pb-1">Item</th>
+                  <th className="w-2/5 pb-1">Item</th>
                   <th className="text-right pb-1">Qty</th>
+                  <th className="text-right pb-1">Price</th>
                   <th className="text-right pb-1">Total</th>
                 </tr>
               </thead>
@@ -140,8 +141,15 @@ export const ReceiptPrint = React.forwardRef<HTMLDivElement, ReceiptPrintProps>(
                 {items.map((item: any) => {
                   const name = item.product?.name || item.name || "Unnamed Item";
                   const quantity = Number(item.quantity || 1);
-                  const price = Number(item.price || item.product?.price || 0);
-                  const lineSubtotal = Number(item.subtotal || (price * quantity));
+                  const price = Number(
+                    item.unitPrice ?? 
+                    item.unit_price ?? 
+                    item.price ?? 
+                    item.product?.retailPrice ?? 
+                    item.product?.price ?? 
+                    (item.subtotal && item.quantity ? item.subtotal / item.quantity : 0)
+                  );
+                  const lineSubtotal = Number(item.subtotal !== undefined ? item.subtotal : (price * quantity));
                   const lineVatAmount = Number(item.vatAmount || item.vat_amount || 0);
                   const itemTotal = lineSubtotal + lineVatAmount;
 
@@ -156,6 +164,7 @@ export const ReceiptPrint = React.forwardRef<HTMLDivElement, ReceiptPrintProps>(
                         )}
                       </td>
                       <td className="text-right py-1">{quantity}</td>
+                      <td className="text-right py-1">${price.toFixed(2)}</td>
                       <td className="text-right py-1">${itemTotal.toFixed(2)}</td>
                     </tr>
                   );

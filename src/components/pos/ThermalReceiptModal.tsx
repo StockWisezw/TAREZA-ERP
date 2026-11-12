@@ -57,14 +57,27 @@ export function ThermalReceiptModal({
   if (!sale) return null;
 
   // Adapt sale data to ThermalSaleData
-  const items = (Array.isArray(sale.items) ? sale.items : []).map((i: any) => ({
-    name: i.product?.name || i.name || 'Item',
-    quantity: Number(i.quantity || 1),
-    price: Number(i.price || i.product?.price || 0),
-    subtotal: Number(i.subtotal || 0),
-    vatAmount: Number(i.vatAmount || 0),
-    discount: i.discount
-  }));
+  const items = (Array.isArray(sale.items) ? sale.items : []).map((i: any) => {
+    const qty = Number(i.quantity || 1);
+    const resolvedUnitPrice = Number(
+      i.unitPrice ?? 
+      i.unit_price ?? 
+      i.price ?? 
+      i.product?.retailPrice ?? 
+      i.product?.price ?? 
+      (i.subtotal && i.quantity ? i.subtotal / i.quantity : 0)
+    );
+    const subtotal = Number(i.subtotal !== undefined ? i.subtotal : (qty * resolvedUnitPrice));
+    return {
+      name: i.product?.name || i.name || 'Item',
+      quantity: qty,
+      price: resolvedUnitPrice,
+      unitPrice: resolvedUnitPrice,
+      subtotal,
+      vatAmount: Number(i.vatAmount || 0),
+      discount: i.discount
+    };
+  });
 
   const payments = Array.isArray(sale.payments) && sale.payments.length > 0
     ? sale.payments.map((p: any) => ({

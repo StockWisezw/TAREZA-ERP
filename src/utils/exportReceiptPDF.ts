@@ -95,11 +95,19 @@ export function exportReceiptPDF({
       const tableData = items.map((item: any) => {
         const name = item.product?.name || item.name || 'Unnamed Item';
         const qty = Number(item.quantity || 1);
-        const price = Number(item.price || item.product?.price || 0);
-        const lineTotal = Number(item.subtotal || (price * qty)) + Number(item.vatAmount || item.vat_amount || 0);
+        const price = Number(
+          item.unitPrice ?? 
+          item.unit_price ?? 
+          item.price ?? 
+          item.product?.retailPrice ?? 
+          item.product?.price ?? 
+          (item.subtotal && item.quantity ? item.subtotal / item.quantity : 0)
+        );
+        const lineTotal = Number(item.subtotal !== undefined ? item.subtotal : (price * qty)) + Number(item.vatAmount || item.vat_amount || 0);
         return [
           name,
           String(qty),
+          `$${price.toFixed(2)}`,
           `$${lineTotal.toFixed(2)}`
         ];
       });
@@ -108,7 +116,7 @@ export function exportReceiptPDF({
         startY: 44,
         margin: { left: 5, right: 5 },
         theme: 'plain',
-        head: [['Item', 'Qty', 'Total']],
+        head: [['Item', 'Qty', 'Price', 'Total']],
         body: tableData,
         headStyles: {
           fontSize: 7.5,
@@ -125,9 +133,10 @@ export function exportReceiptPDF({
           cellPadding: 1.5
         },
         columnStyles: {
-          0: { cellWidth: 42 },
-          1: { cellWidth: 10, halign: 'right' },
-          2: { cellWidth: 18, halign: 'right' }
+          0: { cellWidth: 32 },
+          1: { cellWidth: 8, halign: 'right' },
+          2: { cellWidth: 14, halign: 'right' },
+          3: { cellWidth: 16, halign: 'right' }
         }
       });
 
@@ -277,8 +286,15 @@ export function exportReceiptPDF({
       const tableData = items.map((item: any) => {
         const name = item.product?.name || item.name || 'Item';
         const qty = Number(item.quantity || 1);
-        const price = Number(item.price || item.product?.price || 0);
-        const lineTotal = Number(item.subtotal || (price * qty)) + Number(item.vatAmount || item.vat_amount || 0);
+        const price = Number(
+          item.unitPrice ?? 
+          item.unit_price ?? 
+          item.price ?? 
+          item.product?.retailPrice ?? 
+          item.product?.price ?? 
+          (item.subtotal && item.quantity ? item.subtotal / item.quantity : 0)
+        );
+        const lineTotal = Number(item.subtotal !== undefined ? item.subtotal : (price * qty)) + Number(item.vatAmount || item.vat_amount || 0);
         return [
           name,
           String(qty),
